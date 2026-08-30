@@ -48,7 +48,7 @@ import { newHighlightId } from "../../core/sidecar/ids";
 import { missingFromFile, toInjectable } from "../../core/sidecar/inject";
 import { reconcileSnapshot } from "../../core/sidecar/reconcile";
 import { serializeSidecar } from "../../core/sidecar/serialize";
-import { emptySidecar, type Sidecar } from "../../core/sidecar/types";
+import { emptySidecar, type Sidecar, type SidecarHighlight } from "../../core/sidecar/types";
 import {
   type EmbeddedAnnotation,
   type HostToWebviewMessage,
@@ -153,6 +153,9 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
   /** Fired when a document's model, dirty state or save status changed (the views listen). */
   private readonly _onDidChangeDocument = new EventEmitter<PdfDocument>();
   readonly onDidChangeDocument = this._onDidChangeDocument.event;
+  /** Fired when a viewer panel is resolved or its active state changes (the active-document tracker listens). */
+  private readonly _onDidChangeViewState = new EventEmitter<{ uri: Uri; active: boolean }>();
+  readonly onDidChangeViewState = this._onDidChangeViewState.event;
   private viewerHtmlTemplate: Promise<string> | undefined;
   private readonly generator: string;
 
@@ -334,7 +337,14 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
     const listener = webviewPanel.webview.onDidReceiveMessage((message: unknown) => {
       this.handleMessage(document, webviewPanel.webview, resourceRoot, message);
     });
-    webviewPanel.onDidDispose(() => listener.dispose());
+    const viewState = webviewPanel.onDidChangeViewState((event) => {
+      this._onDidChangeViewState.fire({ uri: document.uri, active: event.webviewPanel.active });
+    });
+    webviewPanel.onDidDispose(() => {
+      listener.dispose();
+      viewState.dispose();
+    });
+    this._onDidChangeViewState.fire({ uri: document.uri, active: webviewPanel.active });
   }
 
   private handleMessage(document: PdfDocument, webview: Webview, resourceRoot: Uri, message: unknown): void {
@@ -407,6 +417,41 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
         return;
       }
     }
+  }
+
+  /** Applies a host-side edit (category, note) to one highlight; returns false when it is unknown. */
+  updateHighlight(
+    document: PdfDocument,
+    id: string,
+    changes: Partial<Pick<SidecarHighlight, "categoryId" | "note">>,
+  ): boolean {
+    const index = document.model.highlights.findIndex((highlight) => highlight.id === id);
+    const current = document.model.highlights[index];
+    if (!current) {
+      return false;
+    }
+    const next = { ...current, ...changes, updatedAt: new Date().toISOString() };
+    const highlights = [...document.model.highlights];
+    highlights[index] = next;
+    document.model = { ...document.model, highlights };
+    this._onDidChangeCustomDocument.fire({ document });
+    this._onDidChangeDocument.fire(document);
+    return true;
+  }
+
+  /** Removes a highlight the viewer does not hold (no editor, no annotation); otherwise use the viewer. */
+  removeHighlight(document: PdfDocument, id: string): boolean {
+    if (!document.model.highlights.some((highlight) => highlight.id === id)) {
+      return false;
+    }
+    document.model = {
+      ...document.model,
+      highlights: document.model.highlights.filter((highlight) => highlight.id !== id),
+    };
+    document.session.unbind(id);
+    this._onDidChangeCustomDocument.fire({ document });
+    this._onDidChangeDocument.fire(document);
+    return true;
   }
 
   /** Draws the highlights the file holds no annotation for (protected PDF, embedding off, unsaved). */

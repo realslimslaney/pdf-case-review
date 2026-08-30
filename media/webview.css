@@ -14,7 +14,8 @@
  * limitations under the License.
  *
  * Modified by Brennen Slaney for PDF Case Review, 2026. Changes: renamed file; hides
- * PDF.js's save/download buttons (saving is VS Code's job); otherwise unchanged from
+ * PDF.js's save/download buttons (saving is VS Code's job); adds the go-to flash;
+ * otherwise unchanged from
  * mathematic-inc/vscode-pdf assets/main.css.
  */
 
@@ -36,4 +37,17 @@ body.vscode-high-contrast {
 #outerContainer #downloadButton,
 #outerContainer #secondaryDownload {
   display: none;
+}
+
+/* "Go to highlight" draws the eye to the editor for a moment. */
+.annotationEditorLayer .highlightEditor.pdfCaseReview-flash {
+  outline: 3px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: 3px;
+  animation: pdfCaseReview-flash 1.5s ease-out forwards;
+}
+
+@keyframes pdfCaseReview-flash {
+  to {
+    outline-color: transparent;
+  }
 }

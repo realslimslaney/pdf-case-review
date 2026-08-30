@@ -68,6 +68,145 @@
         "url": "./schemas/review.schema.json"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "pdfCaseReview",
+          "title": "PDF Case Review",
+          "icon": "media/activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "pdfCaseReview": [
+        {
+          "id": "pdfCaseReview.highlights",
+          "name": "Highlights",
+          "icon": "media/activity.svg",
+          "contextualTitle": "PDF Case Review"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "pdfCaseReview.highlights",
+        "contents": "Open a PDF to start highlighting.\n[Open File](command:workbench.action.files.openFile)\nSelect text in the PDF and use the highlight button; every highlight shows up here with its page.",
+        "when": "!pdfCaseReview.hasActiveDocument"
+      }
+    ],
+    "commands": [
+      {
+        "command": "pdfCaseReview.goToHighlight",
+        "title": "Go to Highlight",
+        "category": "PDF Case Review"
+      },
+      {
+        "command": "pdfCaseReview.setCategory",
+        "title": "Set Category",
+        "category": "PDF Case Review",
+        "icon": "$(symbol-color)"
+      },
+      {
+        "command": "pdfCaseReview.deleteHighlight",
+        "title": "Delete Highlight",
+        "category": "PDF Case Review",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "pdfCaseReview.copyQuote",
+        "title": "Copy Quote",
+        "category": "PDF Case Review"
+      },
+      {
+        "command": "pdfCaseReview.revealSidecar",
+        "title": "Reveal Sidecar",
+        "category": "PDF Case Review",
+        "icon": "$(json)"
+      },
+      {
+        "command": "pdfCaseReview.groupByCategory",
+        "title": "Group by Category",
+        "category": "PDF Case Review",
+        "icon": "$(symbol-class)"
+      },
+      {
+        "command": "pdfCaseReview.groupByPage",
+        "title": "Group by Page",
+        "category": "PDF Case Review",
+        "icon": "$(book)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "pdfCaseReview.goToHighlight",
+          "when": "false"
+        },
+        {
+          "command": "pdfCaseReview.setCategory",
+          "when": "pdfCaseReview.hasActiveDocument"
+        },
+        {
+          "command": "pdfCaseReview.deleteHighlight",
+          "when": "pdfCaseReview.hasActiveDocument"
+        },
+        {
+          "command": "pdfCaseReview.copyQuote",
+          "when": "pdfCaseReview.hasActiveDocument"
+        },
+        {
+          "command": "pdfCaseReview.revealSidecar",
+          "when": "pdfCaseReview.hasActiveDocument"
+        },
+        {
+          "command": "pdfCaseReview.groupByCategory",
+          "when": "pdfCaseReview.groupBy == page"
+        },
+        {
+          "command": "pdfCaseReview.groupByPage",
+          "when": "pdfCaseReview.groupBy == category"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "pdfCaseReview.groupByPage",
+          "when": "view == pdfCaseReview.highlights && pdfCaseReview.groupBy == category",
+          "group": "navigation@1"
+        },
+        {
+          "command": "pdfCaseReview.groupByCategory",
+          "when": "view == pdfCaseReview.highlights && pdfCaseReview.groupBy == page",
+          "group": "navigation@1"
+        },
+        {
+          "command": "pdfCaseReview.revealSidecar",
+          "when": "view == pdfCaseReview.highlights && pdfCaseReview.hasActiveDocument",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "pdfCaseReview.setCategory",
+          "when": "view == pdfCaseReview.highlights && viewItem == highlight",
+          "group": "1_edit@1"
+        },
+        {
+          "command": "pdfCaseReview.copyQuote",
+          "when": "view == pdfCaseReview.highlights && viewItem == highlight",
+          "group": "1_edit@2"
+        },
+        {
+          "command": "pdfCaseReview.deleteHighlight",
+          "when": "view == pdfCaseReview.highlights && viewItem == highlight",
+          "group": "2_danger@1"
+        },
+        {
+          "command": "pdfCaseReview.deleteHighlight",
+          "when": "view == pdfCaseReview.highlights && viewItem == highlight",
+          "group": "inline"
+        }
+      ]
+    },
     "configuration": {
       "title": "PDF Case Review",
       "properties": {
@@ -146,6 +285,20 @@
           "scope": "resource",
           "default": true,
           "markdownDescription": "On save, rewrite the PDF so your highlights become real annotations other readers can see. Only applies to unencrypted PDFs; publisher-protected files are never modified. Turn off to keep PDFs byte-identical (for example in a git repository) and store highlights in the sidecar only."
+        },
+        "pdfCaseReview.highlights.groupBy": {
+          "type": "string",
+          "scope": "window",
+          "default": "category",
+          "enum": [
+            "category",
+            "page"
+          ],
+          "enumDescriptions": [
+            "One group per category, in palette order",
+            "One group per page, in reading order"
+          ],
+          "description": "How the Highlights view groups highlights."
         },
         "pdfCaseReview.viewer.defaultZoom": {
           "type": "string",

@@ -103,10 +103,36 @@ async function waitForInjected(uri: vscode.Uri, sidecarId: string) {
 }
 
 async function waitForModelCount(uri: vscode.Uri, count: number) {
-  return waitFor(`${count} highlight(s) in the model`, async () => {
-    const state = await documentState(uri);
-    return state && state.model.highlights.length === count ? state : undefined;
-  });
+  try {
+    return await waitFor(
+      `${count} highlight(s) in the model`,
+      async () => {
+        const state = await documentState(uri);
+        return state && state.model.highlights.length === count ? state : undefined;
+      },
+      30_000,
+    );
+  } catch (error) {
+    const viewer = await viewerState(uri);
+    const document = await documentState(uri);
+    const summary = {
+      model: document?.model.highlights.map(({ id, page, note }) => ({ id, page, note })),
+      editors: viewer?.editors.map(({ id, sidecarId: sid, pageIndex, annotationElementId }) => ({
+        id,
+        sid,
+        pageIndex,
+        annotationElementId,
+      })),
+      existingUnchanged: viewer?.existingUnchanged,
+      rendered: viewer?.rendered,
+      mode: viewer?.annotationEditorMode,
+      logs: viewer?.logs,
+    };
+    throw new Error(
+      `${error instanceof Error ? error.message : String(error)}
+${JSON.stringify(summary, null, 2)}`,
+    );
+  }
 }
 
 suite("Phase D: sidecar-only highlights render on open; delete, undo and redo", () => {

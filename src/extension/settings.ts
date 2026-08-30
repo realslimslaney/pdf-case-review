@@ -1,6 +1,6 @@
 // The one place that reads `pdfCaseReview.*` settings, validating at the boundary.
 
-import { type LogOutputChannel, type Uri, window, workspace } from "vscode";
+import { ConfigurationTarget, type LogOutputChannel, type Uri, window, workspace } from "vscode";
 
 import {
   type Category,
@@ -9,7 +9,20 @@ import {
   validateCategories,
 } from "../core/categories";
 
+import type { GroupBy } from "../core/tree";
+
 export type SidecarLocation = "beside" | "folder";
+
+export function highlightsGroupBy(): GroupBy {
+  const value = workspace.getConfiguration("pdfCaseReview.highlights").get<string>("groupBy", "category");
+  return value === "page" ? "page" : "category";
+}
+
+export async function setHighlightsGroupBy(groupBy: GroupBy): Promise<void> {
+  await workspace
+    .getConfiguration("pdfCaseReview.highlights")
+    .update("groupBy", groupBy, ConfigurationTarget.Global);
+}
 
 export function sidecarLocation(uri: Uri): SidecarLocation {
   const value = workspace.getConfiguration("pdfCaseReview.sidecar", uri).get<string>("location", "beside");

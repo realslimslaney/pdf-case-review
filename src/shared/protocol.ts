@@ -97,8 +97,12 @@ export type HostToWebviewMessage =
   | { type: "saveDocument" }
   /** Draw sidecar highlights the file holds no annotation for; each page is injected once rendered. */
   | { type: "loadHighlights"; highlights: InjectableHighlight[] }
-  /** Delete editors by viewer id through PDF.js (undoable there). */
-  | { type: "deleteHighlights"; viewerIds: string[] }
+  /** Delete editors by viewer id through PDF.js (undoable there); `sidecarIds` also cancels pending injections. */
+  | { type: "deleteHighlights"; viewerIds: string[]; sidecarIds?: string[] }
+  /** Recolor editors (category change from the host). */
+  | { type: "recolorHighlights"; items: { viewerId: string; color: string }[] }
+  /** Scroll to a highlight (1-based page; rect in PDF user space) and flash its editor when it has one. */
+  | { type: "goTo"; page: number; rect?: [number, number, number, number]; viewerId?: string }
   /** Spike instrumentation: select `spanCount` text-layer spans on `page` without creating anything. */
   | { type: "spike.selectText"; page: number; spanCount: number }
   /** Spike instrumentation: PDF.js undo / redo. */

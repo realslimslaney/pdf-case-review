@@ -271,13 +271,47 @@ export class PdfjsAdapter {
     this.scheduleSnapshot();
   }
 
+  /**
+   * Finds an editor by viewer id, materializing file-backed annotations first when needed: outside
+   * highlight mode PDF.js keeps them as plain annotation elements without editors.
+   */
+  private async withEditor(viewerId: string): Promise<PdfJsEditor | undefined> {
+    let editor = this.findEditor(viewerId);
+    if (editor || !this.uiManager || !/^[0-9]+R/.test(viewerId)) {
+      return editor;
+    }
+    if (this.uiManager.getMode() !== ANNOTATION_EDITOR_TYPE_HIGHLIGHT) {
+      this.setEditorMode(ANNOTATION_EDITOR_TYPE_HIGHLIGHT);
+    }
+    for (let attempt = 0; attempt < 20 && !editor; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      editor = this.findEditor(viewerId);
+    }
+    return editor;
+  }
+
   /** Deletes editors through PDF.js so the deletion lands on its undo stack. */
-  deleteHighlights(viewerIds: readonly string[]): void {
+  async deleteHighlights(viewerIds: readonly string[], sidecarIds: readonly string[] = []): Promise<void> {
+    for (const sidecarId of sidecarIds) {
+      for (const [pageIndex, queue] of this.pendingInjections) {
+        this.pendingInjections.set(
+          pageIndex,
+          queue.filter((item) => item.sidecarId !== sidecarId),
+        );
+      }
+      this.injectedSidecarIds.add(sidecarId);
+    }
     if (!this.uiManager) {
       return;
     }
-    for (const viewerId of viewerIds) {
-      const editor = this.findEditor(viewerId);
+    const targets = new Set(viewerIds);
+    for (const [editorId, sidecarId] of this.sidecarIdByEditorId) {
+      if (sidecarIds.includes(sidecarId)) {
+        targets.add(editorId);
+      }
+    }
+    for (const viewerId of targets) {
+      const editor = await this.withEditor(viewerId);
       if (!editor) {
         this.post({ type: "log", level: "warn", message: `delete: no editor with id ${viewerId}` });
         continue;
@@ -287,6 +321,34 @@ export class PdfjsAdapter {
     }
     this.uiManager.unselectAll();
     this.scheduleSnapshot();
+  }
+
+  async recolorHighlights(items: readonly { viewerId: string; color: string }[]): Promise<void> {
+    for (const { viewerId, color } of items) {
+      const editor = await this.withEditor(viewerId);
+      if (!editor) {
+        this.post({ type: "log", level: "warn", message: `recolor: no editor with id ${viewerId}` });
+        continue;
+      }
+      editor.updateParams(PARAMS_HIGHLIGHT_COLOR, color);
+    }
+    this.scheduleSnapshot();
+  }
+
+  /** Scrolls so the highlight's top-left corner is near the top of the view, then flashes it. */
+  goTo(page: number, rect: readonly number[] | undefined, viewerId: string | undefined): void {
+    const [x1, , , y2] = rect ?? [];
+    this.app.pdfViewer.scrollPageIntoView({
+      pageNumber: page,
+      destArray:
+        x1 !== undefined && y2 !== undefined ? [null, { name: "XYZ" }, x1 - 20, y2 + 20, null] : null,
+    });
+    const editor = viewerId === undefined ? undefined : this.findEditor(viewerId);
+    const div = editor?.div;
+    if (div) {
+      div.classList.add("pdfCaseReview-flash");
+      setTimeout(() => div.classList.remove("pdfCaseReview-flash"), 1_500);
+    }
   }
 
   undo(): void {

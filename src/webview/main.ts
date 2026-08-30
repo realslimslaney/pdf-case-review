@@ -140,7 +140,13 @@ window.addEventListener("message", async (event: MessageEvent<HostToWebviewMessa
       adapter.loadHighlights(message.highlights);
       return;
     case "deleteHighlights":
-      adapter.deleteHighlights(message.viewerIds);
+      await adapter.deleteHighlights(message.viewerIds, message.sidecarIds ?? []);
+      return;
+    case "recolorHighlights":
+      await adapter.recolorHighlights(message.items);
+      return;
+    case "goTo":
+      adapter.goTo(message.page, message.rect, message.viewerId);
       return;
     case "spike.selectText":
       adapter.spikeSelectText(message.page, message.spanCount);
