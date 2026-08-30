@@ -1,0 +1,4 @@
+interface:
+  display_name: "Committer"
+  short_description: "Commit approved work as clean Conventional Commits on a feature branch"
+  default_prompt: "Use $committer to stage and commit the approved changes on a feature branch."

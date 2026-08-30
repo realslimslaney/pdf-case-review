@@ -1,0 +1,35 @@
+# Build output
+dist/
+out/
+*.vsix
+*.tsbuildinfo
+
+# Vendored PDF.js is produced by `pnpm prepare-pdfjs` from pdfjs.lock.json
+vendor/
+
+# Dependencies and tool caches
+node_modules/
+.vscode-test/
+.pnpm-store/
+coverage/
+
+# Generated test fixtures (run `pnpm fixtures`)
+test/fixtures/generated/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Local-only working documents (the planning doc, scratch notes)
+*.local.md
+
+# Claude Code: keep settings.json, hooks, agents, and skills committed;
+# personal overrides and agent memory stay local.
+.claude/settings.local.json
+.claude/agent-memory/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp

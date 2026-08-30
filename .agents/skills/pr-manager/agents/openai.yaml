@@ -1,0 +1,4 @@
+interface:
+  display_name: "PR Manager"
+  short_description: "Open or repair a fully tagged draft pull request for a pushed branch"
+  default_prompt: "Use $pr-manager to open a draft PR for the current pushed branch with the required metadata."

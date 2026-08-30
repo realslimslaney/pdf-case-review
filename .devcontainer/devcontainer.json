@@ -1,0 +1,14 @@
+{
+  "name": "pdf-case-review",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:22",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/python:1": { "version": "3.12" }
+  },
+  "postCreateCommand": "npm i -g pnpm @anthropic-ai/claude-code @openai/codex && sudo apt-get update && sudo apt-get install -y xvfb libgtk-3-0 libnss3 libasound2t64 && pnpm install && pnpm prepare-pdfjs && pnpm fixtures",
+  "customizations": {
+    "vscode": {
+      "extensions": ["biomejs.biome", "vitest.explorer", "ms-vscode.extension-test-runner"]
+    }
+  }
+}

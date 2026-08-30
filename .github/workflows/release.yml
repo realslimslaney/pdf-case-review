@@ -1,0 +1,102 @@
+# Publishes a tagged release to the VS Marketplace (trusted publishing / OIDC) and Open VSX.
+# One-time setup, see docs/how-to/release.md:
+#   - Marketplace: create the publisher, add a trusted-publishing policy for this repo + workflow.
+#   - Open VSX: create the namespace, store the token as the OVSX_PAT secret.
+#   - GitHub: create a "release" environment that requires your approval.
+# Pre-release channel: odd minor versions (0.1.x, 0.3.x …) are published with --pre-release.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        description: Publish as pre-release
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      prerelease: ${{ steps.channel.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm prepare-pdfjs
+      - run: pnpm fixtures
+      - run: pnpm check
+      - id: channel
+        name: Decide channel (odd minor = pre-release)
+        run: |
+          version=$(node -p "require('./package.json').version")
+          minor=$(echo "$version" | cut -d. -f2)
+          if [ "${{ github.event.inputs.prerelease }}" = "true" ] || [ $((minor % 2)) -eq 1 ]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Package
+        run: |
+          flag=""
+          if [ "${{ steps.channel.outputs.prerelease }}" = "true" ]; then flag="--pre-release"; fi
+          pnpm exec vsce package --no-dependencies $flag --out pdf-case-review.vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: pdf-case-review.vsix
+      - name: Attach to GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: gh release upload "${GITHUB_REF_NAME}" pdf-case-review.vsix --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  publish-marketplace:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: vsix
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Publish (trusted publishing)
+        run: |
+          flag=""
+          if [ "${{ needs.build.outputs.prerelease }}" = "true" ]; then flag="--pre-release"; fi
+          npx @vscode/vsce publish --oidc $flag --packagePath pdf-case-review.vsix
+
+  publish-openvsx:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: vsix
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Publish to Open VSX
+        run: |
+          flag=""
+          if [ "${{ needs.build.outputs.prerelease }}" = "true" ]; then flag="--pre-release"; fi
+          npx ovsx publish pdf-case-review.vsix $flag -p "${{ secrets.OVSX_PAT }}"

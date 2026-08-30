@@ -1,0 +1,9 @@
+packages:
+  - "."
+
+# pnpm >= 10 blocks postinstall scripts unless allow-listed. esbuild needs its binary;
+# vsce-sign and keytar are pulled in by @vscode/vsce.
+allowBuilds:
+  "@vscode/vsce-sign": true
+  esbuild: true
+  keytar: true

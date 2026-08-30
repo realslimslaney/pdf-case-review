@@ -1,0 +1,15 @@
+PDF Case Review
+Copyright 2026 Brennen Slaney
+
+This product includes software developed by Mathematic Inc:
+  vscode-pdf (https://github.com/mathematic-inc/vscode-pdf), Apache License 2.0.
+  The custom-editor integration in src/extension/editor/, src/extension/util/,
+  src/webview/main.ts and media/webview.css is derived from that project; each
+  derived file retains its original copyright header and states the modifications.
+
+This product bundles PDF.js (https://github.com/mozilla/pdf.js), Copyright Mozilla
+Foundation, Apache License 2.0, in vendor/pdfjs (with its LICENSE file), including the
+CMap resources (Adobe, BSD-3-Clause), the Foxit standard fonts (see
+vendor/pdfjs/web/standard_fonts/LICENSE_FOXIT) and the Liberation fonts (SIL OFL 1.1).
+
+See THIRD_PARTY_NOTICES.md for the full list of bundled third-party components.

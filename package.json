@@ -1,0 +1,205 @@
+{
+  "name": "pdf-case-review",
+  "displayName": "PDF Case Review",
+  "version": "0.0.0",
+  "description": "Highlight PDFs by category (fact, financial, strategic, concern, question…) and turn your notes into a printable Word/PDF report.",
+  "publisher": "realslimslaney",
+  "author": "Brennen Slaney",
+  "license": "Apache-2.0",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/realslimslaney/pdf-case-review.git"
+  },
+  "bugs": {
+    "url": "https://github.com/realslimslaney/pdf-case-review/issues"
+  },
+  "homepage": "https://github.com/realslimslaney/pdf-case-review#readme",
+  "categories": [
+    "Visualization",
+    "Education",
+    "Other"
+  ],
+  "keywords": [
+    "pdf",
+    "highlight",
+    "annotate",
+    "notes",
+    "case study",
+    "report",
+    "reading"
+  ],
+  "engines": {
+    "vscode": "^1.104.0",
+    "node": ">=22"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "extensionKind": [
+    "ui",
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "AI summary providers and the report output folder setting are disabled in untrusted workspaces."
+    },
+    "virtualWorkspaces": {
+      "supported": "limited",
+      "description": "Highlights are saved beside the PDF; virtual file systems that cannot write sidecars are read-only."
+    }
+  },
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "pdfCaseReview.pdf",
+        "displayName": "PDF Case Review",
+        "selector": [
+          {
+            "filenamePattern": "*.pdf"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "configuration": {
+      "title": "PDF Case Review",
+      "properties": {
+        "pdfCaseReview.categories": {
+          "type": "array",
+          "scope": "resource",
+          "markdownDescription": "Highlight categories. Each needs a unique `id`, a `name`, and a unique hex `color`; colors are how the viewer tells categories apart, so keep them distinct.",
+          "default": [
+            {
+              "id": "fact",
+              "name": "Fact",
+              "color": "#FFFF98"
+            },
+            {
+              "id": "financial",
+              "name": "Financial",
+              "color": "#53FFBC"
+            },
+            {
+              "id": "strategic",
+              "name": "Strategic implication",
+              "color": "#80EBFF"
+            },
+            {
+              "id": "concern",
+              "name": "Concern",
+              "color": "#FF4F5F"
+            },
+            {
+              "id": "question",
+              "name": "Question",
+              "color": "#FFCBE6"
+            }
+          ],
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "color"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*$"
+              },
+              "name": {
+                "type": "string"
+              },
+              "color": {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "pdfCaseReview.viewer.defaultZoom": {
+          "type": "string",
+          "scope": "resource",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "page-actual",
+            "page-fit",
+            "page-width",
+            "50",
+            "75",
+            "100",
+            "125",
+            "150",
+            "200"
+          ],
+          "description": "Zoom level when a PDF opens."
+        },
+        "pdfCaseReview.viewer.sidebarOnLoad": {
+          "type": "number",
+          "scope": "resource",
+          "default": 0,
+          "enum": [
+            -1,
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "enumDescriptions": [
+            "Restore previous state",
+            "None",
+            "Thumbnails",
+            "Outline",
+            "Attachments",
+            "Layers"
+          ],
+          "description": "PDF.js sidebar panel to show when a PDF opens."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "prepare-pdfjs": "node scripts/prepare-pdfjs.mjs",
+    "fixtures": "node scripts/make-fixtures.mjs",
+    "build": "tsup",
+    "watch": "tsup --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.webview.json --noEmit",
+    "lint": "biome check .",
+    "fix": "biome check --write .",
+    "test": "pnpm run test:unit",
+    "test:unit": "vitest run",
+    "test:integration": "vscode-test",
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run test:unit",
+    "package": "pnpm run prepare-pdfjs && pnpm run build -- --minify && vsce package --no-dependencies",
+    "vscode:prepublish": "pnpm run build -- --minify"
+  },
+  "packageManager": "pnpm@11.24.0",
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.11",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^26.4.0",
+    "@types/pdfmake": "^0.3.3",
+    "@types/vscode": "1.104.0",
+    "@vitest/coverage-v8": "^4.1.11",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^3.9.2",
+    "fflate": "^0.8.3",
+    "mocha": "^11.8.0",
+    "tsup": "^8.5.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  },
+  "dependencies": {
+    "docx": "^9.7.1",
+    "marked": "^18.0.11",
+    "pdf-lib": "^1.17.1",
+    "pdfmake": "^0.3.11"
+  }
+}

@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Cache PDF.js
+        uses: actions/cache@v4
+        with:
+          path: vendor/pdfjs
+          key: pdfjs-${{ hashFiles('pdfjs.lock.json', 'patches/pdfjs/**') }}
+      - name: Vendor PDF.js
+        run: pnpm prepare-pdfjs
+      - name: Fixtures
+        run: pnpm fixtures
+      - name: Typecheck, lint, unit tests
+        run: pnpm check
+      - name: Build
+        run: pnpm build
+      - name: Integration tests (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pnpm test:integration
+      - name: Integration tests
+        if: runner.os != 'Linux'
+        run: pnpm test:integration
+      - name: Package
+        if: runner.os == 'Linux'
+        run: pnpm exec vsce package --no-dependencies --out pdf-case-review.vsix
+      - name: Upload VSIX
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-case-review.vsix
+          path: pdf-case-review.vsix
+      - name: Audit dependencies
+        if: runner.os == 'Linux'
+        run: pnpm audit --audit-level high

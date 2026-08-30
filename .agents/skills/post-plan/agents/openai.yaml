@@ -1,0 +1,4 @@
+interface:
+  display_name: "Post Plan"
+  short_description: "Post the current plan or work summary to a GitHub issue or PR with gh"
+  default_prompt: "Use $post-plan to capture the current plan on GitHub."

@@ -1,0 +1,56 @@
+# Weekly check for new PDF.js releases and new commits on mathematic-inc/vscode-pdf
+# (the project this extension's viewer integration is derived from). Opens or updates
+# a single tracking issue with compare links so upgrades are deliberate, never surprising.
+
+name: Upstream watch
+
+on:
+  schedule:
+    - cron: "0 12 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compare pins with upstream
+        id: compare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pinned_pdfjs=$(node -p "require('./pdfjs.lock.json').version")
+          pinned_ref=$(node -p "require('./pdfjs.lock.json').upstreamReference.commit")
+          latest_pdfjs=$(gh api repos/mozilla/pdf.js/releases/latest --jq .tag_name | sed 's/^v//')
+          latest_ref=$(gh api repos/mathematic-inc/vscode-pdf/commits/main --jq .sha)
+          drift=""
+          if [ "$pinned_pdfjs" != "$latest_pdfjs" ]; then
+            drift="$drift- PDF.js: pinned \`$pinned_pdfjs\`, latest \`$latest_pdfjs\` — https://github.com/mozilla/pdf.js/compare/v$pinned_pdfjs...v$latest_pdfjs\n"
+          fi
+          if [ "$pinned_ref" != "$latest_ref" ]; then
+            drift="$drift- vscode-pdf: derived from \`${pinned_ref:0:12}\`, main is \`${latest_ref:0:12}\` — https://github.com/mathematic-inc/vscode-pdf/compare/$pinned_ref...$latest_ref (derived files: see pdfjs.lock.json)\n"
+          fi
+          echo "drift<<EOF" >> "$GITHUB_OUTPUT"
+          printf "%b" "$drift" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+      - name: Open or update the tracking issue
+        if: steps.compare.outputs.drift != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRIFT: ${{ steps.compare.outputs.drift }}
+        run: |
+          title="chore: upstream drift (PDF.js / vscode-pdf)"
+          body=$(printf "Detected by the upstream-watch workflow on %s.\n\n%s\nReview the diffs, bump \`pdfjs.lock.json\` on a branch, run \`pnpm prepare-pdfjs\` and the spike checklist in docs/explanation/decisions.md before merging." "$(date -u +%F)" "$DRIFT")
+          existing=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi

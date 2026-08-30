@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/realslimslaney/pdf-case-review/main/schemas/review.schema.json",
+  "title": "PDF Case Review sidecar",
+  "description": "Highlights and notes for one PDF, stored beside it as <file>.pdf.review.json.",
+  "type": "object",
+  "required": ["version", "source", "categories", "highlights"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "generator": { "type": "string" },
+    "source": {
+      "type": "object",
+      "required": ["fileName", "sha256", "byteLength", "pageCount"],
+      "additionalProperties": false,
+      "properties": {
+        "fileName": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "byteLength": { "type": "integer", "minimum": 0 },
+        "pageCount": { "type": "integer", "minimum": 0 },
+        "title": { "type": "string" },
+        "encrypted": { "type": "boolean" },
+        "lastEmbeddedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "color", "order"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "name": { "type": "string", "minLength": 1 },
+          "color": { "type": "string", "pattern": "^#[0-9A-F]{6}$" },
+          "order": { "type": "integer", "minimum": 0 },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "highlights": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "categoryId",
+          "page",
+          "rect",
+          "quadPoints",
+          "kind",
+          "text",
+          "note",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "categoryId": { "type": "string" },
+          "page": { "type": "integer", "minimum": 1 },
+          "pageLabel": { "type": "string" },
+          "rect": { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 },
+          "quadPoints": { "type": "array", "items": { "type": "number" } },
+          "outlines": {},
+          "rotation": { "type": "integer" },
+          "kind": { "enum": ["text", "free"] },
+          "text": { "type": "string" },
+          "context": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "before": { "type": "string" }, "after": { "type": "string" } }
+          },
+          "note": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "pageNotes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["page", "note", "createdAt", "updatedAt"],
+        "additionalProperties": false,
+        "properties": {
+          "page": { "type": "integer", "minimum": 1 },
+          "note": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "documentNotes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "note", "createdAt", "updatedAt"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "note": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "aiConsent": {
+      "type": "object",
+      "required": [
+        "provider",
+        "email",
+        "verified",
+        "documentSha256",
+        "attestedAt",
+        "responsibilityAcknowledged"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "accountId": { "type": "string" },
+        "provider": { "type": "string" },
+        "email": { "type": "string" },
+        "organization": { "type": "string" },
+        "verified": { "type": "boolean" },
+        "documentSha256": { "type": "string" },
+        "authorizationLine": { "type": "string" },
+        "attestedAt": { "type": "string", "format": "date-time" },
+        "responsibilityAcknowledged": { "type": "boolean" },
+        "wordingVersion": { "type": "integer" }
+      }
+    },
+    "aiSummary": {
+      "type": "object",
+      "required": ["provider", "generatedAt", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "provider": { "type": "string" },
+        "model": { "type": "string" },
+        "account": { "type": "string" },
+        "generatedAt": { "type": "string", "format": "date-time" },
+        "text": { "type": "string" }
+      }
+    }
+  }
+}
