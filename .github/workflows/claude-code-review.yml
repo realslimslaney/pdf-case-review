@@ -12,13 +12,19 @@ concurrency:
 
 jobs:
   claude-review:
-    # Skip bot PRs (Dependabot, release-please) and anything still in draft.
-    if: github.event.pull_request.user.type != 'Bot' && !github.event.pull_request.draft
+    # Skip bot PRs (Dependabot, release-please), drafts, and fork PRs: GitHub withholds secrets
+    # from pull_request runs that originate from forks, so the job would fail on a missing token.
+    if: |
+      github.event.pull_request.user.type != 'Bot' &&
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository
 
     runs-on: ubuntu-latest
+    # GITHUB_TOKEN is the only GitHub credential (github_token below): inline review comments
+    # need pull-requests write; contents stays read so the review can never push.
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write
       issues: read
       id-token: write
 
@@ -33,6 +39,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
           prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
