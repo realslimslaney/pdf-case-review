@@ -127,6 +127,7 @@ async function waitForModelCount(uri: vscode.Uri, count: number) {
       rendered: viewer?.rendered,
       mode: viewer?.annotationEditorMode,
       logs: viewer?.logs,
+      trace: await vscode.commands.executeCommand<string[]>("pdfCaseReview.debug.getTrace"),
     };
     throw new Error(
       `${error instanceof Error ? error.message : String(error)}
@@ -140,18 +141,23 @@ suite("Phase D: sidecar-only highlights render on open; delete, undo and redo", 
   const pdf = fixtureUri("generated", "reload-test", "case.pdf");
   const sidecar = fixtureUri("generated", "reload-test", "case.pdf.review.json");
 
+  const viewer = () => vscode.workspace.getConfiguration("pdfCaseReview.viewer");
+
   suiteSetup(async () => {
     await copyFixture(source, pdf);
     await writeSidecarFor(pdf, sidecar, [
       highlightOn(1, KEEP, "financial", "keep me"),
       highlightOn(2, OTHER, "concern", ""),
     ]);
+    // Render both pages so both highlights are injected, whatever the window size.
+    await viewer().update("defaultZoom", "50", vscode.ConfigurationTarget.Global);
     await openWith(pdf);
     await waitForLoaded(pdf);
   });
 
   suiteTeardown(async () => {
     await closeAll();
+    await viewer().update("defaultZoom", undefined, vscode.ConfigurationTarget.Global);
   });
 
   test("draws the sidecar highlight on the visible page, tagged with its id, without dirtying the document", async () => {
