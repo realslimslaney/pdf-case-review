@@ -73,7 +73,14 @@ function blockToDocx(block: ReportBlock): (Paragraph | Table)[] {
         }),
       ];
     case "paragraph":
-      return [new Paragraph({ children: runs(block.runs, block.muted ? { color: MUTED } : {}) })];
+      return [
+        new Paragraph({
+          children: runs(
+            block.runs,
+            block.generated ? { italics: true, color: MUTED } : block.muted ? { color: MUTED } : {},
+          ),
+        }),
+      ];
     case "keyValues":
       return block.entries.map(
         ([key, value]) =>
@@ -115,7 +122,13 @@ function blockToDocx(block: ReportBlock): (Paragraph | Table)[] {
         }),
       ];
     case "bullets":
-      return block.items.map((item) => new Paragraph({ bullet: { level: 0 }, children: runs(item) }));
+      return block.items.map(
+        (item) =>
+          new Paragraph({
+            bullet: { level: 0 },
+            children: runs(item, block.generated ? { italics: true, color: MUTED } : {}),
+          }),
+      );
     case "pageBreak":
       return [new Paragraph({ children: [new PageBreak()] })];
   }

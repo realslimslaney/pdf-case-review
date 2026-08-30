@@ -40,7 +40,13 @@ function blockToPdf(block: ReportBlock): Content {
       };
     }
     case "paragraph":
-      return { text: runs(block.runs, block.muted ? { color: MUTED } : {}), margin: [0, 0, 0, 6] };
+      return {
+        text: runs(
+          block.runs,
+          block.generated ? { italics: true, color: MUTED } : block.muted ? { color: MUTED } : {},
+        ),
+        margin: [0, 0, 0, 6],
+      };
     case "keyValues":
       return {
         stack: block.entries.map(([key, value]) => ({ text: [{ text: `${key}: `, bold: true }, value] })),
@@ -84,7 +90,12 @@ function blockToPdf(block: ReportBlock): Content {
         unbreakable: true,
       };
     case "bullets":
-      return { ul: block.items.map((item) => ({ text: runs(item) })), margin: [0, 0, 0, 6] };
+      return {
+        ul: block.items.map((item) => ({
+          text: runs(item, block.generated ? { italics: true, color: MUTED } : {}),
+        })),
+        margin: [0, 0, 0, 6],
+      };
     case "pageBreak":
       return { text: "", pageBreak: "after" };
   }

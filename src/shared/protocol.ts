@@ -90,6 +90,8 @@ export type WebviewToHostMessage =
   /** Outcome of `createFromSelection`: a new highlight, or the selected editors recolored, or neither. */
   | { type: "createFromSelectionResult"; id: string; created: boolean; recolored: boolean }
   | { type: "openLink"; url: string }
+  /** Answer to `getPageText`; text is null when the page has no text layer or the read failed. */
+  | { type: "pageText"; requestId: number; page: number; text: string | null }
   | { type: "log"; level: "info" | "warn" | "error"; message: string };
 
 export type HostToWebviewMessage =
@@ -109,6 +111,8 @@ export type HostToWebviewMessage =
   | { type: "createFromSelection"; id: string; color: string }
   /** Scroll to a highlight (1-based page; rect in PDF user space) and flash its editor when it has one. */
   | { type: "goTo"; page: number; rect?: [number, number, number, number]; viewerId?: string }
+  /** Read one page's text content (1-based page); answered with `pageText`. */
+  | { type: "getPageText"; requestId: number; page: number }
   /** Spike instrumentation: select `spanCount` text-layer spans on `page` without creating anything. */
   | { type: "spike.selectText"; page: number; spanCount: number }
   /** Spike instrumentation: select an editor (as a focused viewer does after creating one). */
