@@ -20,6 +20,14 @@ Short records of the decisions that shape the project, newest last. Each spike f
 
 **Decision.** Use PDF.js's native `HighlightEditor` (floating button + editor toolbar) with `highlightEditorColors` mapped to our categories, `enableComment: false`, and a VS Code sidebar/webview view for notes. All PDF.js internals sit behind `src/webview/pdfjsAdapter.ts`; an overlay-based adapter is the fallback if the editor proves unstable across upgrades.
 
+## ADR-0004: Highlight identity: a uuid in the sidecar and `/NM`, `pdfjsId` refreshed on every sync, viewer ids never persisted
+
+**Decision.** Every highlight gets a UUID from the extension host the first time it appears; the sidecar stores it and the PDF annotation carries it as `/NM`. Because PDF.js never surfaces `/NM`, the sidecar also stores `pdfjsId`, the object reference PDF.js reports (`<n>R`), refreshed from pdf-lib's output on every embed. PDF.js editor ids live only for one viewer load and stay in a host-side `ReconcileSession` (`src/core/sidecar/reconcile.ts`). The webview keeps sending full snapshots; the host diffs them with a pure `reconcileSnapshot`, so the mapping is unit-tested.
+
+**Rules.** Resolution order for an editor: existing session binding, the `sidecarId` the host gave it, a highlight with the same `pdfjsId`, a tombstone from a recent delete (undo), else a new highlight. Deletion must be proven: an editor the viewer created vanished from the snapshot, or PDF.js reports the embedded annotation deleted (`isDeletedAnnotationElement`). Absence alone never deletes an embedded highlight, because `AnnotationEditorLayer.disable()` removes every file-backed editor when the viewer leaves highlight mode. Highlights never materialized in the viewer are kept. File-backed editors the sidecar does not know are foreign annotations and are left alone.
+
+**Why.** Three id spaces with three lifetimes; keeping the join in one tested place is what stops notes from being lost on undo, reload, mode switches or re-embedding.
+
 ## Spike log
 
 Results are recorded here as they land. Pass/fail criteria are in the maintainer plan (§14).

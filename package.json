@@ -62,6 +62,12 @@
         "priority": "default"
       }
     ],
+    "jsonValidation": [
+      {
+        "fileMatch": "*.review.json",
+        "url": "./schemas/review.schema.json"
+      }
+    ],
     "configuration": {
       "title": "PDF Case Review",
       "properties": {

@@ -12,6 +12,12 @@ export interface SerializedHighlight {
   rotation: number;
   /** Text captured from the selection when the highlight was created, when available. */
   text: string | null;
+  /** PDF.js annotation id when the editor backs an annotation already in the file, else null. */
+  annotationElementId: string | null;
+  /** Our highlight uuid when the host created or injected this editor (see core/sidecar/reconcile). */
+  sidecarId?: string;
+  /** Text recovered by intersecting `quadPoints` with the page's text content, when computed. */
+  quadText?: string;
   /** Raw serialize() payload, kept so it can be replayed via deserialize() verbatim. */
   raw: Record<string, unknown>;
 }
@@ -57,6 +63,8 @@ export type WebviewToHostMessage =
       editors: SerializedHighlight[];
       /** Editors backing unchanged pre-existing annotations (`serialize()` returned null). */
       existingUnchanged: string[];
+      /** Annotation ids (from `viewerLoaded.annotations`) that PDF.js now reports as deleted. */
+      deletedAnnotationIds: string[];
       /** Highlight editor elements actually laid out in the page DOM (width > 0). */
       rendered: number;
     }

@@ -26,6 +26,8 @@ declare module "pdfjs-viewer" {
     highlightSelection(methodOfCreation?: string, comment?: boolean): void;
     updateParams(type: number, value: unknown): void;
     setSelected(editor: PdfJsEditor): void;
+    /** True once a file-backed editor was deleted (the annotation is dropped on save). */
+    isDeletedAnnotationElement(annotationElementId: string): boolean;
     getMode(): number;
     readonly highlightColors: Map<string, string> | null;
   }

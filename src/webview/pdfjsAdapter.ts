@@ -46,6 +46,10 @@ export class PdfjsAdapter {
   private snapshotTimer: ReturnType<typeof setTimeout> | undefined;
   private lastSnapshotJson = "";
   private readonly textById = new Map<string, string>();
+  /** Sidecar uuids for editors the host created or injected, keyed by PDF.js editor id. */
+  private readonly sidecarIdByEditorId = new Map<string, string>();
+  /** Highlight annotation ids found in the file at load time. */
+  private annotationIds: string[] = [];
   private lastSelection: { text: string; at: number } | null = null;
 
   constructor(
@@ -81,12 +85,15 @@ export class PdfjsAdapter {
 
   async reportLoaded(): Promise<void> {
     const colors = this.options.get("highlightEditorColors");
+    const annotations = await this.collectHighlightAnnotations();
+    this.annotationIds = annotations.map((annotation) => annotation.id);
+    this.sidecarIdByEditorId.clear();
     this.post({
       type: "viewerLoaded",
       pagesCount: this.app.pdfViewer.pagesCount,
       annotationEditorMode: this.app.pdfViewer.annotationEditorMode,
       highlightEditorColors: typeof colors === "string" ? colors : null,
-      annotations: await this.collectHighlightAnnotations(),
+      annotations,
     });
     this.scheduleSnapshot();
   }
@@ -186,13 +193,15 @@ export class PdfjsAdapter {
         }
       }
     }
+    const uiManager = this.uiManager;
+    const deletedAnnotationIds = this.annotationIds.filter((id) => uiManager.isDeletedAnnotationElement(id));
     const rendered = [...document.querySelectorAll(".annotationEditorLayer .highlightEditor")].filter(
       (element) => element.getBoundingClientRect().width > 0,
     ).length;
-    const json = JSON.stringify({ editors, existingUnchanged, rendered });
+    const json = JSON.stringify({ editors, existingUnchanged, deletedAnnotationIds, rendered });
     if (json !== this.lastSnapshotJson) {
       this.lastSnapshotJson = json;
-      this.post({ type: "editorsChanged", editors, existingUnchanged, rendered });
+      this.post({ type: "editorsChanged", editors, existingUnchanged, deletedAnnotationIds, rendered });
     }
   }
 
@@ -212,7 +221,7 @@ export class PdfjsAdapter {
     // payload survives postMessage and JSON alike.
     const plain = toPlain(raw) as Record<string, unknown>;
     const color = numberList(plain["color"]);
-    return {
+    const serialized: SerializedHighlight = {
       id: editor.annotationElementId ?? editor.id,
       pageIndex: editor.pageIndex,
       color: color.length === 3 ? rgbToHex(color as [number, number, number]) : String(plain["color"]),
@@ -220,8 +229,14 @@ export class PdfjsAdapter {
       rect: numberList(plain["rect"]),
       rotation: typeof plain["rotation"] === "number" ? plain["rotation"] : 0,
       text: this.textById.get(editor.id) ?? null,
+      annotationElementId: editor.annotationElementId ?? null,
       raw: plain,
     };
+    const sidecarId = this.sidecarIdByEditorId.get(editor.id);
+    if (sidecarId !== undefined) {
+      serialized.sidecarId = sidecarId;
+    }
+    return serialized;
   }
 
   /**
