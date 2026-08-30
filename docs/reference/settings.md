@@ -22,6 +22,33 @@ All settings live under `pdfCaseReview.*`. Unless noted, they have `resource` sc
 |---|---|---|
 | `pdfCaseReview.highlights.groupBy` | `category` | Whether the Highlights view groups rows by category (palette order) or by page (reading order). The view's title buttons toggle it. |
 
+## Report
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `pdfCaseReview.report.defaultFormat` | `ask` | Format for **Generate Report** (`Ctrl+Alt+R`): `ask` shows a picker; `markdown`, `docx` or `pdf` render immediately. |
+| `pdfCaseReview.report.organization` | `both` | `category` (sections per category), `page` (reading order), or `both` (categories plus a per-page appendix). |
+| `pdfCaseReview.report.outputFolder` | `""` | Where reports are written. Empty writes beside the PDF; a relative path is resolved against the workspace folder. Ignored in untrusted workspaces. |
+| `pdfCaseReview.report.quoteMaxChars` | `300` | Longest quoted passage, truncated at a word boundary; `0` means unlimited. |
+| `pdfCaseReview.report.author` | `""` | Author line in the title block; empty omits it. |
+| `pdfCaseReview.report.includeEmptyCategories` | `false` | Show categories with no highlights in the summary table and body. |
+| `pdfCaseReview.report.usePageLabels` | `true` | Cite the PDF's own page labels when they differ from page numbers, as `p. iv [4]`. |
+| `pdfCaseReview.report.overwrite` | `false` | Overwrite an existing `<name>.review.<ext>`; off writes a numbered copy. |
+
+## AI (optional, off by default)
+
+Nothing leaves your machine unless a provider is enabled or you copy the prompt yourself; only highlights and notes are ever sent, never the PDF. Every run passes the eligibility question naming the signed-in account. See [the AI reviewer how-to](../how-to/ai-reviewer.md).
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `pdfCaseReview.ai.provider` | `off` | `off`, `claude-cli` (spawns `claude`) or `codex-cli` (spawns `codex`). CLI providers need desktop VS Code and a trusted workspace. |
+| `pdfCaseReview.ai.model` | `""` | Model passed to the CLI (`--model`); empty uses the CLI's default. |
+| `pdfCaseReview.ai.includeInReport` | `true` | Include the cached AI summary as a labeled, grey-italics section of generated reports. |
+| `pdfCaseReview.ai.maxWords` | `250` | Word budget for the executive summary. |
+| `pdfCaseReview.ai.requiredAccount` | `[]` | Rules refusing the AI step under the wrong login. The first rule whose `when` matches (`protected`, `authorizationLineMatches`, `pathGlob`) applies; `email` names the account that must be signed in (no override) and `use` selects an entry of `ai.accounts`. |
+| `pdfCaseReview.ai.accounts` | `[]` | Separate CLI login directories (`{id, provider, configDir}`) for people with more than one account; the extension sets `CLAUDE_CONFIG_DIR` / `CODEX_HOME` on the spawned CLI itself. |
+| `pdfCaseReview.ai.requireVerifiedAccountForProtected` | `true` | Refuse CLI providers on publisher-protected documents when the login cannot be verified from the CLI's saved credentials; the manual clipboard path asks for an extra acknowledgment instead. |
+
 ## Viewer
 
 | Setting | Default | Meaning |

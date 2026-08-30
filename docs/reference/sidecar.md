@@ -91,7 +91,7 @@ Every reviewed PDF gets one sidecar file. It is the canonical store for highligh
 | `categories` | yes | The category palette copied into the file so it is self-describing (below). |
 | `highlights` | yes | One entry per highlight (below). |
 | `pageNotes`, `documentNotes` | no | Notes attached to a page or to the whole document (`page`, `note`, timestamps; document notes also have `id` and `title`). |
-| `aiConsent`, `aiSummary` | no | The recorded eligibility attestation and the cached AI summary, when those features are used. |
+| `aiConsent`, `aiSummary` | no | The recorded eligibility attestation and the cached AI summary, when those features are used (below). |
 
 ### `source`
 
@@ -125,9 +125,25 @@ Every reviewed PDF gets one sidecar file. It is the canonical store for highligh
 | `note` | yes | Your note, Markdown subset; empty string when there is none. |
 | `createdAt`, `updatedAt` | yes | ISO 8601 timestamps. `updatedAt` moves on user-visible edits (category, geometry, note), not on bookkeeping such as a refreshed `pdfjsId`. |
 
+### `aiConsent`
+
+Written when the eligibility question is answered yes; shown and revoked by **Review AI Consent**.
+
+| Field | Required | Meaning |
+|---|---|---|
+| `provider`, `email`, `verified` | yes | Which provider the consent was given for, the account named in the dialog, and whether that email was read from the CLI's own saved login (`true`) or typed by the user (`false`). |
+| `documentSha256` | yes | The PDF revision the consent applies to; a changed file re-asks. |
+| `attestedAt`, `responsibilityAcknowledged` | yes | When, and that the responsibility statement was part of the dialog. |
+| `eligibilityConfirmed` | no | The explicit yes to "may this document be fed into AI context on this account?". |
+| `accountId`, `organization`, `authorizationLine`, `wordingVersion` | no | The `ai.accounts` entry used, the account's organization, the document's own authorization line as shown in the dialog, and the dialog wording version (a change re-asks). |
+
+### `aiSummary`
+
+The cached executive summary: `provider` (`claude-cli`, `codex-cli` or `manual`), optional `model` and `account`, `generatedAt`, and `text` (Markdown). Reports render it as a labeled section in grey italics; regenerating replaces it.
+
 ## How the file is written
 
 - Keys are sorted at every level, indentation is two spaces, line endings are LF and the file ends with a newline, so diffs stay small.
-- `highlights` are in reading order: page, then top edge descending, then left edge, then `id`. `categories` are ordered by `order`, `pageNotes` by `page`.
+- `highlights` are in reading order: page, then top edge descending, then left edge, then `id`. `categories` are ordered by `order`, `pageNotes` by `page`, `documentNotes` by creation time.
 - The sidecar is written before the PDF, so an interrupted save never loses notes (see ADR-0005 in `docs/explanation/decisions.md` for why writes are not temp-and-rename).
 - Editing the file by hand is fine; unknown properties and malformed values are rejected on open with the JSON path of the problem, and the document then opens read-only until the file is fixed.
