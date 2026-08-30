@@ -185,7 +185,7 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "^26.4.0",
     "@types/pdfmake": "^0.3.3",
-    "@types/vscode": "1.104.0",
+    "@types/vscode": "1.134.0",
     "@vitest/coverage-v8": "^4.1.11",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.1.0",
