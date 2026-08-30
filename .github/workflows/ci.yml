@@ -34,7 +34,7 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Cache PDF.js
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: vendor/pdfjs
           key: pdfjs-${{ hashFiles('pdfjs.lock.json', 'patches/pdfjs/**') }}
