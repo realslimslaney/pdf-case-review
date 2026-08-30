@@ -1,6 +1,6 @@
 // Who is the AI provider logged in as? Pure parsers for the identity data each CLI exposes;
 // the extension host (desktop only) runs the commands / reads the files and hands the text here.
-// Identity always comes from stored login metadata or the CLI's own status output — never
+// Identity always comes from stored login metadata or the CLI's own status output, never
 // from asking the model (plan §9.4).
 
 export interface ProviderIdentity {
@@ -60,7 +60,7 @@ export function parseClaudeAuthStatus(output: string): ProviderIdentity {
   };
 }
 
-/** Decodes a JWT payload without verifying it — we only display the claims, never trust them. */
+/** Decodes a JWT payload without verifying it; we only display the claims, never trust them. */
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   const segment = token.split(".")[1];
   if (!segment) {

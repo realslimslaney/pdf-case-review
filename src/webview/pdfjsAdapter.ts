@@ -1,5 +1,5 @@
 // Everything that touches PDF.js editor internals lives here (ADR-0003). If an upgrade breaks
-// the highlight editor, this is the one file to fix — or to swap for an overlay-based adapter.
+// the highlight editor, this is the one file to fix, or to swap for an overlay-based adapter.
 
 import type { PdfJsApplication, PdfJsEditor, PdfJsUiManager } from "pdfjs-viewer";
 

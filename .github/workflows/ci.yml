@@ -23,18 +23,18 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Cache PDF.js
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: vendor/pdfjs
           key: pdfjs-${{ hashFiles('pdfjs.lock.json', 'patches/pdfjs/**') }}
@@ -57,10 +57,11 @@ jobs:
         run: pnpm exec vsce package --no-dependencies --out pdf-case-review.vsix
       - name: Upload VSIX
         if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pdf-case-review.vsix
           path: pdf-case-review.vsix
-      - name: Audit dependencies
+      - name: Audit shipped dependencies
         if: runner.os == 'Linux'
-        run: pnpm audit --audit-level high
+        # Only what ends up in the VSIX; advisories in dev tooling are handled by Dependabot.
+        run: pnpm audit --prod --audit-level high

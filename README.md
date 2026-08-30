@@ -4,7 +4,7 @@
 
 **Status: pre-alpha (architecture spikes).** Nothing is published yet. See `docs/explanation/decisions.md` for the architecture decisions and the spike results as they land.
 
-Built for reading business-school cases — Fact, Financial, Strategic implication, Concern, Question — but the categories are yours to define, so it works just as well for papers, contracts and textbooks.
+Built for reading business-school cases (Fact, Financial, Strategic implication, Concern, Question), but the categories are yours to define, so it works just as well for papers, contracts and textbooks.
 
 ## What it will do (1.0)
 
@@ -14,11 +14,11 @@ Built for reading business-school cases — Fact, Financial, Strategic implicati
 - A sidebar lists everything by category or by page; click to jump.
 - **Generate report** → Markdown, Word (`.docx`) or PDF, organized by category and/or page, with page citations.
 - Highlights are stored beside the PDF in `case.pdf.review.json` and synced into the PDF as real annotations when the file allows it. Publisher-protected PDFs are never modified.
-- Optional, off by default: an AI executive summary via Claude Code, Codex, Copilot or an API key — always behind an eligibility confirmation that shows which account is used.
+- Optional, off by default: an AI executive summary via Claude Code, Codex, Copilot or an API key, always behind an eligibility confirmation that shows which account is used.
 
 ## Privacy & responsibility
 
-The extension makes no network requests and collects no telemetry. If you enable an AI provider, only your highlighted excerpts and notes are sent — never the PDF — and only after you confirm the account being used. **You are responsible for using this tool on appropriate content; the developers of this extension are not liable for misuse.**
+The extension makes no network requests and collects no telemetry. If you enable an AI provider, only your highlighted excerpts and notes are sent (never the PDF), and only after you confirm the account being used. **You are responsible for using this tool on appropriate content; the developers of this extension are not liable for misuse.**
 
 ## Development
 

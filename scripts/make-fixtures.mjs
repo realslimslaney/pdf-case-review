@@ -82,7 +82,7 @@ async function makeSampleCase() {
       }
       y -= 9;
     }
-    page.drawText(`Acme Widgets (A) — page ${index + 1} of ${pages.length}`, {
+    page.drawText(`Acme Widgets (A) · page ${index + 1} of ${pages.length}`, {
       x: PAGE.margin,
       y: PAGE.margin / 2,
       size: 8,

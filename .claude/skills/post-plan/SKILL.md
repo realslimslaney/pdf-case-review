@@ -1,6 +1,6 @@
 ---
 name: post-plan
-description: Post the current implementation plan or work summary to GitHub using the gh CLI — by default creating a new issue, or commenting on a PR/issue when one is named. Use when the user says "post-plan", "post this plan to an issue", "open an issue for this plan", "capture this plan on GitHub", or otherwise wants a plan or work summary tracked on GitHub.
+description: Post the current implementation plan or work summary to GitHub using the gh CLI: by default creating a new issue, or commenting on a PR/issue when one is named. Use when the user says "post-plan", "post this plan to an issue", "open an issue for this plan", "capture this plan on GitHub", or otherwise wants a plan or work summary tracked on GitHub.
 ---
 
 # Post Plan to GitHub
@@ -8,7 +8,7 @@ description: Post the current implementation plan or work summary to GitHub usin
 Turn the current plan (or a work summary) into a tracked GitHub artifact using
 the `gh` CLI. Defaults to **creating a new issue**; comment on a PR or existing
 issue only when the user names one. `gh` uses the user's local GitHub auth
-automatically — never handle tokens yourself.
+automatically; never handle tokens yourself.
 
 ## Steps
 
@@ -62,7 +62,7 @@ automatically — never handle tokens yourself.
 
 ## Context
 
-<why — the problem or motivation>
+<why: the problem or motivation>
 
 ## Acceptance Criteria
 
@@ -72,7 +72,7 @@ automatically — never handle tokens yourself.
 
 ## Notes
 
-- Never commit the temp body file — keep it outside the repo and delete it after.
+- Never commit the temp body file; keep it outside the repo and delete it after.
 - `gh` uses the user's local GitHub authentication automatically.
 - Don't pass `--label` unless the label already exists on the repo (it errors otherwise).
 - Default title: a short imperative summary of the plan; ask the user if ambiguous.

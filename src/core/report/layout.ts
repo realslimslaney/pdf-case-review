@@ -1,4 +1,4 @@
-// Turns a ReportModel into a flat list of layout blocks — the one place that decides what the
+// Turns a ReportModel into a flat list of layout blocks: the one place that decides what the
 // report looks like, so the Markdown, Word and PDF renderers cannot drift from each other.
 
 import { lexer, type Token, type Tokens } from "marked";

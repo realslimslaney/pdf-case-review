@@ -22,7 +22,7 @@ export async function renderReport(
 ): Promise<RenderedReport> {
   const model = buildReportModel(input, options);
   const blocks = layoutReport(model);
-  const footer = `${model.title} — PDF Case Review`;
+  const footer = `${model.title} · PDF Case Review`;
   switch (format) {
     case "markdown":
       return {

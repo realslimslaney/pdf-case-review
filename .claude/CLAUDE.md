@@ -4,12 +4,12 @@ Open-source VS Code extension: open a PDF, highlight passages by user-defined ca
 
 ## Layout
 
-- `src/extension/` — extension host code (VS Code API). **No Node built-ins here** except under `src/extension/desktop/`; everything else must work in the web extension host (`vscode.workspace.fs`, `Uri.joinPath`, `TextDecoder`).
-- `src/core/` — pure TypeScript: model, categories, report pipeline. No `vscode` import, no DOM, no Node. Unit-tested with vitest.
-- `src/shared/protocol.ts` — the typed message contract between host and webview.
-- `src/webview/` — the PDF.js viewer bootstrap and the `ViewerAdapter`. Every touch of PDF.js internals lives here.
-- `vendor/pdfjs/` — the pinned PDF.js prebuilt viewer, produced by `pnpm prepare-pdfjs` from `pdfjs.lock.json`. Gitignored; shipped in the VSIX. Patches (ideally none) go in `patches/pdfjs/`.
-- `media/` — icon and webview CSS. `schemas/` — the sidecar JSON schema. `scripts/` — Node maintenance scripts. `test/{unit,integration,fixtures}`. `docs/` — diataxis.
+- `src/extension/`: extension host code (VS Code API). **No Node built-ins here** except under `src/extension/desktop/`; everything else must work in the web extension host (`vscode.workspace.fs`, `Uri.joinPath`, `TextDecoder`).
+- `src/core/`: pure TypeScript: model, categories, report pipeline. No `vscode` import, no DOM, no Node. Unit-tested with vitest.
+- `src/shared/protocol.ts`: the typed message contract between host and webview.
+- `src/webview/`: the PDF.js viewer bootstrap and the `ViewerAdapter`. Every touch of PDF.js internals lives here.
+- `vendor/pdfjs/`: the pinned PDF.js prebuilt viewer, produced by `pnpm prepare-pdfjs` from `pdfjs.lock.json`. Gitignored; shipped in the VSIX. Patches (ideally none) go in `patches/pdfjs/`.
+- `media/`: icon and webview CSS. `schemas/`: the sidecar JSON schema. `scripts/`: Node maintenance scripts. `test/{unit,integration,fixtures}`. `docs/`: diataxis.
 
 Derived-from-upstream files (see `pdfjs.lock.json` → `upstreamReference.derivedFiles`) keep the Mathematic Inc header plus a "Modified by" line; never strip either.
 
@@ -18,18 +18,19 @@ Derived-from-upstream files (see `pdfjs.lock.json` → `upstreamReference.derive
 - TypeScript strict; `pnpm` only (never npm/yarn); Node 22+.
 - Lint/format = Biome (`pnpm lint`, `pnpm fix`). Line length 110.
 - Names spell things out (`webviewPanel`, not `wp`). No comments unless the *why* is non-obvious.
+- **Writing style:** avoid em-dashes; prefer separate sentences, commas, colons or parentheses. Use one only where it is genuinely the clearest choice. Applies to docs, comments, commit messages, PR bodies and generated report text.
 - Validate at boundaries (settings, sidecar files, webview messages); trust internal calls.
 - Don't add dependencies without a real need; anything bundled into the VSIX must be pure JS (no native modules) and its license recorded in `THIRD_PARTY_NOTICES.md`.
 - Never write to the user's PDF except through the dual-write sync in `src/extension/pdfSync/`; never strip encryption or permissions from a PDF.
 
 ## Tooling
 
-- `pnpm prepare-pdfjs` — vendor PDF.js (run once after clone, and after `pdfjs.lock.json` changes).
-- `pnpm fixtures` — generate synthetic test PDFs into `test/fixtures/generated/`.
-- `pnpm build` / `pnpm watch` — tsup (extension host + webview + integration tests).
-- `pnpm check` — typecheck + lint + unit tests. `pnpm test:integration` — headless VS Code (Mocha).
+- `pnpm prepare-pdfjs`: vendor PDF.js (run once after clone, and after `pdfjs.lock.json` changes).
+- `pnpm fixtures`: generate synthetic test PDFs into `test/fixtures/generated/`.
+- `pnpm build` / `pnpm watch`: tsup (extension host + webview + integration tests).
+- `pnpm check`: typecheck + lint + unit tests. `pnpm test:integration`: headless VS Code (Mocha).
 - F5 in VS Code runs the extension against `test/fixtures`.
-- `pnpm package` — builds the `.vsix`.
+- `pnpm package`: builds the `.vsix`.
 
 ## Committing
 

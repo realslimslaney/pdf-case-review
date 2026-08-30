@@ -1,6 +1,6 @@
 # Agent instructions
 
-Conventions for this repository live in `.claude/CLAUDE.md` — read that first. This file points at it, lists the easy-to-miss rules, and describes the Codex-specific layout.
+Conventions for this repository live in `.claude/CLAUDE.md`; read that first. This file points at it, lists the easy-to-miss rules, and describes the Codex-specific layout.
 
 ## Easy to miss
 
@@ -9,6 +9,7 @@ Conventions for this repository live in `.claude/CLAUDE.md` — read that first.
 - Never commit without an explicit yes from the user; never on `main`; never `--no-verify`.
 - Never write to a user's PDF outside `src/extension/pdfSync/`; never remove encryption or permissions from a PDF.
 - Files derived from `mathematic-inc/vscode-pdf` keep their Apache-2.0 header and "Modified by" line.
+- Avoid em-dashes in anything you write (docs, comments, commits, PR bodies, report text); rephrase with sentences, commas, colons or parentheses, and use one only where it is genuinely clearest.
 
 ## Codex
 

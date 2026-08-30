@@ -1,6 +1,6 @@
 // Minimal typings for the parts of the vendored PDF.js viewer we touch. `pdfjs-viewer` is
 // rewritten by tsup to the runtime URL ../../vendor/pdfjs/web/viewer.mjs (see tsup.config.ts).
-// Everything here is PDF.js internals, not a public API — keep the surface small and keep every
+// Everything here is PDF.js internals, not a public API; keep the surface small and keep every
 // use inside src/webview/ so an upgrade only ever breaks one place.
 
 declare module "pdfjs-viewer" {
