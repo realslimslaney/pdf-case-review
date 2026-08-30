@@ -7,11 +7,10 @@
 // viewer load). Only the session below knows viewer ids; the host resets it on every load.
 
 import type { SerializedHighlight } from "../../shared/protocol";
-import { type Category, categoryForColor } from "../categories";
+import { type Category, categoryForColor, UNCATEGORIZED_CATEGORY } from "../categories";
 import { normalizeCapturedText } from "../text/normalize";
-import type { SidecarHighlight } from "./types";
+import { type SidecarHighlight, toRect } from "./types";
 
-export const UNCATEGORIZED_ID = "uncategorized";
 const RECENTLY_DELETED_LIMIT = 200;
 
 export interface ViewerSnapshot {
@@ -147,14 +146,6 @@ function sameNumbers(left: readonly number[], right: readonly number[]): boolean
   );
 }
 
-function toRect(values: readonly number[]): [number, number, number, number] | undefined {
-  const [x1, y1, x2, y2] = values;
-  if (values.length !== 4 || x1 === undefined || y1 === undefined || x2 === undefined || y2 === undefined) {
-    return undefined;
-  }
-  return [x1, y1, x2, y2];
-}
-
 /** The editor's own text first, then the quad-intersection fallback, normalized either way. */
 function capturedText(editor: SerializedHighlight): string {
   return normalizeCapturedText(editor.text ?? editor.quadText ?? "");
@@ -173,7 +164,7 @@ function createHighlight(
   const category = categoryForColor(context.categories, editor.color);
   const highlight: SidecarHighlight = {
     id,
-    categoryId: category?.id ?? UNCATEGORIZED_ID,
+    categoryId: category?.id ?? UNCATEGORIZED_CATEGORY.id,
     page: editor.pageIndex + 1,
     rect: toRect(editor.rect) ?? [0, 0, 0, 0],
     quadPoints: [...editor.quadPoints],
@@ -246,7 +237,9 @@ function withEditorState(
   if (current.pageLabel === undefined && pageLabel !== undefined) {
     changes.pageLabel = pageLabel;
   }
-  if (editor.annotationElementId && editor.annotationElementId !== current.pdfjsId) {
+  // The model's pdfjsId is refreshed by every embed; the viewer may still report the id of the
+  // bytes it loaded (an alias the session knows), so only a missing id is filled in from it.
+  if (editor.annotationElementId && current.pdfjsId === undefined) {
     changes.pdfjsId = editor.annotationElementId;
   }
   if (Object.keys(changes).length === 0) {

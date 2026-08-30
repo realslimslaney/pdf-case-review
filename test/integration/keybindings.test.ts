@@ -4,10 +4,10 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
 
-import type { Sidecar } from "../../src/core/sidecar/types";
 import {
   closeAll,
   copyFixture,
+  documentState,
   fixtureUri,
   openWith,
   send,
@@ -17,12 +17,6 @@ import {
   waitForLoaded,
 } from "./helpers";
 
-interface DocumentState {
-  dirty: boolean;
-  instance: number;
-  model: Sidecar;
-}
-
 async function dump(uri: vscode.Uri): Promise<string> {
   const viewer = await viewerState(uri);
   const document = await documentState(uri);
@@ -31,7 +25,7 @@ async function dump(uri: vscode.Uri): Promise<string> {
     {
       instance: document?.instance,
       highlights: document?.model.highlights.map(({ id, categoryId, page }) => ({ id, categoryId, page })),
-      editors: viewer?.editors.map(({ id, sidecarId: sid, color }) => ({ id, sid, color })),
+      editors: viewer?.editors.map(({ id, sidecarId, color }) => ({ id, sidecarId, color })),
       loads: viewer?.loads,
       logs: viewer?.logs,
       trace,
@@ -52,13 +46,6 @@ async function waitOrDump<T>(
   } catch (error) {
     throw new Error(`${error instanceof Error ? error.message : String(error)}\n${await dump(uri)}`);
   }
-}
-
-async function documentState(uri: vscode.Uri): Promise<DocumentState | undefined> {
-  return vscode.commands.executeCommand<DocumentState | undefined>(
-    "pdfCaseReview.debug.getDocumentState",
-    uri,
-  );
 }
 
 suite("Phase F: highlight with category, presets and sync", () => {

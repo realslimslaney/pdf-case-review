@@ -3,6 +3,7 @@ import {
   CATEGORY_PRESETS,
   categoryAt,
   DEFAULT_CATEGORIES,
+  isCategoryList,
   validateCategories,
   validatePresets,
 } from "../../src/core/categories";
@@ -33,6 +34,15 @@ describe("validatePresets", () => {
   it("rejects non-object input", () => {
     expect(validatePresets([]).errors).toHaveLength(1);
     expect(validatePresets(null).presets).toEqual({});
+  });
+});
+
+describe("isCategoryList", () => {
+  it("accepts well-shaped lists and rejects everything else", () => {
+    expect(isCategoryList(DEFAULT_CATEGORIES)).toBe(true);
+    expect(isCategoryList([])).toBe(false);
+    expect(isCategoryList("fact")).toBe(false);
+    expect(isCategoryList([{ id: "fact" }])).toBe(false);
   });
 });
 

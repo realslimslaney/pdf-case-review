@@ -13,36 +13,16 @@ import { parseSidecar } from "../../src/core/sidecar/validate";
 import {
   closeAll,
   copyFixture,
+  documentState,
   fixtureUri,
+  highlight,
   openWith,
-  send,
+  remove,
   sleep,
   viewerState,
   waitFor,
   waitForLoaded,
 } from "./helpers";
-
-interface DocumentState {
-  dirty: boolean;
-  readOnly: boolean;
-  sidecarUri: string;
-  model: Sidecar;
-}
-
-async function documentState(uri: vscode.Uri): Promise<DocumentState | undefined> {
-  return vscode.commands.executeCommand<DocumentState | undefined>(
-    "pdfCaseReview.debug.getDocumentState",
-    uri,
-  );
-}
-
-async function remove(uri: vscode.Uri): Promise<void> {
-  try {
-    await vscode.workspace.fs.delete(uri, { recursive: true });
-  } catch {
-    // Nothing to remove.
-  }
-}
 
 function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
@@ -50,14 +30,6 @@ function sha256(bytes: Uint8Array): string {
 
 function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
   return left.byteLength === right.byteLength && Buffer.compare(Buffer.from(left), Buffer.from(right)) === 0;
-}
-
-async function highlight(uri: vscode.Uri, page: number, color: string, expectedCount: number): Promise<void> {
-  await send(uri, { type: "spike.highlightText", page, spanCount: 2, color });
-  await waitFor(`highlight ${expectedCount} in the model`, async () => {
-    const state = await documentState(uri);
-    return state && state.model.highlights.length >= expectedCount ? state : undefined;
-  });
 }
 
 async function saveAndRead(uri: vscode.Uri, sidecar: vscode.Uri): Promise<Sidecar> {
@@ -112,7 +84,7 @@ suite("Phase C: PdfSync embeds highlights on save", () => {
     await sleep(1_500);
     const after = await viewerState(pdf);
     assert.equal(after?.loads, loadsBefore, "the self-write must not reload the viewer");
-    assert.ok(isOpenInTab(pdf), "the editor tab survives the atomic rename over the PDF");
+    assert.ok(isOpenInTab(pdf), "the editor tab survives the rewrite of the PDF");
   });
 
   test("a second Save re-syncs without duplicating annotations", async () => {

@@ -6,6 +6,7 @@ import { ConfigurationTarget, commands, type Disposable, window, workspace } fro
 
 import { type Category, categoryAt } from "../../core/categories";
 import { newHighlightId } from "../../core/sidecar/ids";
+import { sortedCategories } from "../../core/sidecar/types";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
 import type { PdfDocument } from "../editor/pdfDocument";
@@ -18,7 +19,7 @@ interface CommandContext {
 }
 
 function paletteOf(document: PdfDocument): Category[] {
-  return [...document.model.categories].sort((left, right) => left.order - right.order);
+  return sortedCategories(document.model.categories);
 }
 
 async function pickCategory(document: PdfDocument, placeHolder: string): Promise<Category | undefined> {
@@ -61,7 +62,6 @@ export async function highlightWithCategory(
   context.provider.postMessage(document.uri, {
     type: "createFromSelection",
     id: newHighlightId(),
-    categoryId: category.id,
     color: category.color,
   });
 }

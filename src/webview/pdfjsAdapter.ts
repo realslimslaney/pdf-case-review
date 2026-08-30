@@ -1,7 +1,7 @@
 // Everything that touches PDF.js editor internals lives here (ADR-0003). If an upgrade breaks
 // the highlight editor, this is the one file to fix, or to swap for an overlay-based adapter.
 
-import type { PdfJsApplication, PdfJsEditor, PdfJsEditorLayer, PdfJsUiManager } from "pdfjs-viewer";
+import type { PdfJsApplication, PdfJsEditor, PdfJsUiManager } from "pdfjs-viewer";
 
 import { rgbToHex } from "../core/categories";
 import { type TextItemGeometry, textInQuads } from "../core/text/quadText";
@@ -64,6 +64,8 @@ export class PdfjsAdapter {
   /** Quad-intersection text per editor id, keyed by the quads it was computed for. */
   private readonly quadTextById = new Map<string, { key: string; text: string }>();
   private readonly quadTextInFlight = new Set<string>();
+  /** Editors already reported once; only a first sighting may pair with the last selection. */
+  private readonly seenEditorIds = new Set<string>();
 
   constructor(
     private readonly app: PdfJsApplication,
@@ -81,8 +83,12 @@ export class PdfjsAdapter {
       eventBus.on(name, () => this.scheduleSnapshot());
     }
     for (const name of ["pagerendered", "editorsrendered"]) {
+      eventBus.on(name, () => this.scheduleSnapshot());
+    }
+    // A page's editor layer exists only after annotationeditorlayerrendered (pagerendered fires
+    // before it is built); editorsrendered covers layers enabled by a mode switch.
+    for (const name of ["annotationeditorlayerrendered", "editorsrendered"]) {
       eventBus.on(name, (event) => {
-        this.scheduleSnapshot();
         const pageNumber = event["pageNumber"];
         if (typeof pageNumber === "number") {
           void this.tryInject(pageNumber - 1);
@@ -120,6 +126,7 @@ export class PdfjsAdapter {
     this.textItemsByPage.clear();
     this.quadTextById.clear();
     this.quadTextInFlight.clear();
+    this.seenEditorIds.clear();
     this.post({
       type: "viewerLoaded",
       pagesCount: this.app.pdfViewer.pagesCount,
@@ -175,16 +182,42 @@ export class PdfjsAdapter {
     this.app.eventBus.dispatch("switchannotationeditormode", { source: this, mode });
   }
 
-  /** Finds an editor by our id: the annotation id for file-backed editors, else PDF.js's editor id. */
-  private findEditor(id: string): PdfJsEditor | undefined {
+  /** Every editor PDF.js currently holds, page by page. */
+  private *editors(): Iterable<PdfJsEditor> {
     if (!this.uiManager) {
-      return undefined;
+      return;
     }
     for (let pageIndex = 0; pageIndex < this.app.pdfViewer.pagesCount; pageIndex += 1) {
-      for (const editor of this.uiManager.getEditors(pageIndex)) {
-        if (editor.annotationElementId === id || editor.id === id) {
-          return editor;
-        }
+      yield* this.uiManager.getEditors(pageIndex);
+    }
+  }
+
+  /** Finds an editor by our id: the annotation id for file-backed editors, else PDF.js's editor id. */
+  private findEditor(id: string): PdfJsEditor | undefined {
+    for (const editor of this.editors()) {
+      if (editor.annotationElementId === id || editor.id === id) {
+        return editor;
+      }
+    }
+    return undefined;
+  }
+
+  private editorIdForSidecar(sidecarId: string): string | undefined {
+    for (const [editorId, candidate] of this.sidecarIdByEditorId) {
+      if (candidate === sidecarId) {
+        return editorId;
+      }
+    }
+    return undefined;
+  }
+
+  /** Polls `probe` every 50 ms for up to a second (PDF.js defers creation behind mode switches). */
+  private async pollFor<T>(probe: () => T | undefined): Promise<T | undefined> {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const value = probe();
+      if (value !== undefined) {
+        return value;
       }
     }
     return undefined;
@@ -249,7 +282,11 @@ export class PdfjsAdapter {
           });
           continue;
         }
-        this.addWithoutUndo(layer, editor);
+        // Not an edit: PDF.js's onceAdded() would register an undo command and focus the editor
+        // on every attach (the layer re-adds every editor when a page is recycled), so it is
+        // neutralized on the instance before the first add().
+        editor.onceAdded = () => {};
+        layer.add(editor);
         // In NONE mode PDF.js renders an empty layer hidden and only un-hides it on a mode
         // change; an editor added afterwards would stay invisible.
         layer.div.hidden = false;
@@ -273,85 +310,79 @@ export class PdfjsAdapter {
 
   /**
    * Finds an editor by viewer id, materializing file-backed annotations first when needed: outside
-   * highlight mode PDF.js keeps them as plain annotation elements without editors.
+   * highlight mode PDF.js keeps them as plain annotation elements without editors, and it only
+   * materializes annotations on pages whose layer has been rendered.
    */
   private async withEditor(viewerId: string): Promise<PdfJsEditor | undefined> {
-    let editor = this.findEditor(viewerId);
+    const editor = this.findEditor(viewerId);
     if (editor || !this.uiManager || !/^[0-9]+R/.test(viewerId)) {
       return editor;
     }
     if (this.uiManager.getMode() !== ANNOTATION_EDITOR_TYPE_HIGHLIGHT) {
       this.setEditorMode(ANNOTATION_EDITOR_TYPE_HIGHLIGHT);
     }
-    for (let attempt = 0; attempt < 20 && !editor; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      editor = this.findEditor(viewerId);
+    return this.pollFor(() => this.findEditor(viewerId));
+  }
+
+  /** Runs `work` and puts the editor mode back afterwards when materializing had to switch it. */
+  private async keepingMode<T>(work: () => Promise<T>): Promise<T> {
+    const before = this.uiManager?.getMode();
+    try {
+      return await work();
+    } finally {
+      if (before !== undefined && this.uiManager && this.uiManager.getMode() !== before) {
+        this.setEditorMode(before);
+      }
     }
-    return editor;
+  }
+
+  private cancelInjection(sidecarId: string): void {
+    for (const [pageIndex, queue] of this.pendingInjections) {
+      this.pendingInjections.set(
+        pageIndex,
+        queue.filter((item) => item.sidecarId !== sidecarId),
+      );
+    }
+    this.injectedSidecarIds.add(sidecarId);
   }
 
   /**
-   * What `AnnotationEditorLayer.add()` does minus `onceAdded()`: an injected highlight must not
-   * become an undo command (a late injection would otherwise sit on top of the stack and the
-   * next Ctrl+Z would remove it instead of undoing the user's edit) and must not steal focus.
+   * Deletes highlights through PDF.js so the deletion lands on its undo stack, and reports the
+   * ones it could not reach (no editor: the host removes those from the model itself).
    */
-  private addWithoutUndo(layer: PdfJsEditorLayer, editor: PdfJsEditor): void {
-    if (!this.uiManager) {
-      return;
-    }
-    layer.changeParent(editor);
-    this.uiManager.addEditor(editor);
-    layer.attach(editor);
-    if (!editor.isAttachedToDOM) {
-      layer.div.append(editor.render());
-      editor.isAttachedToDOM = true;
-    }
-    editor.fixAndSetPosition();
-    this.uiManager.addToAnnotationStorage(editor);
-  }
-
-  /** Deletes editors through PDF.js so the deletion lands on its undo stack. */
-  async deleteHighlights(viewerIds: readonly string[], sidecarIds: readonly string[] = []): Promise<void> {
-    for (const sidecarId of sidecarIds) {
-      for (const [pageIndex, queue] of this.pendingInjections) {
-        this.pendingInjections.set(
-          pageIndex,
-          queue.filter((item) => item.sidecarId !== sidecarId),
-        );
+  async deleteHighlights(items: readonly { sidecarId: string; viewerId?: string }[]): Promise<void> {
+    const deleted: string[] = [];
+    const failed: string[] = [];
+    await this.keepingMode(async () => {
+      for (const item of items) {
+        this.cancelInjection(item.sidecarId);
+        const viewerId = item.viewerId ?? this.editorIdForSidecar(item.sidecarId);
+        const editor = viewerId === undefined ? undefined : await this.withEditor(viewerId);
+        if (!editor || !this.uiManager) {
+          failed.push(item.sidecarId);
+          continue;
+        }
+        this.uiManager.setSelected(editor);
+        this.uiManager.delete();
+        deleted.push(item.sidecarId);
       }
-      this.injectedSidecarIds.add(sidecarId);
-    }
-    if (!this.uiManager) {
-      return;
-    }
-    const targets = new Set(viewerIds);
-    for (const [editorId, sidecarId] of this.sidecarIdByEditorId) {
-      if (sidecarIds.includes(sidecarId)) {
-        targets.add(editorId);
-      }
-    }
-    for (const viewerId of targets) {
-      const editor = await this.withEditor(viewerId);
-      if (!editor) {
-        this.post({ type: "log", level: "warn", message: `delete: no editor with id ${viewerId}` });
-        continue;
-      }
-      this.uiManager.setSelected(editor);
-      this.uiManager.delete();
-    }
-    this.uiManager.unselectAll();
+      this.uiManager?.unselectAll();
+    });
     this.scheduleSnapshot();
+    this.post({ type: "highlightsDeleted", deleted, failed });
   }
 
   async recolorHighlights(items: readonly { viewerId: string; color: string }[]): Promise<void> {
-    for (const { viewerId, color } of items) {
-      const editor = await this.withEditor(viewerId);
-      if (!editor) {
-        this.post({ type: "log", level: "warn", message: `recolor: no editor with id ${viewerId}` });
-        continue;
+    await this.keepingMode(async () => {
+      for (const { viewerId, color } of items) {
+        const editor = await this.withEditor(viewerId);
+        if (!editor) {
+          this.post({ type: "log", level: "warn", message: `recolor: no editor with id ${viewerId}` });
+          continue;
+        }
+        editor.updateParams(PARAMS_HIGHLIGHT_COLOR, color);
       }
-      editor.updateParams(PARAMS_HIGHLIGHT_COLOR, color);
-    }
+    });
     this.scheduleSnapshot();
   }
 
@@ -464,14 +495,12 @@ export class PdfjsAdapter {
     }
     const editors: SerializedHighlight[] = [];
     const existingUnchanged: string[] = [];
-    for (let pageIndex = 0; pageIndex < this.app.pdfViewer.pagesCount; pageIndex += 1) {
-      for (const editor of this.uiManager.getEditors(pageIndex)) {
-        const serialized = this.serialize(editor);
-        if (serialized) {
-          editors.push(serialized);
-        } else if (editor.annotationElementId) {
-          existingUnchanged.push(editor.annotationElementId);
-        }
+    for (const editor of this.editors()) {
+      const serialized = this.serialize(editor);
+      if (serialized) {
+        editors.push(serialized);
+      } else if (editor.annotationElementId) {
+        existingUnchanged.push(editor.annotationElementId);
       }
     }
     const uiManager = this.uiManager;
@@ -493,10 +522,19 @@ export class PdfjsAdapter {
     if (!raw || raw["annotationType"] !== ANNOTATION_EDITOR_TYPE_HIGHLIGHT || raw["deleted"] === true) {
       return null;
     }
-    if (!this.textById.has(editor.id) && this.lastSelection) {
-      if (Date.now() - this.lastSelection.at <= SELECTION_PAIRING_WINDOW_MS) {
-        this.textById.set(editor.id, this.lastSelection.text);
-      }
+    // Pair the last selection only with an editor the viewer itself just created: injected or
+    // file-backed editors would otherwise adopt whatever the user selected last.
+    const firstSighting = !this.seenEditorIds.has(editor.id);
+    this.seenEditorIds.add(editor.id);
+    if (
+      firstSighting &&
+      !editor.annotationElementId &&
+      !this.sidecarIdByEditorId.has(editor.id) &&
+      !this.textById.has(editor.id) &&
+      this.lastSelection &&
+      Date.now() - this.lastSelection.at <= SELECTION_PAIRING_WINDOW_MS
+    ) {
+      this.textById.set(editor.id, this.lastSelection.text);
     }
     // PDF.js serializes geometry as typed arrays (Float32Array); flatten to plain numbers so the
     // payload survives postMessage and JSON alike.
@@ -565,16 +603,7 @@ export class PdfjsAdapter {
   }
 
   private allEditorIds(): Set<string> {
-    const ids = new Set<string>();
-    if (!this.uiManager) {
-      return ids;
-    }
-    for (let pageIndex = 0; pageIndex < this.app.pdfViewer.pagesCount; pageIndex += 1) {
-      for (const editor of this.uiManager.getEditors(pageIndex)) {
-        ids.add(editor.id);
-      }
-    }
-    return ids;
+    return new Set([...this.editors()].map((editor) => editor.id));
   }
 
   /**
@@ -589,7 +618,8 @@ export class PdfjsAdapter {
       return [];
     }
     const uiManager = this.uiManager;
-    this.lastSelection = { text: selection.toString(), at: Date.now() };
+    const text = selection.toString();
+    this.lastSelection = { text, at: Date.now() };
     const before = this.allEditorIds();
     // Without an editor selection updateParams sets the default color (there is no
     // HIGHLIGHT_DEFAULT_COLOR param in PDF.js 6.3); with one it would recolor that editor, so the
@@ -599,24 +629,22 @@ export class PdfjsAdapter {
       uiManager.updateParams(PARAMS_HIGHLIGHT_COLOR, color);
     }
     uiManager.highlightSelection("keyboard");
-    let created: PdfJsEditor[] = [];
-    for (let attempt = 0; attempt < 20 && created.length === 0; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      created = [];
-      for (let pageIndex = 0; pageIndex < this.app.pdfViewer.pagesCount; pageIndex += 1) {
-        for (const editor of uiManager.getEditors(pageIndex)) {
-          if (!before.has(editor.id)) {
-            created.push(editor);
-          }
-        }
-      }
-    }
+    // The mode switch also materializes file-backed annotations as editors; only viewer-created
+    // editors that were not there before are the new highlight.
+    const created =
+      (await this.pollFor(() => {
+        const fresh = [...this.editors()].filter(
+          (editor) => !before.has(editor.id) && !editor.annotationElementId,
+        );
+        return fresh.length > 0 ? fresh : undefined;
+      })) ?? [];
     this.post({
       type: "log",
       level: "info",
       message: `create from selection: ${before.size} editor(s) before, ${created.length} created (${created.map((editor) => editor.id).join(", ")}), mode ${uiManager.getMode()}`,
     });
     for (const editor of created) {
+      this.textById.set(editor.id, text);
       if (colorToHex(editor.serialize(false)?.["color"]) !== color.toUpperCase()) {
         editor.updateParams(PARAMS_HIGHLIGHT_COLOR, color);
       }

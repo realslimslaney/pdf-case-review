@@ -41,7 +41,7 @@ export function baseName(uri: Uri): string {
 
 /** SHA-256 of `bytes` as lowercase hex. Web-safe: `crypto.subtle` exists in both hosts. */
 export async function hashBytes(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", Uint8Array.from(bytes));
+  const digest = await crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
@@ -90,6 +90,8 @@ export class PdfDocument extends Disposable implements CustomDocument {
   protected = false;
   /** The one-time "this PDF is protected" notice was shown for this document. */
   protectedNoticeShown = false;
+  /** What the PDF currently holds of ours (`JSON.stringify(toEmbeddable(model))`); null when unknown. */
+  embeddedFingerprint: string | null = null;
 
   constructor(
     uri: Uri,
@@ -121,8 +123,18 @@ export class PdfDocument extends Disposable implements CustomDocument {
     return this._uri;
   }
 
+  private serialized: { model: Sidecar; text: string } | undefined;
+
+  /** Canonical text of the current model; the model is replaced, never mutated, so this is cached by identity. */
+  get serializedModel(): string {
+    if (this.serialized?.model !== this.model) {
+      this.serialized = { model: this.model, text: serializeSidecar(this.model) };
+    }
+    return this.serialized.text;
+  }
+
   get isDirty(): boolean {
-    return serializeSidecar(this.model) !== this.savedSnapshot;
+    return this.serializedModel !== this.savedSnapshot;
   }
 
   private readonly _onDidDelete = this._register(new EventEmitter<Uri>());

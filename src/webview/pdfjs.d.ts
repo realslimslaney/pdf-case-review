@@ -6,7 +6,6 @@
 declare module "pdfjs-viewer" {
   export interface PdfJsEventBus {
     on(name: string, listener: (event: Record<string, unknown>) => void): void;
-    off(name: string, listener: (event: Record<string, unknown>) => void): void;
     dispatch(name: string, data: Record<string, unknown>): void;
   }
 
@@ -17,35 +16,26 @@ declare module "pdfjs-viewer" {
     annotationElementId: string | null;
     /** The editor's DOM element once rendered; highlight editors carry their text as aria-label. */
     div?: HTMLElement | null;
-    color?: string | number[];
     serialize(isForCopying?: boolean): Record<string, unknown> | null;
     updateParams(type: number, value: unknown): void;
-    isAttachedToDOM: boolean;
-    render(): HTMLElement;
-    fixAndSetPosition(): void;
+    /** Called by the layer on every attach; PDF.js registers an undo command and focuses here. */
+    onceAdded(focus: boolean): void;
   }
 
   /** One page's AnnotationEditorLayer; exists once the page has been rendered. */
   export interface PdfJsEditorLayer {
-    readonly pageIndex: number;
     readonly div: HTMLElement;
     deserialize(data: Record<string, unknown>): Promise<PdfJsEditor | null>;
     add(editor: PdfJsEditor): void;
-    changeParent(editor: PdfJsEditor): void;
-    attach(editor: PdfJsEditor): void;
   }
 
   export interface PdfJsUiManager {
     getEditors(pageIndex: number): Iterable<PdfJsEditor>;
-    getEditor(id: string): PdfJsEditor | undefined;
-    addEditor(editor: PdfJsEditor): void;
-    addToAnnotationStorage(editor: PdfJsEditor): void;
     getLayer(pageIndex: number): PdfJsEditorLayer | undefined;
     highlightSelection(methodOfCreation?: string, comment?: boolean): void;
     updateParams(type: number, value: unknown): void;
     setSelected(editor: PdfJsEditor): void;
     unselectAll(): void;
-    unselect(editor: PdfJsEditor): void;
     /** Deletes the selected editors as one undoable command. */
     delete(): void;
     undo(): void;
@@ -55,7 +45,6 @@ declare module "pdfjs-viewer" {
     getMode(): number;
     /** True while at least one editor is selected. */
     readonly hasSelection: boolean;
-    readonly highlightColors: Map<string, string> | null;
   }
 
   export interface PdfJsViewer {
@@ -101,6 +90,4 @@ declare module "pdfjs-viewer" {
 
 declare function acquireVsCodeApi(): {
   postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
 };

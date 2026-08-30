@@ -4,7 +4,7 @@ import { StatusBarAlignment, window } from "vscode";
 
 import type { PdfWriteStatus } from "../../core/sidecar/types";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
-import type { PdfDocument } from "../editor/pdfDocument";
+import { baseName, type PdfDocument } from "../editor/pdfDocument";
 import { Disposable } from "../util/disposable";
 
 function pdfStatus(document: PdfDocument): string {
@@ -50,7 +50,7 @@ export class HighlightsStatusBar extends Disposable {
       return;
     }
     this.item.text = statusText(document);
-    this.item.tooltip = `${document.model.source.fileName}: highlights are stored in ${document.sidecarUri.path.slice(document.sidecarUri.path.lastIndexOf("/") + 1)}. Click to show the Highlights view.`;
+    this.item.tooltip = `${document.model.source.fileName}: highlights are stored in ${baseName(document.sidecarUri)}. Click to show the Highlights view.`;
     this.item.show();
   }
 }

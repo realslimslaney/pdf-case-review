@@ -1,11 +1,10 @@
 // The Highlights view as data: groups (by category or by page) of highlight rows. Pure so the
 // labels, ordering and buckets are unit-tested; the extension turns these into TreeItems.
 
-import { UNCATEGORIZED_COLOR } from "./categories";
+import { UNCATEGORIZED_CATEGORY } from "./categories";
 import { formatCitation, normalizeQuote, truncateQuote } from "./report/model";
-import { UNCATEGORIZED_ID } from "./sidecar/reconcile";
 import { sortHighlights } from "./sidecar/serialize";
-import type { Sidecar, SidecarHighlight } from "./sidecar/types";
+import { type Sidecar, type SidecarHighlight, sortedCategories } from "./sidecar/types";
 
 export type GroupBy = "category" | "page";
 
@@ -36,8 +35,7 @@ export interface GroupNode {
   children: HighlightNode[];
 }
 
-export function highlightLabel(highlight: SidecarHighlight): string {
-  const quote = normalizeQuote(highlight.text);
+export function highlightLabel(highlight: SidecarHighlight, quote = normalizeQuote(highlight.text)): string {
   if (quote === "") {
     return highlight.kind === "free" ? IMAGE_REGION_LABEL : NO_TEXT_LABEL;
   }
@@ -65,10 +63,11 @@ function toNode(highlight: SidecarHighlight, color: string): HighlightNode {
 }
 
 export function buildTree(model: Sidecar, groupBy: GroupBy): GroupNode[] {
-  const categories = [...model.categories].sort((left, right) => left.order - right.order);
+  const categories = sortedCategories(model.categories);
   const colorOf = new Map(categories.map((category) => [category.id, category.color]));
   const highlights = sortHighlights(model.highlights);
-  const color = (highlight: SidecarHighlight) => colorOf.get(highlight.categoryId) ?? UNCATEGORIZED_COLOR;
+  const color = (highlight: SidecarHighlight) =>
+    colorOf.get(highlight.categoryId) ?? UNCATEGORIZED_CATEGORY.color;
 
   if (groupBy === "category") {
     const groups: GroupNode[] = [];
@@ -90,11 +89,11 @@ export function buildTree(model: Sidecar, groupBy: GroupBy): GroupNode[] {
     if (orphans.length > 0) {
       groups.push({
         kind: "category",
-        id: UNCATEGORIZED_ID,
-        label: "Uncategorized",
+        id: UNCATEGORIZED_CATEGORY.id,
+        label: UNCATEGORIZED_CATEGORY.name,
         description: countLabel(orphans.length),
-        color: UNCATEGORIZED_COLOR,
-        children: orphans.map((highlight) => toNode(highlight, UNCATEGORIZED_COLOR)),
+        color: UNCATEGORIZED_CATEGORY.color,
+        children: orphans.map((highlight) => toNode(highlight, UNCATEGORIZED_CATEGORY.color)),
       });
     }
     return groups;

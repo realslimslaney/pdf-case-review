@@ -3,7 +3,7 @@
 
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
-
+import type { Sidecar } from "../../src/core/sidecar/types";
 import type { ViewerState } from "../../src/extension/editor/pdfCaseReviewEditorProvider";
 import type { HostToWebviewMessage } from "../../src/shared/protocol";
 
@@ -40,6 +40,44 @@ export function fixturesFolder(): vscode.Uri {
 /** A path under test/fixtures, e.g. `fixtureUri("generated", "sample-case.pdf")`. */
 export function fixtureUri(...segments: string[]): vscode.Uri {
   return vscode.Uri.joinPath(fixturesFolder(), ...segments);
+}
+
+/** What `pdfCaseReview.debug.getDocumentState` returns. */
+export interface DocumentState {
+  dirty: boolean;
+  instance: number;
+  readOnly: boolean;
+  sidecarUri: string;
+  model: Sidecar;
+}
+
+export async function documentState(uri: vscode.Uri): Promise<DocumentState | undefined> {
+  return vscode.commands.executeCommand<DocumentState | undefined>(
+    "pdfCaseReview.debug.getDocumentState",
+    uri,
+  );
+}
+
+/** Creates a highlight from the first two text spans of `page` and waits for the model to hold it. */
+export async function highlight(
+  uri: vscode.Uri,
+  page: number,
+  color: string,
+  expectedCount: number,
+): Promise<void> {
+  await send(uri, { type: "spike.highlightText", page, spanCount: 2, color });
+  await waitFor(`highlight ${expectedCount} in the model`, async () => {
+    const state = await documentState(uri);
+    return state && state.model.highlights.length >= expectedCount ? state : undefined;
+  });
+}
+
+export async function remove(uri: vscode.Uri): Promise<void> {
+  try {
+    await vscode.workspace.fs.delete(uri, { recursive: true });
+  } catch {
+    // Nothing to remove.
+  }
 }
 
 export async function viewerState(uri: vscode.Uri): Promise<ViewerState | undefined> {

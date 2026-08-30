@@ -24,10 +24,17 @@ export interface TreeSnapshot {
   }[];
 }
 
+const icons = new Map<string, Uri>();
+
 /** A filled circle in the category color, as an inline SVG icon (works in every theme). */
 export function circleIcon(color: string): Uri {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="${color}" stroke="rgba(128,128,128,0.6)"/></svg>`;
-  return Uri.parse(`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
+  let icon = icons.get(color);
+  if (!icon) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="${color}" stroke="rgba(128,128,128,0.6)"/></svg>`;
+    icon = Uri.parse(`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
+    icons.set(color, icon);
+  }
+  return icon;
 }
 
 export class HighlightsTreeProvider extends Disposable implements TreeDataProvider<TreeNode> {
@@ -85,16 +92,6 @@ export class HighlightsTreeProvider extends Disposable implements TreeDataProvid
     item.iconPath = node.color ? circleIcon(node.color) : new ThemeIcon("book");
     item.contextValue = node.kind;
     return item;
-  }
-
-  findHighlight(id: string): HighlightNode | undefined {
-    for (const group of this.groups) {
-      const node = group.children.find((child) => child.id === id);
-      if (node) {
-        return node;
-      }
-    }
-    return undefined;
   }
 
   /** What the view shows, for the integration tests. */

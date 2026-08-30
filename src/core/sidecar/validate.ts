@@ -3,6 +3,7 @@
 // and `contributes.jsonValidation` already gives editor-time feedback from the same schema file.
 
 import { validateCategories } from "../categories";
+import { UUID_PATTERN } from "./ids";
 import {
   type AiConsent,
   type AiSummary,
@@ -11,11 +12,13 @@ import {
   type HighlightKind,
   type PageNote,
   type PdfWriteStatus,
+  type Rect,
   SIDECAR_VERSION,
   type Sidecar,
   type SidecarCategory,
   type SidecarHighlight,
   type SidecarSource,
+  toRect,
 } from "./types";
 
 export class SidecarError extends Error {
@@ -31,7 +34,6 @@ export class SidecarError extends Error {
 
 type JsonObject = Record<string, unknown>;
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA256 = /^[0-9a-f]{64}$/;
 const COLOR = /^#[0-9A-F]{6}$/;
 const CATEGORY_ID = /^[a-z][a-z0-9-]*$/;
@@ -309,13 +311,12 @@ function readCategory(value: unknown, path: string): SidecarCategory {
   return category;
 }
 
-function readRect(reader: Reader): [number, number, number, number] {
-  const values = reader.numbers("rect");
-  const [x1, y1, x2, y2] = values;
-  if (values.length !== 4 || x1 === undefined || y1 === undefined || x2 === undefined || y2 === undefined) {
+function readRect(reader: Reader): Rect {
+  const rect = toRect(reader.numbers("rect"));
+  if (!rect) {
     fail(reader.at("rect"), "expected 4 numbers");
   }
-  return [x1, y1, x2, y2];
+  return rect;
 }
 
 function readContext(value: unknown, path: string): HighlightContext {
@@ -333,7 +334,7 @@ function readHighlight(value: unknown, path: string): SidecarHighlight {
     fail(reader.at("quadPoints"), "expected groups of 8 numbers");
   }
   const highlight: SidecarHighlight = {
-    id: reader.pattern("id", UUID, "a UUID"),
+    id: reader.pattern("id", UUID_PATTERN, "a UUID"),
     categoryId: reader.string("categoryId"),
     page: reader.integer("page", 1),
     rect: readRect(reader),

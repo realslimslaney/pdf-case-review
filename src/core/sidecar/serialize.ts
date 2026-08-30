@@ -1,7 +1,7 @@
 // Deterministic sidecar text so git diffs stay readable: sorted keys, 2-space indent, LF,
 // highlights in reading order.
 
-import type { Sidecar, SidecarHighlight } from "./types";
+import { type Sidecar, type SidecarHighlight, sortedCategories } from "./types";
 
 function compareStrings(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -43,9 +43,7 @@ export function sortHighlights(highlights: readonly SidecarHighlight[]): Sidecar
 export function serializeSidecar(sidecar: Sidecar): string {
   const ordered: Sidecar = {
     ...sidecar,
-    categories: [...sidecar.categories].sort(
-      (left, right) => left.order - right.order || compareStrings(left.id, right.id),
-    ),
+    categories: sortedCategories(sidecar.categories),
     highlights: sortHighlights(sidecar.highlights),
   };
   if (sidecar.pageNotes) {

@@ -4,53 +4,28 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
 
-import type { Sidecar } from "../../src/core/sidecar/types";
+import type { TreeSnapshot as TreeViewSnapshot } from "../../src/extension/views/highlightsTree";
 import {
   closeAll,
   copyFixture,
+  documentState,
   fixtureUri,
+  highlight,
   openWith,
-  send,
   viewerState,
   waitFor,
   waitForLoaded,
 } from "./helpers";
 
-interface DocumentState {
-  dirty: boolean;
-  model: Sidecar;
-}
-
-interface TreeSnapshot {
-  groupBy: "category" | "page";
+interface TreeSnapshot extends TreeViewSnapshot {
   activeUri: string | null;
   statusText: string | null;
-  groups: {
-    label: string;
-    description: string;
-    children: { id: string; label: string; description: string }[];
-  }[];
-}
-
-async function documentState(uri: vscode.Uri): Promise<DocumentState | undefined> {
-  return vscode.commands.executeCommand<DocumentState | undefined>(
-    "pdfCaseReview.debug.getDocumentState",
-    uri,
-  );
 }
 
 async function treeSnapshot(): Promise<TreeSnapshot> {
   const snapshot = await vscode.commands.executeCommand<TreeSnapshot>("pdfCaseReview.debug.getTreeSnapshot");
   assert.ok(snapshot);
   return snapshot;
-}
-
-async function highlight(uri: vscode.Uri, page: number, color: string, expectedCount: number): Promise<void> {
-  await send(uri, { type: "spike.highlightText", page, spanCount: 2, color });
-  await waitFor(`highlight ${expectedCount} in the model`, async () => {
-    const state = await documentState(uri);
-    return state && state.model.highlights.length >= expectedCount ? state : undefined;
-  });
 }
 
 suite("Phase E: Highlights view and commands", () => {

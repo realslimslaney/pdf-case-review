@@ -31,7 +31,8 @@ export async function readSidecar(uri: Uri): Promise<SidecarLoad> {
     if (isFileNotFound(error)) {
       return { kind: "missing" };
     }
-    throw error;
+    const detail = error instanceof Error ? error.message : String(error);
+    return { kind: "invalid", error: new SidecarError("", `could not be read: ${detail}`) };
   }
   try {
     const raw: unknown = JSON.parse(new TextDecoder().decode(bytes));

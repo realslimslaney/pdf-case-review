@@ -6,6 +6,7 @@ import {
   CATEGORY_PRESETS,
   type Category,
   DEFAULT_CATEGORIES,
+  isCategoryList,
   normalizeCategories,
   validateCategories,
   validatePresets,
@@ -20,10 +21,17 @@ export function highlightsGroupBy(): GroupBy {
   return value === "page" ? "page" : "category";
 }
 
+/** Writes where the setting is defined (a workspace override would otherwise win over a user write). */
 export async function setHighlightsGroupBy(groupBy: GroupBy): Promise<void> {
-  await workspace
-    .getConfiguration("pdfCaseReview.highlights")
-    .update("groupBy", groupBy, ConfigurationTarget.Global);
+  const configuration = workspace.getConfiguration("pdfCaseReview.highlights");
+  const inspected = configuration.inspect<string>("groupBy");
+  const target =
+    inspected?.workspaceFolderValue !== undefined
+      ? ConfigurationTarget.WorkspaceFolder
+      : inspected?.workspaceValue !== undefined
+        ? ConfigurationTarget.Workspace
+        : ConfigurationTarget.Global;
+  await configuration.update("groupBy", groupBy, target);
 }
 
 export function sidecarLocation(uri: Uri): SidecarLocation {
@@ -56,7 +64,14 @@ export function categoryPresets(output: LogOutputChannel): Record<string, Catego
 export function configuredCategories(uri: Uri, output: LogOutputChannel): Category[] {
   const configured = workspace
     .getConfiguration("pdfCaseReview", uri)
-    .get<Category[]>("categories", [...DEFAULT_CATEGORIES]);
+    .get<unknown>("categories", [...DEFAULT_CATEGORIES]);
+  if (!isCategoryList(configured)) {
+    output.warn("pdfCaseReview.categories is not a list of {id, name, color} objects, using defaults");
+    void window.showWarningMessage(
+      "PDF Case Review: category settings must be a list of {id, name, color} objects. Using defaults.",
+    );
+    return [...DEFAULT_CATEGORIES];
+  }
   const errors = validateCategories(configured);
   if (errors.length > 0) {
     const detail = errors.map((error) => `#${error.index + 1}: ${error.message}`).join("; ");

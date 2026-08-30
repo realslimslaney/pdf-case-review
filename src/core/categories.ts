@@ -72,8 +72,12 @@ export function categoryForColor(categories: readonly Category[], color: string)
   return categories.find((category) => category.color.toUpperCase() === wanted);
 }
 
-/** Color for highlights whose category is unknown, in the viewer and the PDF. */
-export const UNCATEGORIZED_COLOR = "#CCCCCC";
+/** The bucket for highlights whose category id is unknown, in the viewer, the tree, the PDF and the report. */
+export const UNCATEGORIZED_CATEGORY: Category = {
+  id: "uncategorized",
+  name: "Uncategorized",
+  color: "#CCCCCC",
+};
 
 /** `#RRGGBB` to 0-255 components (what PDF.js editors take). */
 export function hexToRgb(color: string): [number, number, number] {
@@ -99,6 +103,22 @@ export const CATEGORY_PRESETS: Readonly<Record<string, readonly Category[]>> = {
     { id: "question", name: "Question", color: "#FFCBE6" },
   ],
 };
+
+/** Structural check for settings input: a non-empty list of `{ id, name, color }` strings. */
+export function isCategoryList(value: unknown): value is Category[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every(
+      (entry) =>
+        typeof entry === "object" &&
+        entry !== null &&
+        typeof (entry as Category).id === "string" &&
+        typeof (entry as Category).name === "string" &&
+        typeof (entry as Category).color === "string",
+    )
+  );
+}
 
 export interface PresetValidationError {
   preset: string;
@@ -127,15 +147,7 @@ export function validatePresets(presets: unknown): {
       errors.push({ preset: name, message: "expected a non-empty list of categories" });
       continue;
     }
-    const shaped = categories.every(
-      (entry) =>
-        typeof entry === "object" &&
-        entry !== null &&
-        typeof (entry as Category).id === "string" &&
-        typeof (entry as Category).name === "string" &&
-        typeof (entry as Category).color === "string",
-    );
-    if (!shaped) {
+    if (!isCategoryList(categories)) {
       errors.push({ preset: name, message: "every category needs id, name and color" });
       continue;
     }

@@ -27,6 +27,24 @@ export interface SidecarCategory extends Category {
   order: number;
 }
 
+/** Display order of a document's palette: `order`, then id for stability. */
+export function sortedCategories(categories: readonly SidecarCategory[]): SidecarCategory[] {
+  return [...categories].sort(
+    (left, right) => left.order - right.order || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0),
+  );
+}
+
+/** PDF user-space `[x1, y1, x2, y2]`. */
+export type Rect = [number, number, number, number];
+
+export function toRect(values: readonly number[]): Rect | undefined {
+  const [x1, y1, x2, y2] = values;
+  if (values.length !== 4 || x1 === undefined || y1 === undefined || x2 === undefined || y2 === undefined) {
+    return undefined;
+  }
+  return [x1, y1, x2, y2];
+}
+
 export type HighlightKind = "text" | "free";
 
 export interface HighlightContext {
@@ -43,7 +61,7 @@ export interface SidecarHighlight {
   pageLabel?: string;
   /** The id PDF.js gives the embedded annotation (`<objectNumber>R`); refreshed on every sync. */
   pdfjsId?: string;
-  rect: [number, number, number, number];
+  rect: Rect;
   /** Groups of 8 numbers; empty for a `free` highlight drawn over an image. */
   quadPoints: number[];
   /** PDF.js `serialize()` outlines, kept verbatim so the highlight can be re-created in the viewer. */

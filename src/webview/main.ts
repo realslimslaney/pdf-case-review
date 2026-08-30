@@ -75,7 +75,7 @@ document.addEventListener(
       return;
     }
     const key = event.key.toLowerCase();
-    if (key === "p" || (key === "s" && !event.shiftKey)) {
+    if ((key === "p" || key === "s") && !event.shiftKey) {
       event.preventDefault();
       event.stopImmediatePropagation();
       if (key === "s") {
@@ -140,7 +140,7 @@ window.addEventListener("message", async (event: MessageEvent<HostToWebviewMessa
       adapter.loadHighlights(message.highlights);
       return;
     case "deleteHighlights":
-      await adapter.deleteHighlights(message.viewerIds, message.sidecarIds ?? []);
+      await adapter.deleteHighlights(message.items);
       return;
     case "recolorHighlights":
       await adapter.recolorHighlights(message.items);

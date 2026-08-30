@@ -3,6 +3,7 @@
 
 import { commands, type Disposable, env, type TreeView, window } from "vscode";
 
+import { sortedCategories } from "../../core/sidecar/types";
 import type { GroupBy, HighlightNode } from "../../core/tree";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
@@ -81,14 +82,11 @@ export function deleteHighlight(context: CommandContext, target: unknown): void 
   }
   const { document, id } = resolved;
   const viewerId = viewerIdFor(document, id);
-  // With an editor or annotation in the viewer, PDF.js deletes (undoably) and the next snapshot
-  // removes it from the model; otherwise the model is the only place it exists.
-  context.provider.postMessage(document.uri, {
-    type: "deleteHighlights",
-    viewerIds: viewerId === undefined ? [] : [viewerId],
-    sidecarIds: [id],
-  });
-  if (viewerId === undefined) {
+  // The viewer deletes what it holds (undoably) and the next snapshot removes it from the model;
+  // it reports back what it could not reach, and the host removes those itself.
+  const item = viewerId === undefined ? { sidecarId: id } : { sidecarId: id, viewerId };
+  const delivered = context.provider.postMessage(document.uri, { type: "deleteHighlights", items: [item] });
+  if (delivered === 0) {
     context.provider.removeHighlight(document, id);
   }
 }
@@ -107,13 +105,11 @@ export async function setCategory(
   if (chosen === undefined) {
     const current = document.model.highlights.find((entry) => entry.id === id)?.categoryId;
     const picked = await window.showQuickPick(
-      [...document.model.categories]
-        .sort((left, right) => left.order - right.order)
-        .map((category) => ({
-          label: category.name,
-          description: category.id === current ? "current" : category.color,
-          id: category.id,
-        })),
+      sortedCategories(document.model.categories).map((category) => ({
+        label: category.name,
+        description: category.id === current ? "current" : category.color,
+        id: category.id,
+      })),
       { placeHolder: "Category for this highlight" },
     );
     chosen = picked?.id;

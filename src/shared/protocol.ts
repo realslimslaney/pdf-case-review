@@ -85,6 +85,8 @@ export type WebviewToHostMessage =
   | { type: "pageChanged"; page: number; pageLabel: string | null }
   /** Ctrl+S / Cmd+S pressed inside the viewer; the host runs VS Code's save. */
   | { type: "saveRequested" }
+  /** Outcome of `deleteHighlights`: `failed` ids had no editor the viewer could delete. */
+  | { type: "highlightsDeleted"; deleted: string[]; failed: string[] }
   /** Outcome of `createFromSelection`: a new highlight, or the selected editors recolored, or neither. */
   | { type: "createFromSelectionResult"; id: string; created: boolean; recolored: boolean }
   | { type: "openLink"; url: string }
@@ -99,12 +101,12 @@ export type HostToWebviewMessage =
   | { type: "saveDocument" }
   /** Draw sidecar highlights the file holds no annotation for; each page is injected once rendered. */
   | { type: "loadHighlights"; highlights: InjectableHighlight[] }
-  /** Delete editors by viewer id through PDF.js (undoable there); `sidecarIds` also cancels pending injections. */
-  | { type: "deleteHighlights"; viewerIds: string[]; sidecarIds?: string[] }
+  /** Delete highlights through PDF.js (undoable there); pending injections are cancelled too. */
+  | { type: "deleteHighlights"; items: { sidecarId: string; viewerId?: string }[] }
   /** Recolor editors (category change from the host). */
   | { type: "recolorHighlights"; items: { viewerId: string; color: string }[] }
   /** Highlight the text selection with this uuid and color, or recolor the selected editors. */
-  | { type: "createFromSelection"; id: string; categoryId: string; color: string }
+  | { type: "createFromSelection"; id: string; color: string }
   /** Scroll to a highlight (1-based page; rect in PDF user space) and flash its editor when it has one. */
   | { type: "goTo"; page: number; rect?: [number, number, number, number]; viewerId?: string }
   /** Spike instrumentation: select `spanCount` text-layer spans on `page` without creating anything. */

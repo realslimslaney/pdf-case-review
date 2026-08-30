@@ -32,15 +32,22 @@ export interface SyncContext {
   embedOnSave: boolean;
   /** Called (at most once per save) when the PDF turns out to be protected. */
   onProtected: (document: PdfDocument) => void;
+  /** Called when pdf-lib could not rewrite the PDF; the sidecar is still saved. */
+  onEmbedFailed: (document: PdfDocument, detail: string) => void;
 }
 
 export interface PdfInspection {
   protected: boolean;
   /** Our annotations found in the file; null when the file was not inspected. */
   embedded: EmbeddedHighlight[] | null;
+  /** Why the file could not be inspected, when pdf-lib rejected it for a reason other than encryption. */
+  error?: string;
 }
 
-/** Looks inside a PDF once, on open: is it protected, and which of our annotations does it hold? */
+/**
+ * Looks inside a PDF once, on open: is it protected, and which of our annotations does it hold?
+ * A file pdf-lib cannot parse (PDF.js is more forgiving) is simply "not inspected".
+ */
 export async function inspectPdf(bytes: Uint8Array): Promise<PdfInspection> {
   if (bytes.byteLength > INSPECT_LIMIT_BYTES) {
     return { protected: false, embedded: null };
@@ -51,7 +58,11 @@ export async function inspectPdf(bytes: Uint8Array): Promise<PdfInspection> {
     if (error instanceof ProtectedPdfError) {
       return { protected: true, embedded: null };
     }
-    throw error;
+    return {
+      protected: false,
+      embedded: null,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -74,16 +85,27 @@ async function embedStep(
     // Nothing to write and nothing of ours to strip: leave the file byte-identical.
     return { status: "synced", bytes: null, written: [] };
   }
+  const embeddable = toEmbeddable(model);
+  const fingerprint = JSON.stringify(embeddable);
+  if (fingerprint === document.embeddedFingerprint) {
+    // The file already holds exactly these annotations (notes, free highlights and page labels
+    // live in the sidecar only): skip the pdf-lib rewrite.
+    return { status: "synced", bytes: null, written: [] };
+  }
   try {
-    const result = await embedHighlights(bytes, toEmbeddable(model));
+    const result = await embedHighlights(bytes, embeddable);
+    document.embeddedFingerprint = fingerprint;
     return { status: "synced", bytes: result.bytes, written: result.written };
   } catch (error) {
+    document.embeddedFingerprint = null;
     if (error instanceof ProtectedPdfError) {
       document.protected = true;
       context.onProtected(document);
       return SKIPPED_PROTECTED;
     }
-    throw error;
+    // pdf-lib could not rewrite the file (PDF.js is more forgiving): the sidecar still saves.
+    context.onEmbedFailed(document, error instanceof Error ? error.message : String(error));
+    return { status: "failed", bytes: null, written: [] };
   }
 }
 
@@ -105,8 +127,9 @@ export async function syncOnSave(document: PdfDocument, context: SyncContext): P
       }
     : null;
 
+  // Apply to the model as it is now: a reconcile may have landed during the awaits above.
   document.model = applyEmbedOutcome(
-    before,
+    document.model,
     sourceFor(document.uri, document.info),
     outcome,
     embedded,
@@ -128,6 +151,7 @@ export async function syncOnSave(document: PdfDocument, context: SyncContext): P
   } catch (error) {
     document.contentHash = previousInfo.sha256;
     document.info = previousInfo;
+    document.embeddedFingerprint = null;
     document.model = markPdfWriteFailed(document.model, before, previousInfo);
     document.savedSnapshot = await writeSidecar(document.sidecarUri, document.model);
     const detail = error instanceof Error ? error.message : String(error);

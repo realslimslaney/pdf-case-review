@@ -6,33 +6,20 @@ import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
 
 import { serializeSidecar } from "../../src/core/sidecar/serialize";
-import type { Sidecar } from "../../src/core/sidecar/types";
 import { parseSidecar } from "../../src/core/sidecar/validate";
 import {
   closeAll,
   copyFixture,
+  documentState,
   fixtureUri,
+  highlight,
   openWith,
-  send,
+  remove,
   sleep,
   viewerState,
   waitFor,
   waitForLoaded,
 } from "./helpers";
-
-interface DocumentState {
-  dirty: boolean;
-  readOnly: boolean;
-  sidecarUri: string;
-  model: Sidecar;
-}
-
-async function documentState(uri: vscode.Uri): Promise<DocumentState | undefined> {
-  return vscode.commands.executeCommand<DocumentState | undefined>(
-    "pdfCaseReview.debug.getDocumentState",
-    uri,
-  );
-}
 
 async function exists(uri: vscode.Uri): Promise<boolean> {
   try {
@@ -41,22 +28,6 @@ async function exists(uri: vscode.Uri): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-async function remove(uri: vscode.Uri): Promise<void> {
-  try {
-    await vscode.workspace.fs.delete(uri, { recursive: true });
-  } catch {
-    // Nothing to remove.
-  }
-}
-
-async function highlight(uri: vscode.Uri, page: number, color: string, expectedCount: number): Promise<void> {
-  await send(uri, { type: "spike.highlightText", page, spanCount: 2, color });
-  await waitFor(`highlight ${expectedCount} in the model`, async () => {
-    const state = await documentState(uri);
-    return state && state.model.highlights.length >= expectedCount ? state : undefined;
-  });
 }
 
 suite("Phase B: sidecar save, revert and location", () => {

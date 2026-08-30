@@ -9,11 +9,12 @@ import * as vscode from "vscode";
 
 import { DEFAULT_CATEGORIES } from "../../src/core/categories";
 import { serializeSidecar } from "../../src/core/sidecar/serialize";
-import { emptySidecar, type Sidecar, type SidecarHighlight } from "../../src/core/sidecar/types";
+import { emptySidecar, type SidecarHighlight } from "../../src/core/sidecar/types";
 import { parseSidecar } from "../../src/core/sidecar/validate";
 import {
   closeAll,
   copyFixture,
+  documentState,
   fixtureUri,
   openWith,
   send,
@@ -22,11 +23,6 @@ import {
   waitFor,
   waitForLoaded,
 } from "./helpers";
-
-interface DocumentState {
-  dirty: boolean;
-  model: Sidecar;
-}
 
 const KEEP = "8f6c1b2e-3d4a-4f5b-9c6d-7e8f9a0b1c2d";
 const OTHER = "0d3a7c44-9b1e-4e2a-8f3c-5a6b7c8d9e0f";
@@ -45,13 +41,6 @@ function highlightOn(page: number, id: string, categoryId: string, note: string)
     createdAt: STAMP,
     updatedAt: STAMP,
   };
-}
-
-async function documentState(uri: vscode.Uri): Promise<DocumentState | undefined> {
-  return vscode.commands.executeCommand<DocumentState | undefined>(
-    "pdfCaseReview.debug.getDocumentState",
-    uri,
-  );
 }
 
 async function writeSidecarFor(pdf: vscode.Uri, sidecar: vscode.Uri, highlights: SidecarHighlight[]) {
@@ -87,9 +76,9 @@ async function waitForInjected(uri: vscode.Uri, sidecarId: string) {
   } catch (error) {
     const state = await viewerState(uri);
     const summary = {
-      editors: state?.editors.map(({ id, sidecarId: sid, pageIndex, color }) => ({
+      editors: state?.editors.map(({ id, sidecarId, pageIndex, color }) => ({
         id,
-        sid,
+        sidecarId,
         pageIndex,
         color,
       })),
@@ -117,9 +106,9 @@ async function waitForModelCount(uri: vscode.Uri, count: number) {
     const document = await documentState(uri);
     const summary = {
       model: document?.model.highlights.map(({ id, page, note }) => ({ id, page, note })),
-      editors: viewer?.editors.map(({ id, sidecarId: sid, pageIndex, annotationElementId }) => ({
+      editors: viewer?.editors.map(({ id, sidecarId, pageIndex, annotationElementId }) => ({
         id,
-        sid,
+        sidecarId,
         pageIndex,
         annotationElementId,
       })),
@@ -195,15 +184,13 @@ suite("Phase D: sidecar-only highlights render on open; delete, undo and redo", 
             hasOutlines: outlines !== undefined,
           }),
         ),
-        editors: (await viewerState(pdf))?.editors.map(
-          ({ sidecarId: sid, rect, quadPoints, text, quadText }) => ({
-            sid,
-            rect,
-            quadPoints,
-            text,
-            quadText,
-          }),
-        ),
+        editors: (await viewerState(pdf))?.editors.map(({ sidecarId, rect, quadPoints, text, quadText }) => ({
+          sidecarId,
+          rect,
+          quadPoints,
+          text,
+          quadText,
+        })),
       },
       null,
       2,
@@ -217,7 +204,7 @@ suite("Phase D: sidecar-only highlights render on open; delete, undo and redo", 
     const target = state?.editors.find((editor) => editor.sidecarId === KEEP);
     assert.ok(target, "the injected editor for KEEP is known");
 
-    await send(pdf, { type: "deleteHighlights", viewerIds: [target.id] });
+    await send(pdf, { type: "deleteHighlights", items: [{ sidecarId: KEEP, viewerId: target.id }] });
     const afterDelete = await waitForModelCount(pdf, 1);
     assert.equal(afterDelete.dirty, true);
     assert.equal(afterDelete.model.highlights[0]?.id, OTHER);

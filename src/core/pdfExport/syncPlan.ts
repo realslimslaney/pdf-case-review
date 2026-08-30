@@ -2,15 +2,16 @@
 // how the model changes once the embed step has decided, how to roll back when the PDF write
 // fails, and how to repair or rebuild the sidecar from the annotations found in a PDF on open.
 
-import { type Category, categoryForColor, UNCATEGORIZED_COLOR } from "../categories";
-import { UNCATEGORIZED_ID } from "../sidecar/reconcile";
-import type { PdfWriteStatus, Sidecar, SidecarHighlight, SidecarSource } from "../sidecar/types";
+import { type Category, categoryForColor, UNCATEGORIZED_CATEGORY } from "../categories";
+import { UUID_PATTERN } from "../sidecar/ids";
+import {
+  type PdfWriteStatus,
+  type Sidecar,
+  type SidecarHighlight,
+  type SidecarSource,
+  toRect,
+} from "../sidecar/types";
 import type { EmbeddableHighlight, EmbeddedHighlight } from "./embedHighlights";
-
-export { UNCATEGORIZED_COLOR } from "../categories";
-export const UNCATEGORIZED_NAME = "Uncategorized";
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** What the embed step decided. `bytes` is null when the PDF is left alone. */
 export interface EmbedOutcome {
@@ -38,9 +39,9 @@ export function toEmbeddable(model: Sidecar): EmbeddableHighlight[] {
         page: highlight.page,
         rect: highlight.rect,
         quadPoints: highlight.quadPoints,
-        color: category?.color ?? UNCATEGORIZED_COLOR,
+        color: category?.color ?? UNCATEGORIZED_CATEGORY.color,
         note: highlight.note,
-        categoryName: category?.name ?? UNCATEGORIZED_NAME,
+        categoryName: category?.name ?? UNCATEGORIZED_CATEGORY.name,
         updatedAt: highlight.updatedAt,
       };
     });
@@ -153,14 +154,6 @@ export function repairPdfjsIds(
   return changed ? { model: { ...model, highlights }, changed } : { model, changed };
 }
 
-function toRect(values: readonly number[]): [number, number, number, number] | undefined {
-  const [x1, y1, x2, y2] = values;
-  if (values.length !== 4 || x1 === undefined || y1 === undefined || x2 === undefined || y2 === undefined) {
-    return undefined;
-  }
-  return [x1, y1, x2, y2];
-}
-
 /**
  * Rebuilds highlights from the annotations we wrote into a PDF whose sidecar has gone missing.
  * Category comes from the color, then the recorded category name; text is unknown until the
@@ -182,8 +175,8 @@ export function adoptEmbedded(
       categoryForColor(categories, entry.color) ??
       categories.find((candidate) => candidate.name === entry.categoryName);
     highlights.push({
-      id: UUID.test(entry.id) ? entry.id : newId(),
-      categoryId: category?.id ?? UNCATEGORIZED_ID,
+      id: UUID_PATTERN.test(entry.id) ? entry.id : newId(),
+      categoryId: category?.id ?? UNCATEGORIZED_CATEGORY.id,
       page: entry.page,
       pdfjsId: entry.pdfjsId,
       rect,

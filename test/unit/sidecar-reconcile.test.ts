@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CATEGORIES } from "../../src/core/categories";
+import { DEFAULT_CATEGORIES, UNCATEGORIZED_CATEGORY } from "../../src/core/categories";
 import {
   type ReconcileContext,
   ReconcileSession,
   reconcileSnapshot,
-  UNCATEGORIZED_ID,
   type ViewerSnapshot,
 } from "../../src/core/sidecar/reconcile";
 import type { SidecarHighlight } from "../../src/core/sidecar/types";
@@ -131,7 +130,7 @@ describe("reconcileSnapshot", () => {
     const context = makeContext();
     const session = new ReconcileSession();
     const first = reconcileSnapshot([], snapshot([editor({ id: "e0", color: "#123456" })]), session, context);
-    expect(first.highlights[0]?.categoryId).toBe(UNCATEGORIZED_ID);
+    expect(first.highlights[0]?.categoryId).toBe(UNCATEGORIZED_CATEGORY.id);
 
     const known = first.highlights.map((entry) => ({ ...entry, categoryId: "fact" }));
     const second = reconcileSnapshot(
@@ -310,6 +309,7 @@ describe("reconcileSnapshot", () => {
     expect(result.ignored).toEqual([]);
     expect(result.updated).toEqual([model[0]?.id]);
     expect(result.highlights[0]?.categoryId).toBe("concern");
+    expect(result.highlights[0]?.pdfjsId).toBe("30R");
 
     const leftEditMode = reconcileSnapshot(result.highlights, snapshot([]), session, context);
     expect(leftEditMode.changed).toBe(false);

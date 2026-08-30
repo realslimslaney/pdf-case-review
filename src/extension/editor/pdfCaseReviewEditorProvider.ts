@@ -43,7 +43,7 @@ import {
 } from "vscode";
 
 import { type Category, toHighlightEditorColors } from "../../core/categories";
-import { adoptEmbedded, repairPdfjsIds } from "../../core/pdfExport/syncPlan";
+import { adoptEmbedded, repairPdfjsIds, toEmbeddable } from "../../core/pdfExport/syncPlan";
 import { newHighlightId } from "../../core/sidecar/ids";
 import { missingFromFile, toInjectable } from "../../core/sidecar/inject";
 import { reconcileSnapshot } from "../../core/sidecar/reconcile";
@@ -62,22 +62,14 @@ import {
   type SerializedHighlight,
   type ViewerConfig,
 } from "../../shared/protocol";
-import { exportCopy, inspectPdf, type SyncContext, syncOnSave } from "../pdfSync/pdfSync";
+import { exportCopy, inspectPdf, type PdfInspection, type SyncContext, syncOnSave } from "../pdfSync/pdfSync";
 import { configuredCategories, embedOnSave, sidecarLocation } from "../settings";
 import { sidecarUriFor } from "../sidecar/sidecarLocation";
-import { readSidecar, type SidecarLoad } from "../sidecar/sidecarStore";
+import { readSidecar, type SidecarLoad, writeSidecar } from "../sidecar/sidecarStore";
 import { disposeAll } from "../util/disposable";
 import { escapeAttribute } from "../util/escapeAttribute";
 import { WebviewCollection } from "../util/webviewCollection";
-import {
-  baseName,
-  contentHash,
-  hashBytes,
-  PdfDocument,
-  type PdfInfo,
-  parentUri,
-  sourceFor,
-} from "./pdfDocument";
+import { baseName, hashBytes, PdfDocument, type PdfInfo, parentUri, sourceFor } from "./pdfDocument";
 
 export interface ViewerState {
   loaded: boolean;
@@ -149,8 +141,6 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
   private readonly webviews = new WebviewCollection();
   private readonly documents = new Map<string, PdfDocument>();
   private readonly states = new Map<string, ViewerState>();
-  private readonly _onDidChangeViewerState = new EventEmitter<{ uri: Uri; state: ViewerState }>();
-  readonly onDidChangeViewerState = this._onDidChangeViewerState.event;
   private readonly _onDidChangeCustomDocument = new EventEmitter<
     CustomDocumentContentChangeEvent<PdfDocument>
   >();
@@ -205,7 +195,6 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
     const key = uri.toString();
     const next = { ...(this.states.get(key) ?? EMPTY_VIEWER_STATE), ...patch };
     this.states.set(key, next);
-    this._onDidChangeViewerState.fire({ uri, state: next });
     return next;
   }
 
@@ -233,9 +222,6 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
         }
         break;
       case "missing":
-        model = fresh();
-        snapshot = serializeSidecar(model);
-        break;
       case "invalid":
         model = fresh();
         snapshot = serializeSidecar(model);
@@ -249,10 +235,16 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
       }
     }
 
-    // Look inside the PDF once: protected files are never written, and for the others the
-    // annotations we embedded earlier refresh (or rebuild) the sidecar's bookkeeping.
-    const inspection =
-      model.source.encrypted === true ? { protected: true, embedded: null } : await inspectPdf(bytes);
+    // Look inside the PDF when the sidecar cannot vouch for it (missing, or written against other
+    // bytes): protected files are never written, and the annotations embedded earlier refresh
+    // (or rebuild) the sidecar's bookkeeping. An unchanged file is trusted as recorded.
+    const unchanged = onDisk.kind === "loaded" && model.source.sha256 === info.sha256;
+    const inspection: PdfInspection = unchanged
+      ? { protected: model.source.encrypted === true, embedded: null }
+      : await inspectPdf(bytes);
+    if (inspection.error !== undefined) {
+      this.output.warn(`could not inspect ${uri.fsPath} with pdf-lib: ${inspection.error}`);
+    }
     if (inspection.embedded !== null) {
       const now = new Date().toISOString();
       const rebuild =
@@ -283,6 +275,9 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
 
     const document = new PdfDocument(uri, sidecarUri, model, snapshot, info);
     document.instance = ++this.documentCounter;
+    if (unchanged && model.source.pdfWrite === "synced") {
+      document.embeddedFingerprint = JSON.stringify(toEmbeddable(model));
+    }
     this.note(
       `open #${document.instance} ${baseName(uri)} (sidecar ${onDisk.kind}, backup ${openContext.backupId ? "yes" : "no"})`,
     );
@@ -291,23 +286,7 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
     const key = uri.toString();
     this.documents.set(key, document);
     const listeners: Disposable[] = [];
-    listeners.push(
-      document.onDidChange((changed) => {
-        // The workspace watcher can deliver a write that predates this document (e.g. a file
-        // written just before it was opened); only a real content change warrants a reload.
-        void contentHash(changed).then((hash) => {
-          if (hash === document.contentHash) {
-            return;
-          }
-          document.contentHash = hash;
-          this.output.info(`pdf changed on disk, reloading: ${changed.fsPath}`);
-          void workspace.fs.stat(changed).then((stat) => {
-            document.info = { ...document.info, sha256: hash, byteLength: stat.size };
-          });
-          this.reloadViewer(document);
-        });
-      }),
-    );
+    listeners.push(document.onDidChange((changed) => void this.onPdfChanged(document, changed)));
     document.onDidDelete(() => {
       this.note(`dispose #${document.instance} ${baseName(uri)}`);
       disposeAll(listeners);
@@ -315,6 +294,32 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
       this.documents.delete(key);
     });
     return document;
+  }
+
+  /**
+   * The workspace watcher can deliver a write that predates this document (e.g. a file written
+   * just before it was opened) and may fire while another program still holds the file; only a
+   * readable, real content change warrants a reload.
+   */
+  private async onPdfChanged(document: PdfDocument, changed: Uri): Promise<void> {
+    let bytes: Uint8Array;
+    try {
+      bytes = await workspace.fs.readFile(changed);
+    } catch (error) {
+      this.output.warn(
+        `could not read ${changed.fsPath} after a change: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return;
+    }
+    const hash = await hashBytes(bytes);
+    if (hash === document.contentHash) {
+      return;
+    }
+    document.contentHash = hash;
+    document.info = { ...document.info, sha256: hash, byteLength: bytes.byteLength };
+    document.embeddedFingerprint = null;
+    this.output.info(`pdf changed on disk, reloading: ${changed.fsPath}`);
+    this.reloadViewer(document);
   }
 
   private async loadSidecar(uri: Uri): Promise<SidecarLoad> {
@@ -433,6 +438,15 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
       case "saveRequested":
         void commands.executeCommand("workbench.action.files.save");
         return;
+      case "highlightsDeleted":
+        // The viewer had no editor for these (page not rendered yet, or never drawn): the model
+        // is the only place they exist, so remove them here; the PDF loses them on the next save.
+        for (const id of message.failed) {
+          if (this.removeHighlight(document, id)) {
+            this.output.info(`removed highlight ${id} from the sidecar (not shown in the viewer)`);
+          }
+        }
+        return;
       case "createFromSelectionResult":
         if (!message.created && !message.recolored) {
           void window.showInformationMessage(
@@ -452,6 +466,12 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
     }
   }
 
+  /** Tells VS Code the document is dirty and the views that its model changed. */
+  private markEdited(document: PdfDocument): void {
+    this._onDidChangeCustomDocument.fire({ document });
+    this._onDidChangeDocument.fire(document);
+  }
+
   /** Applies a host-side edit (category, note) to one highlight; returns false when it is unknown. */
   updateHighlight(
     document: PdfDocument,
@@ -467,16 +487,14 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
     const highlights = [...document.model.highlights];
     highlights[index] = next;
     document.model = { ...document.model, highlights };
-    this._onDidChangeCustomDocument.fire({ document });
-    this._onDidChangeDocument.fire(document);
+    this.markEdited(document);
     return true;
   }
 
   /** Replaces the document's palette (the sidecar is self-describing); the viewer needs a rebuild to show it. */
   replaceCategories(document: PdfDocument, categories: readonly Category[]): void {
     document.model = { ...document.model, categories: toSidecarCategories(categories) };
-    this._onDidChangeCustomDocument.fire({ document });
-    this._onDidChangeDocument.fire(document);
+    this.markEdited(document);
   }
 
   /** Re-renders the webview HTML (new palette); the viewer reloads and reports `viewerLoaded` again. */
@@ -499,8 +517,7 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
       highlights: document.model.highlights.filter((highlight) => highlight.id !== id),
     };
     document.session.unbind(id);
-    this._onDidChangeCustomDocument.fire({ document });
-    this._onDidChangeDocument.fire(document);
+    this.markEdited(document);
     return true;
   }
 
@@ -544,12 +561,11 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
     if (result.derivedOnly && !wasDirty) {
       // Page labels, late text and annotation ids are facts about the file, not edits: a clean
       // document stays clean and picks them up with the next real save.
-      document.savedSnapshot = serializeSidecar(document.model);
+      document.savedSnapshot = document.serializedModel;
       this._onDidChangeDocument.fire(document);
       return;
     }
-    this._onDidChangeCustomDocument.fire({ document });
-    this._onDidChangeDocument.fire(document);
+    this.markEdited(document);
   }
 
   async saveCustomDocument(document: PdfDocument, _token: CancellationToken): Promise<void> {
@@ -559,11 +575,15 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
       );
     }
     this.note(`save #${document.instance} ${baseName(document.uri)}`);
-    await syncOnSave(document, this.syncContext(document.uri));
+    try {
+      await syncOnSave(document, this.syncContext(document.uri));
+    } finally {
+      // The model, snapshot and pdfWrite status changed even when the PDF write failed.
+      this._onDidChangeDocument.fire(document);
+    }
     this.note(
       `saved #${document.instance} ${baseName(document.uri)} (${document.model.source.pdfWrite ?? "?"})`,
     );
-    this._onDidChangeDocument.fire(document);
   }
 
   /** Save As exports a copy: the PDF (with highlights embedded when allowed) plus a sidecar beside it. */
@@ -581,6 +601,12 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
       generator: this.generator,
       embedOnSave: embedOnSave(uri),
       onProtected: (document) => this.notifyProtected(document),
+      onEmbedFailed: (document, detail) => {
+        this.output.error(`could not embed highlights into ${document.uri.fsPath}: ${detail}`);
+        void window.showWarningMessage(
+          `PDF Case Review: highlights were saved to ${baseName(document.sidecarUri)}, but ${baseName(document.uri)} could not be rewritten (${detail}).`,
+        );
+      },
     };
   }
 
@@ -608,6 +634,12 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
 
   async revertCustomDocument(document: PdfDocument, _token: CancellationToken): Promise<void> {
     const onDisk = await this.loadSidecar(document.sidecarUri);
+    document.readOnly = onDisk.kind === "invalid";
+    if (onDisk.kind === "invalid") {
+      // Nothing usable to revert to; the in-memory model stays (and stays unsaved) until fixed.
+      this._onDidChangeDocument.fire(document);
+      return;
+    }
     document.model =
       onDisk.kind === "loaded"
         ? onDisk.model
@@ -626,11 +658,7 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
     context: CustomDocumentBackupContext,
     _token: CancellationToken,
   ): Promise<CustomDocumentBackup> {
-    await workspace.fs.createDirectory(parentUri(context.destination));
-    await workspace.fs.writeFile(
-      context.destination,
-      new TextEncoder().encode(serializeSidecar(document.model)),
-    );
+    await writeSidecar(context.destination, document.model);
     return {
       id: context.destination.toString(),
       delete: async () => {
