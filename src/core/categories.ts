@@ -80,3 +80,79 @@ export function hexToRgb(color: string): [number, number, number] {
   const value = Number.parseInt(color.slice(1), 16);
   return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
 }
+
+/** Built-in palettes; `pdfCaseReview.categoryPresets` can add more. */
+export const CATEGORY_PRESETS: Readonly<Record<string, readonly Category[]>> = {
+  "Business case": DEFAULT_CATEGORIES,
+  "Academic paper": [
+    { id: "claim", name: "Claim", color: "#FFFF98" },
+    { id: "evidence", name: "Evidence", color: "#53FFBC" },
+    { id: "method", name: "Method", color: "#80EBFF" },
+    { id: "limitation", name: "Limitation", color: "#FF4F5F" },
+    { id: "question", name: "Question", color: "#FFCBE6" },
+  ],
+  Contract: [
+    { id: "obligation", name: "Obligation", color: "#FFFF98" },
+    { id: "risk", name: "Risk", color: "#FF4F5F" },
+    { id: "deadline", name: "Deadline", color: "#80EBFF" },
+    { id: "defined-term", name: "Defined term", color: "#53FFBC" },
+    { id: "question", name: "Question", color: "#FFCBE6" },
+  ],
+};
+
+export interface PresetValidationError {
+  preset: string;
+  message: string;
+}
+
+/** Validates a `{ name: Category[] }` map; a preset with any error is reported and left out. */
+export function validatePresets(presets: unknown): {
+  presets: Record<string, Category[]>;
+  errors: PresetValidationError[];
+} {
+  const valid: Record<string, Category[]> = {};
+  const errors: PresetValidationError[] = [];
+  if (typeof presets !== "object" || presets === null || Array.isArray(presets)) {
+    return {
+      presets: valid,
+      errors: [{ preset: "", message: "expected an object of preset name to categories" }],
+    };
+  }
+  for (const [name, categories] of Object.entries(presets as Record<string, unknown>)) {
+    if (name.trim() === "") {
+      errors.push({ preset: name, message: "preset name must not be empty" });
+      continue;
+    }
+    if (!Array.isArray(categories) || categories.length === 0) {
+      errors.push({ preset: name, message: "expected a non-empty list of categories" });
+      continue;
+    }
+    const shaped = categories.every(
+      (entry) =>
+        typeof entry === "object" &&
+        entry !== null &&
+        typeof (entry as Category).id === "string" &&
+        typeof (entry as Category).name === "string" &&
+        typeof (entry as Category).color === "string",
+    );
+    if (!shaped) {
+      errors.push({ preset: name, message: "every category needs id, name and color" });
+      continue;
+    }
+    const categoryErrors = validateCategories(categories as Category[]);
+    if (categoryErrors.length > 0) {
+      errors.push({
+        preset: name,
+        message: categoryErrors.map((error) => `#${error.index + 1}: ${error.message}`).join("; "),
+      });
+      continue;
+    }
+    valid[name] = normalizeCategories(categories as Category[]);
+  }
+  return { presets: valid, errors };
+}
+
+/** The category bound to `Ctrl+Alt+<index>` (1-based, in palette order), if there is one. */
+export function categoryAt(categories: readonly Category[], index: number): Category | undefined {
+  return Number.isInteger(index) && index >= 1 ? categories[index - 1] : undefined;
+}

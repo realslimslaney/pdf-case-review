@@ -134,6 +134,21 @@
         "title": "Group by Page",
         "category": "PDF Case Review",
         "icon": "$(book)"
+      },
+      {
+        "command": "pdfCaseReview.highlightWithCategory",
+        "title": "Highlight Selection with Category...",
+        "category": "PDF Case Review"
+      },
+      {
+        "command": "pdfCaseReview.applyCategoryPreset",
+        "title": "Apply Category Preset...",
+        "category": "PDF Case Review"
+      },
+      {
+        "command": "pdfCaseReview.syncCategoriesFromSettings",
+        "title": "Sync Categories from Settings",
+        "category": "PDF Case Review"
       }
     ],
     "menus": {
@@ -165,6 +180,14 @@
         {
           "command": "pdfCaseReview.groupByPage",
           "when": "pdfCaseReview.groupBy == category"
+        },
+        {
+          "command": "pdfCaseReview.highlightWithCategory",
+          "when": "pdfCaseReview.hasActiveDocument"
+        },
+        {
+          "command": "pdfCaseReview.syncCategoriesFromSettings",
+          "when": "pdfCaseReview.hasActiveDocument"
         }
       ],
       "view/title": [
@@ -207,6 +230,89 @@
         }
       ]
     },
+    "keybindings": [
+      {
+        "command": "pdfCaseReview.highlightWithCategory",
+        "key": "ctrl+alt+1",
+        "mac": "cmd+alt+1",
+        "when": "activeCustomEditorId == pdfCaseReview.pdf",
+        "args": {
+          "index": 1
+        }
+      },
+      {
+        "command": "pdfCaseReview.highlightWithCategory",
+        "key": "ctrl+alt+2",
+        "mac": "cmd+alt+2",
+        "when": "activeCustomEditorId == pdfCaseReview.pdf",
+        "args": {
+          "index": 2
+        }
+      },
+      {
+        "command": "pdfCaseReview.highlightWithCategory",
+        "key": "ctrl+alt+3",
+        "mac": "cmd+alt+3",
+        "when": "activeCustomEditorId == pdfCaseReview.pdf",
+        "args": {
+          "index": 3
+        }
+      },
+      {
+        "command": "pdfCaseReview.highlightWithCategory",
+        "key": "ctrl+alt+4",
+        "mac": "cmd+alt+4",
+        "when": "activeCustomEditorId == pdfCaseReview.pdf",
+        "args": {
+          "index": 4
+        }
+      },
+      {
+        "command": "pdfCaseReview.highlightWithCategory",
+        "key": "ctrl+alt+5",
+        "mac": "cmd+alt+5",
+        "when": "activeCustomEditorId == pdfCaseReview.pdf",
+        "args": {
+          "index": 5
+        }
+      },
+      {
+        "command": "pdfCaseReview.highlightWithCategory",
+        "key": "ctrl+alt+6",
+        "mac": "cmd+alt+6",
+        "when": "activeCustomEditorId == pdfCaseReview.pdf",
+        "args": {
+          "index": 6
+        }
+      },
+      {
+        "command": "pdfCaseReview.highlightWithCategory",
+        "key": "ctrl+alt+7",
+        "mac": "cmd+alt+7",
+        "when": "activeCustomEditorId == pdfCaseReview.pdf",
+        "args": {
+          "index": 7
+        }
+      },
+      {
+        "command": "pdfCaseReview.highlightWithCategory",
+        "key": "ctrl+alt+8",
+        "mac": "cmd+alt+8",
+        "when": "activeCustomEditorId == pdfCaseReview.pdf",
+        "args": {
+          "index": 8
+        }
+      },
+      {
+        "command": "pdfCaseReview.highlightWithCategory",
+        "key": "ctrl+alt+9",
+        "mac": "cmd+alt+9",
+        "when": "activeCustomEditorId == pdfCaseReview.pdf",
+        "args": {
+          "index": 9
+        }
+      }
+    ],
     "configuration": {
       "title": "PDF Case Review",
       "properties": {
@@ -265,6 +371,39 @@
               }
             }
           }
+        },
+        "pdfCaseReview.categoryPresets": {
+          "type": "object",
+          "scope": "window",
+          "default": {},
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "name",
+                "color"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9-]*$"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "color": {
+                  "type": "string",
+                  "pattern": "^#[0-9A-Fa-f]{6}$"
+                },
+                "description": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "markdownDescription": "Extra palettes for `PDF Case Review: Apply Category Preset`, keyed by name (`Business case`, `Academic paper` and `Contract` are built in). Each preset has the same shape as `#pdfCaseReview.categories#`."
         },
         "pdfCaseReview.sidecar.location": {
           "type": "string",

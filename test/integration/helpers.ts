@@ -70,8 +70,17 @@ export async function closeAll(): Promise<void> {
   await vscode.commands.executeCommand("workbench.action.closeAllEditors");
 }
 
-/** Copies a fixture so a test can write beside it without touching the shared file. */
+/**
+ * Copies a fixture so a test can write beside it without touching the shared file, and removes
+ * any sidecar a previous run left next to the copy so every suite starts from a clean document.
+ */
 export async function copyFixture(source: vscode.Uri, target: vscode.Uri): Promise<void> {
   await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(target, ".."));
   await vscode.workspace.fs.copy(source, target, { overwrite: true });
+  const name = target.path.slice(target.path.lastIndexOf("/") + 1);
+  try {
+    await vscode.workspace.fs.delete(vscode.Uri.joinPath(target, "..", `${name}.review.json`));
+  } catch {
+    // No stale sidecar.
+  }
 }

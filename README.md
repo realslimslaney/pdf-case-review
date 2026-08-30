@@ -2,18 +2,21 @@
 
 > Highlight PDFs by category inside VS Code, add notes, and turn them into a printable Word / PDF / Markdown report.
 
-**Status: pre-alpha (architecture spikes).** Nothing is published yet. See `docs/explanation/decisions.md` for the architecture decisions and the spike results as they land.
+**Status: 0.1.0 pre-release (highlight and persist).** Not on the Marketplace yet. See `docs/explanation/decisions.md` for the architecture decisions and the spike results.
 
 Built for reading business-school cases (Fact, Financial, Strategic implication, Concern, Question), but the categories are yours to define, so it works just as well for papers, contracts and textbooks.
 
-## What it will do (1.0)
+## What works today (0.1.0)
 
 - Open any `.pdf` in VS Code with a full PDF.js viewer.
-- Select text → pick a category → it's highlighted in that category's color. Keyboard: `Ctrl+Alt+1…9`.
-- Attach a note to each highlight; add page-level and document-level notes.
-- A sidebar lists everything by category or by page; click to jump.
-- **Generate report** → Markdown, Word (`.docx`) or PDF, organized by category and/or page, with page citations.
-- Highlights are stored beside the PDF in `case.pdf.review.json` and synced into the PDF as real annotations when the file allows it. Publisher-protected PDFs are never modified.
+- Select text and use the highlight button, or press `Ctrl+Alt+1` to `Ctrl+Alt+9` (`Cmd+Alt` on macOS) to highlight with a category. Categories are yours to define; presets for business cases, academic papers and contracts are built in.
+- The **Highlights** view lists everything by category or by page; click to jump, right-click to change the category, copy the quote or delete.
+- Highlights are stored beside the PDF in `case.pdf.review.json` (the canonical copy) and written into the PDF as real annotations on save when the file allows it. Publisher-protected PDFs are never modified.
+- Undo and redo inside the viewer work through PDF.js; hot exit keeps unsaved highlights.
+
+## Coming next
+
+- Notes on highlights, pages and the document, and the one-button report in Markdown, Word or PDF (0.3.0).
 - Optional, off by default: an AI executive summary via Claude Code, Codex, Copilot or an API key, always behind an eligibility confirmation that shows which account is used.
 
 ## Purchased and protected PDFs

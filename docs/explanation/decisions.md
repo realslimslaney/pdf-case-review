@@ -20,6 +20,8 @@ Short records of the decisions that shape the project, newest last. Each spike f
 
 **Decision.** Use PDF.js's native `HighlightEditor` (floating button + editor toolbar) with `highlightEditorColors` mapped to our categories, `enableComment: false`, and a VS Code sidebar/webview view for notes. All PDF.js internals sit behind `src/webview/pdfjsAdapter.ts`; an overlay-based adapter is the fallback if the editor proves unstable across upgrades.
 
+**Note (M1).** PDF.js 6.3.289 has no `HIGHLIGHT_DEFAULT_COLOR` parameter: the keyboard path (`Ctrl+Alt+N`) sets the default color through `uiManager.updateParams(HIGHLIGHT_COLOR, hex)` with nothing selected, calls `highlightSelection("keyboard")`, and polls for the new editor because creation is deferred behind the mode switch.
+
 ## ADR-0004: Highlight identity: a uuid in the sidecar and `/NM`, `pdfjsId` refreshed on every sync, viewer ids never persisted
 
 **Decision.** Every highlight gets a UUID from the extension host the first time it appears; the sidecar stores it and the PDF annotation carries it as `/NM`. Because PDF.js never surfaces `/NM`, the sidecar also stores `pdfjsId`, the object reference PDF.js reports (`<n>R`), refreshed from pdf-lib's output on every embed. PDF.js editor ids live only for one viewer load and stay in a host-side `ReconcileSession` (`src/core/sidecar/reconcile.ts`). The webview keeps sending full snapshots; the host diffs them with a pure `reconcileSnapshot`, so the mapping is unit-tested.

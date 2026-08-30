@@ -85,6 +85,8 @@ export type WebviewToHostMessage =
   | { type: "pageChanged"; page: number; pageLabel: string | null }
   /** Ctrl+S / Cmd+S pressed inside the viewer; the host runs VS Code's save. */
   | { type: "saveRequested" }
+  /** Outcome of `createFromSelection`: a new highlight, or the selected editors recolored, or neither. */
+  | { type: "createFromSelectionResult"; id: string; created: boolean; recolored: boolean }
   | { type: "openLink"; url: string }
   | { type: "log"; level: "info" | "warn" | "error"; message: string };
 
@@ -101,6 +103,8 @@ export type HostToWebviewMessage =
   | { type: "deleteHighlights"; viewerIds: string[]; sidecarIds?: string[] }
   /** Recolor editors (category change from the host). */
   | { type: "recolorHighlights"; items: { viewerId: string; color: string }[] }
+  /** Highlight the text selection with this uuid and color, or recolor the selected editors. */
+  | { type: "createFromSelection"; id: string; categoryId: string; color: string }
   /** Scroll to a highlight (1-based page; rect in PDF user space) and flash its editor when it has one. */
   | { type: "goTo"; page: number; rect?: [number, number, number, number]; viewerId?: string }
   /** Spike instrumentation: select `spanCount` text-layer spans on `page` without creating anything. */

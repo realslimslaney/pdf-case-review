@@ -42,13 +42,18 @@ import {
   workspace,
 } from "vscode";
 
-import { toHighlightEditorColors } from "../../core/categories";
+import { type Category, toHighlightEditorColors } from "../../core/categories";
 import { adoptEmbedded, repairPdfjsIds } from "../../core/pdfExport/syncPlan";
 import { newHighlightId } from "../../core/sidecar/ids";
 import { missingFromFile, toInjectable } from "../../core/sidecar/inject";
 import { reconcileSnapshot } from "../../core/sidecar/reconcile";
 import { serializeSidecar } from "../../core/sidecar/serialize";
-import { emptySidecar, type Sidecar, type SidecarHighlight } from "../../core/sidecar/types";
+import {
+  emptySidecar,
+  type Sidecar,
+  type SidecarHighlight,
+  toSidecarCategories,
+} from "../../core/sidecar/types";
 import {
   type EmbeddedAnnotation,
   type HostToWebviewMessage,
@@ -158,6 +163,9 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
   readonly onDidChangeViewState = this._onDidChangeViewState.event;
   private viewerHtmlTemplate: Promise<string> | undefined;
   private readonly generator: string;
+  /** Recent host-side events (open, resolve, load, save, reload, dispose), newest last; for tests. */
+  readonly trace: string[] = [];
+  private documentCounter = 0;
 
   constructor(
     private readonly context: ExtensionContext,
@@ -165,6 +173,14 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
   ) {
     const manifest = context.extension.packageJSON as { version?: unknown };
     this.generator = `pdf-case-review/${typeof manifest.version === "string" ? manifest.version : "0.0.0"}`;
+  }
+
+  private note(message: string): void {
+    this.output.debug(message);
+    this.trace.push(`${new Date().toISOString().slice(11, 23)} ${message}`);
+    if (this.trace.length > 60) {
+      this.trace.splice(0, this.trace.length - 60);
+    }
   }
 
   getViewerState(uri: Uri): ViewerState | undefined {
@@ -266,6 +282,10 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
     }
 
     const document = new PdfDocument(uri, sidecarUri, model, snapshot, info);
+    document.instance = ++this.documentCounter;
+    this.note(
+      `open #${document.instance} ${baseName(uri)} (sidecar ${onDisk.kind}, backup ${openContext.backupId ? "yes" : "no"})`,
+    );
     document.readOnly = onDisk.kind === "invalid";
     document.protected = inspection.protected;
     const key = uri.toString();
@@ -289,6 +309,7 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
       }),
     );
     document.onDidDelete(() => {
+      this.note(`dispose #${document.instance} ${baseName(uri)}`);
       disposeAll(listeners);
       this.states.delete(key);
       this.documents.delete(key);
@@ -318,11 +339,13 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
 
   /** Reloads the PDF in the viewer; snapshots are ignored until the viewer reports the new load. */
   private reloadViewer(document: PdfDocument): void {
+    this.note(`reload #${document.instance} ${baseName(document.uri)}`);
     this.updateState(document.uri, { loaded: false });
     this.postMessage(document.uri, { type: "reload" });
   }
 
   async resolveCustomEditor(document: PdfDocument, webviewPanel: WebviewPanel): Promise<void> {
+    this.note(`resolve #${document.instance} ${baseName(document.uri)}`);
     this.webviews.add(document.uri, webviewPanel);
     const resourceRoot = parentUri(document.uri);
     webviewPanel.webview.options = {
@@ -354,9 +377,12 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
     const state = this.getViewerState(document.uri);
     switch (message.type) {
       case "ready":
-        this.output.debug(`webview ready: ${document.uri.fsPath}`);
+        this.note(`ready #${document.instance} ${baseName(document.uri)}`);
         return;
       case "viewerLoaded": {
+        this.note(
+          `viewerLoaded #${document.instance} ${baseName(document.uri)} (${message.annotations.length} annotations)`,
+        );
         document.session.reset();
         document.pageLabels = message.pageLabels;
         document.info = { ...document.info, pageCount: message.pagesCount, title: message.title };
@@ -407,6 +433,13 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
       case "saveRequested":
         void commands.executeCommand("workbench.action.files.save");
         return;
+      case "createFromSelectionResult":
+        if (!message.created && !message.recolored) {
+          void window.showInformationMessage(
+            "PDF Case Review: select some text in the PDF (or a highlight), then press the category shortcut.",
+          );
+        }
+        return;
       case "openLink":
         void this.openLocalLink(webview, resourceRoot, message.url);
         return;
@@ -437,6 +470,23 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
     this._onDidChangeCustomDocument.fire({ document });
     this._onDidChangeDocument.fire(document);
     return true;
+  }
+
+  /** Replaces the document's palette (the sidecar is self-describing); the viewer needs a rebuild to show it. */
+  replaceCategories(document: PdfDocument, categories: readonly Category[]): void {
+    document.model = { ...document.model, categories: toSidecarCategories(categories) };
+    this._onDidChangeCustomDocument.fire({ document });
+    this._onDidChangeDocument.fire(document);
+  }
+
+  /** Re-renders the webview HTML (new palette); the viewer reloads and reports `viewerLoaded` again. */
+  async rebuildWebview(document: PdfDocument): Promise<void> {
+    this.note(`rebuild #${document.instance} ${baseName(document.uri)}`);
+    const resourceRoot = parentUri(document.uri);
+    for (const panel of this.webviews.get(document.uri)) {
+      this.updateState(document.uri, { loaded: false });
+      panel.webview.html = await this.getHtmlForWebview(document, panel.webview, resourceRoot);
+    }
   }
 
   /** Removes a highlight the viewer does not hold (no editor, no annotation); otherwise use the viewer. */
@@ -483,6 +533,9 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
     if (!result.changed) {
       return;
     }
+    this.note(
+      `reconcile #${document.instance}: +${result.created.length} ~${result.updated.length} -${result.deleted.length} restored ${result.restored.length}`,
+    );
     const wasDirty = document.isDirty;
     document.model = { ...document.model, highlights: result.highlights };
     this.output.debug(
@@ -505,7 +558,11 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
         `PDF Case Review: ${baseName(document.sidecarUri)} could not be read when the PDF was opened; fix or remove it, then reopen the PDF.`,
       );
     }
+    this.note(`save #${document.instance} ${baseName(document.uri)}`);
     await syncOnSave(document, this.syncContext(document.uri));
+    this.note(
+      `saved #${document.instance} ${baseName(document.uri)} (${document.model.source.pdfWrite ?? "?"})`,
+    );
     this._onDidChangeDocument.fire(document);
   }
 

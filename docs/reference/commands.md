@@ -15,6 +15,14 @@ The **PDF Case Review** activity-bar icon opens the **Highlights** view for the 
 | `PDF Case Review: Group by Page` / `Group by Category` | view title | Switches the grouping (remembered in `pdfCaseReview.highlights.groupBy`). |
 | `PDF Case Review: Reveal Sidecar` | view title, palette | Opens the document's `.pdf.review.json` in a text editor (after the first save). |
 
+## Categories and keyboard highlighting
+
+| Command | Where | What it does |
+|---|---|---|
+| `PDF Case Review: Highlight Selection with Category...` | `Ctrl+Alt+1` to `Ctrl+Alt+9` (`Cmd+Alt` on macOS) while the PDF has focus, or the palette | Turns the viewer's current text selection into a highlight of the Nth category in the document's palette. In PDF.js's highlight mode the mouse selection is already a highlight by the time you press the shortcut, so with no text selection the shortcut recolors the selected highlight instead; with neither, a hint is shown. Either way the category becomes the default for the next highlight. From the palette a picker lists the categories. |
+| `PDF Case Review: Apply Category Preset...` | palette | Replaces `pdfCaseReview.categories` (user or workspace settings) with a preset: `Business case`, `Academic paper`, `Contract`, or one from `pdfCaseReview.categoryPresets`. New documents use it. |
+| `PDF Case Review: Sync Categories from Settings` | palette | Copies the settings palette into the open document (each sidecar carries its own categories) and offers to save and reload the viewer so the new colors apply. Highlights whose category no longer exists show under "Uncategorized". |
+
 ## Status bar
 
 While a PDF is active the status bar shows `$(notebook) N highlights · PDF synced`, `sidecar only` (protected PDF or embedding turned off), `unsaved`, or `PDF write failed`. Clicking it focuses the Highlights view.

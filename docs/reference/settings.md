@@ -8,6 +8,8 @@ All settings live under `pdfCaseReview.*`. Unless noted, they have `resource` sc
 |---|---|---|
 | `pdfCaseReview.categories` | Fact, Financial, Strategic implication, Concern, Question | The highlight palette for new documents. Each entry needs a unique `id` (lowercase letters, digits, dashes), a `name` and a unique `#RRGGBB` `color`; the color is how the viewer tells categories apart. An invalid setting falls back to the defaults with a warning. Categories are copied into each document's sidecar when it is created, so changing the setting does not alter existing documents. |
 
+| `pdfCaseReview.categoryPresets` | `{}` | Extra palettes for **Apply Category Preset**, keyed by name; `Business case`, `Academic paper` and `Contract` are built in. Same item shape as `categories`. |
+
 ## Storage
 
 | Setting | Default | Meaning |

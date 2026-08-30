@@ -38,6 +38,7 @@ declare module "pdfjs-viewer" {
     updateParams(type: number, value: unknown): void;
     setSelected(editor: PdfJsEditor): void;
     unselectAll(): void;
+    unselect(editor: PdfJsEditor): void;
     /** Deletes the selected editors as one undoable command. */
     delete(): void;
     undo(): void;
@@ -45,6 +46,8 @@ declare module "pdfjs-viewer" {
     /** True once a file-backed editor was deleted (the annotation is dropped on save). */
     isDeletedAnnotationElement(annotationElementId: string): boolean;
     getMode(): number;
+    /** True while at least one editor is selected. */
+    readonly hasSelection: boolean;
     readonly highlightColors: Map<string, string> | null;
   }
 

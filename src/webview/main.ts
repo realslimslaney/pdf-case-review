@@ -148,6 +148,9 @@ window.addEventListener("message", async (event: MessageEvent<HostToWebviewMessa
     case "goTo":
       adapter.goTo(message.page, message.rect, message.viewerId);
       return;
+    case "createFromSelection":
+      await adapter.applyCategory(message.id, message.color);
+      return;
     case "spike.selectText":
       adapter.spikeSelectText(message.page, message.spanCount);
       return;

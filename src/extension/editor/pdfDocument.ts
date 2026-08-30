@@ -82,6 +82,8 @@ export class PdfDocument extends Disposable implements CustomDocument {
   readonly session = new ReconcileSession();
   /** Page labels reported by the viewer, by page index; null when the PDF defines none. */
   pageLabels: string[] | null = null;
+  /** Sequence number of this document instance in the session (diagnostics). */
+  instance = 0;
   /** Set when the sidecar on disk could not be read; saving is refused until it is fixed. */
   readOnly = false;
   /** Encrypted or permission-restricted: the PDF is never written, highlights stay sidecar-only. */

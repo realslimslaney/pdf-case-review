@@ -536,36 +536,99 @@ export class PdfjsAdapter {
     return true;
   }
 
-  /**
-   * Spike instrumentation: select text, create a highlight from that selection exactly as the
-   * floating button would, and recolor it. Used by the integration tests; harmless otherwise.
-   */
-  spikeHighlightText(page: number, spanCount: number, color: string): void {
-    if (!this.uiManager || !this.spikeSelectText(page, spanCount)) {
-      return;
+  private allEditorIds(): Set<string> {
+    const ids = new Set<string>();
+    if (!this.uiManager) {
+      return ids;
     }
-    const before = new Set([...this.uiManager.getEditors(page - 1)].map((editor) => editor.id));
-    this.uiManager.highlightSelection("pdfCaseReview.spike");
+    for (let pageIndex = 0; pageIndex < this.app.pdfViewer.pagesCount; pageIndex += 1) {
+      for (const editor of this.uiManager.getEditors(pageIndex)) {
+        ids.add(editor.id);
+      }
+    }
+    return ids;
+  }
 
-    // Creation is deferred behind a mode switch; recolor once the new editor exists.
-    const recolor = (attempt: number) => {
-      if (!this.uiManager) {
-        return;
-      }
-      const created = [...this.uiManager.getEditors(page - 1)].filter((editor) => !before.has(editor.id));
-      if (created.length === 0) {
-        if (attempt < 20) {
-          setTimeout(() => recolor(attempt + 1), 50);
-        } else {
-          this.post({ type: "log", level: "error", message: "spike: no highlight editor was created" });
+  /**
+   * Creates a highlight from the viewer's current text selection the way the floating button does,
+   * in `color`, tagged with `sidecarId` when the host pre-assigned one. PDF.js 6.3 has no
+   * HIGHLIGHT_DEFAULT_COLOR param: the default is set through `updateParams` with nothing selected,
+   * and creation is deferred behind a mode switch, so the new editor is polled for and recolored.
+   */
+  private async createHighlightFromSelection(color: string, sidecarId?: string): Promise<PdfJsEditor[]> {
+    const selection = document.getSelection();
+    if (!this.uiManager || !selection || selection.isCollapsed || selection.toString().trim() === "") {
+      return [];
+    }
+    const uiManager = this.uiManager;
+    this.lastSelection = { text: selection.toString(), at: Date.now() };
+    const before = this.allEditorIds();
+    // Without an editor selection updateParams sets the default color (there is no
+    // HIGHLIGHT_DEFAULT_COLOR param in PDF.js 6.3); with one it would recolor that editor, so the
+    // new editor is recolored afterwards instead. Nothing here may await before highlightSelection:
+    // the pending selectionchange event would otherwise create a highlight of its own.
+    if (!uiManager.hasSelection) {
+      uiManager.updateParams(PARAMS_HIGHLIGHT_COLOR, color);
+    }
+    uiManager.highlightSelection("keyboard");
+    let created: PdfJsEditor[] = [];
+    for (let attempt = 0; attempt < 20 && created.length === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      created = [];
+      for (let pageIndex = 0; pageIndex < this.app.pdfViewer.pagesCount; pageIndex += 1) {
+        for (const editor of uiManager.getEditors(pageIndex)) {
+          if (!before.has(editor.id)) {
+            created.push(editor);
+          }
         }
-        return;
       }
-      for (const editor of created) {
+    }
+    this.post({
+      type: "log",
+      level: "info",
+      message: `create from selection: ${before.size} editor(s) before, ${created.length} created (${created.map((editor) => editor.id).join(", ")}), mode ${uiManager.getMode()}`,
+    });
+    for (const editor of created) {
+      if (colorToHex(editor.serialize(false)?.["color"]) !== color.toUpperCase()) {
         editor.updateParams(PARAMS_HIGHLIGHT_COLOR, color);
       }
-      this.scheduleSnapshot();
-    };
-    recolor(0);
+      if (sidecarId !== undefined) {
+        this.sidecarIdByEditorId.set(editor.id, sidecarId);
+      }
+    }
+    this.scheduleSnapshot();
+    return created;
+  }
+
+  /**
+   * The Ctrl+Alt+N path: a text selection becomes a highlight of that category; failing that, the
+   * selected editors (in highlight mode PDF.js has already turned the mouse selection into one)
+   * are recolored; and the color becomes the default for the next highlight either way.
+   */
+  async applyCategory(id: string, color: string): Promise<void> {
+    const created = await this.createHighlightFromSelection(color, id);
+    if (created.length > 0) {
+      this.post({ type: "createFromSelectionResult", id, created: true, recolored: false });
+      return;
+    }
+    const recolored = this.uiManager?.hasSelection === true;
+    this.uiManager?.updateParams(PARAMS_HIGHLIGHT_COLOR, color);
+    this.scheduleSnapshot();
+    this.post({ type: "createFromSelectionResult", id, created: false, recolored });
+  }
+
+  /**
+   * Spike instrumentation: select text and create a highlight from that selection exactly as the
+   * floating button would. Used by the integration tests; harmless otherwise.
+   */
+  spikeHighlightText(page: number, spanCount: number, color: string): void {
+    if (!this.spikeSelectText(page, spanCount)) {
+      return;
+    }
+    void this.createHighlightFromSelection(color).then((created) => {
+      if (created.length === 0) {
+        this.post({ type: "log", level: "error", message: "spike: no highlight editor was created" });
+      }
+    });
   }
 }
