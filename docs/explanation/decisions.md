@@ -18,7 +18,7 @@ Short records of the decisions that shape the project, newest last. Each spike f
 
 ## ADR-0003: PDF.js highlight editor is the drawing engine; notes live in VS Code, not PDF.js comments
 
-**Decision.** Use PDF.js's native `HighlightEditor` (floating button + editor toolbar) with `highlightEditorColors` mapped to our categories, `enableComment: false`, and a VS Code sidebar/webview view for notes. All PDF.js internals sit behind `src/webview/viewerAdapter.ts`; an overlay-based adapter is the fallback if the editor proves unstable across upgrades.
+**Decision.** Use PDF.js's native `HighlightEditor` (floating button + editor toolbar) with `highlightEditorColors` mapped to our categories, `enableComment: false`, and a VS Code sidebar/webview view for notes. All PDF.js internals sit behind `src/webview/pdfjsAdapter.ts`; an overlay-based adapter is the fallback if the editor proves unstable across upgrades.
 
 ## Spike log
 

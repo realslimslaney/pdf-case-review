@@ -15,7 +15,7 @@ Thanks for your interest. Until 1.0 the project is moving fast and the maintaine
 - Conventional Commits (`feat:`, `fix:`, `docs:`, `ci:`, `refactor:`, `test:`, `chore:`); release-please builds the changelog from them.
 - Feature branches + pull requests only; `main` is protected.
 - `src/core/` stays pure (no `vscode`, DOM or Node); `src/extension/` avoids Node built-ins outside `desktop/` so the web host keeps working.
-- All PDF.js internals stay behind `src/webview/viewerAdapter.ts`; avoid patches to `vendor/pdfjs` unless a runtime hook is impossible, and document why in the patch header.
+- All PDF.js internals stay behind `src/webview/pdfjsAdapter.ts`; avoid patches to `vendor/pdfjs` unless a runtime hook is impossible, and document why in the patch header.
 - Never write to a user's PDF outside the dual-write sync, and never strip encryption or permissions from a PDF.
 - New bundled dependencies must be pure JS and recorded in `THIRD_PARTY_NOTICES.md`.
 - Versioning: pre-releases use odd minor versions (`0.1.x`, `0.3.x`) and stable releases even ones.
