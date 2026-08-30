@@ -351,6 +351,14 @@ export class PdfjsAdapter {
     }
   }
 
+  /** Spike instrumentation: select an editor. On an unfocused window PDF.js drops editor selection. */
+  spikeSelectEditor(viewerId: string): void {
+    const editor = this.findEditor(viewerId);
+    if (editor && this.uiManager) {
+      this.uiManager.setSelected(editor);
+    }
+  }
+
   undo(): void {
     this.uiManager?.undo();
     this.scheduleSnapshot();

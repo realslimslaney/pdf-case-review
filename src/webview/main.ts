@@ -154,6 +154,9 @@ window.addEventListener("message", async (event: MessageEvent<HostToWebviewMessa
     case "spike.selectText":
       adapter.spikeSelectText(message.page, message.spanCount);
       return;
+    case "spike.selectEditor":
+      adapter.spikeSelectEditor(message.viewerId);
+      return;
     case "spike.undo":
       adapter.undo();
       return;

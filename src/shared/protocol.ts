@@ -109,6 +109,8 @@ export type HostToWebviewMessage =
   | { type: "goTo"; page: number; rect?: [number, number, number, number]; viewerId?: string }
   /** Spike instrumentation: select `spanCount` text-layer spans on `page` without creating anything. */
   | { type: "spike.selectText"; page: number; spanCount: number }
+  /** Spike instrumentation: select an editor (as a focused viewer does after creating one). */
+  | { type: "spike.selectEditor"; viewerId: string }
   /** Spike instrumentation: PDF.js undo / redo. */
   | { type: "spike.undo" }
   | { type: "spike.redo" }
