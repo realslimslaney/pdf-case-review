@@ -87,15 +87,30 @@ export class PdfjsAdapter {
     const colors = this.options.get("highlightEditorColors");
     const annotations = await this.collectHighlightAnnotations();
     this.annotationIds = annotations.map((annotation) => annotation.id);
+    // Editor ids do not survive a load: forget per-load bookkeeping and force a fresh snapshot.
     this.sidecarIdByEditorId.clear();
+    this.textById.clear();
+    this.lastSnapshotJson = "";
     this.post({
       type: "viewerLoaded",
       pagesCount: this.app.pdfViewer.pagesCount,
+      pageLabels: (await this.app.pdfDocument?.getPageLabels()) ?? null,
+      title: await this.documentTitle(),
       annotationEditorMode: this.app.pdfViewer.annotationEditorMode,
       highlightEditorColors: typeof colors === "string" ? colors : null,
       annotations,
     });
     this.scheduleSnapshot();
+  }
+
+  private async documentTitle(): Promise<string | null> {
+    try {
+      const metadata = await this.app.pdfDocument?.getMetadata();
+      const title = metadata?.info["Title"];
+      return typeof title === "string" && title.trim() !== "" ? title.trim() : null;
+    } catch {
+      return null;
+    }
   }
 
   /** Highlight annotations already present in the file, straight from the PDF.js document proxy. */
@@ -221,6 +236,9 @@ export class PdfjsAdapter {
     // payload survives postMessage and JSON alike.
     const plain = toPlain(raw) as Record<string, unknown>;
     const color = numberList(plain["color"]);
+    // PDF.js keeps the highlighted text private but exposes it as the editor's aria-label; the
+    // selection pairing above is the fallback for editors that have not rendered yet.
+    const ariaLabel = editor.div?.getAttribute("aria-label")?.trim();
     const serialized: SerializedHighlight = {
       id: editor.annotationElementId ?? editor.id,
       pageIndex: editor.pageIndex,
@@ -228,7 +246,7 @@ export class PdfjsAdapter {
       quadPoints: numberList(plain["quadPoints"]),
       rect: numberList(plain["rect"]),
       rotation: typeof plain["rotation"] === "number" ? plain["rotation"] : 0,
-      text: this.textById.get(editor.id) ?? null,
+      text: ariaLabel ? ariaLabel : (this.textById.get(editor.id) ?? null),
       annotationElementId: editor.annotationElementId ?? null,
       raw: plain,
     };

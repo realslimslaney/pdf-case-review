@@ -15,6 +15,8 @@ declare module "pdfjs-viewer" {
     pageIndex: number;
     /** Set when the editor was created from an annotation already in the file. */
     annotationElementId: string | null;
+    /** The editor's DOM element once rendered; highlight editors carry their text as aria-label. */
+    div?: HTMLElement | null;
     color?: string | number[];
     serialize(isForCopying?: boolean): Record<string, unknown> | null;
     updateParams(type: number, value: unknown): void;
@@ -47,6 +49,8 @@ declare module "pdfjs-viewer" {
   export interface PdfJsDocumentProxy {
     readonly numPages: number;
     getPage(pageNumber: number): Promise<PdfJsPageProxy>;
+    getPageLabels(): Promise<string[] | null>;
+    getMetadata(): Promise<{ info: Record<string, unknown> }>;
     saveDocument(): Promise<Uint8Array>;
   }
 

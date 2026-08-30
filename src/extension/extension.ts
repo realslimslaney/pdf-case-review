@@ -42,6 +42,17 @@ export function activate(context: ExtensionContext): void {
     commands.registerCommand("pdfCaseReview.debug.postMessage", (uri: Uri, message: HostToWebviewMessage) =>
       provider.postMessage(uri, message),
     ),
+    commands.registerCommand("pdfCaseReview.debug.getDocumentState", (uri: Uri) => {
+      const document = provider.getDocument(uri);
+      return document
+        ? {
+            dirty: document.isDirty,
+            readOnly: document.readOnly,
+            sidecarUri: document.sidecarUri.toString(),
+            model: document.model,
+          }
+        : undefined;
+    }),
     commands.registerCommand("pdfCaseReview.debug.renderSampleReport", async (folder: Uri) => {
       const results = await renderSampleReport(folder);
       for (const result of results) {

@@ -53,6 +53,10 @@ export type WebviewToHostMessage =
   | {
       type: "viewerLoaded";
       pagesCount: number;
+      /** PDF page labels by page index (`["i", "ii", "1", ...]`), or null when the file has none. */
+      pageLabels: string[] | null;
+      /** Document title from the PDF metadata, when present. */
+      title: string | null;
       annotationEditorMode: number;
       highlightEditorColors: string | null;
       /** Highlight annotations found in the file itself. */

@@ -28,6 +28,14 @@ Short records of the decisions that shape the project, newest last. Each spike f
 
 **Why.** Three id spaces with three lifetimes; keeping the join in one tested place is what stops notes from being lost on undo, reload, mode switches or re-embedding.
 
+## ADR-0005: `CustomDocumentContentChangeEvent`, not `CustomDocumentEditEvent`
+
+**Decision.** The editor provider reports model changes to VS Code with `CustomDocumentContentChangeEvent` (dirty dot, Ctrl+S, "Save changes?", hot-exit backup, `files.autoSave`) and never with `CustomDocumentEditEvent`. Dirty means `serializeSidecar(model) !== savedSnapshot`. Revert reloads the sidecar from disk and reloads the viewer; Save As exports a copy (PDF bytes plus a sidecar beside the destination) and leaves the original untouched.
+
+**Why.** With edit events VS Code owns undo and redo, and PDF.js has its own undo stack for highlights; two stacks for one gesture would fight. Letting PDF.js keep undo means `Ctrl+Z` inside the viewer behaves exactly as in PDF.js.
+
+**Consequences.** Undoing back to the saved state does not clear the dirty flag (VS Code only clears it on save or revert); that is documented rather than worked around. Snapshots that arrive while a reload is pending are ignored, and the reconcile session is reset on every `viewerLoaded`, so a reload can never look like a mass deletion.
+
 ## Spike log
 
 Results are recorded here as they land. Pass/fail criteria are in the maintainer plan (§14).

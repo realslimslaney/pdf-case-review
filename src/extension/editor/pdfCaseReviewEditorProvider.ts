@@ -18,11 +18,18 @@
  * runtime instead of bundling it (no Node path APIs, web-host compatible); strips PDF.js's
  * own CSP meta tag at rewrite time instead of patching the vendored file; passes the
  * category palette and highlight-editor options to the viewer; typed message protocol;
- * tracks per-document viewer state for tests and the notes views.
+ * tracks per-document viewer state for tests and the notes views; editable custom editor
+ * (CustomEditorProvider) whose document is the sidecar model: save, save as, revert and
+ * hot-exit backup, with highlight editors reconciled into the model on every snapshot.
  */
 
 import {
-  type CustomReadonlyEditorProvider,
+  type CancellationToken,
+  type CustomDocumentBackup,
+  type CustomDocumentBackupContext,
+  type CustomDocumentContentChangeEvent,
+  type CustomDocumentOpenContext,
+  type CustomEditorProvider,
   commands,
   type Disposable,
   EventEmitter,
@@ -35,13 +42,11 @@ import {
   workspace,
 } from "vscode";
 
-import {
-  type Category,
-  DEFAULT_CATEGORIES,
-  normalizeCategories,
-  toHighlightEditorColors,
-  validateCategories,
-} from "../../core/categories";
+import { toHighlightEditorColors } from "../../core/categories";
+import { newHighlightId } from "../../core/sidecar/ids";
+import { reconcileSnapshot } from "../../core/sidecar/reconcile";
+import { serializeSidecar } from "../../core/sidecar/serialize";
+import { emptySidecar, type Sidecar, type SidecarSource } from "../../core/sidecar/types";
 import {
   type EmbeddedAnnotation,
   type HostToWebviewMessage,
@@ -49,10 +54,13 @@ import {
   type SerializedHighlight,
   type ViewerConfig,
 } from "../../shared/protocol";
+import { configuredCategories, sidecarLocation } from "../settings";
+import { sidecarUriFor } from "../sidecar/sidecarLocation";
+import { readSidecar, type SidecarLoad, writeSidecar } from "../sidecar/sidecarStore";
 import { disposeAll } from "../util/disposable";
 import { escapeAttribute } from "../util/escapeAttribute";
 import { WebviewCollection } from "../util/webviewCollection";
-import { contentHash, PdfDocument, parentUri } from "./pdfDocument";
+import { baseName, contentHash, hashBytes, PdfDocument, type PdfInfo, parentUri } from "./pdfDocument";
 
 export interface ViewerState {
   loaded: boolean;
@@ -72,6 +80,19 @@ export interface ViewerState {
   lastSave: { byteLength: number; error: string | null; bytes: Uint8Array | null } | null;
 }
 
+const EMPTY_VIEWER_STATE: ViewerState = {
+  loaded: false,
+  loads: 0,
+  rendered: 0,
+  pagesCount: 0,
+  annotationEditorMode: -1,
+  highlightEditorColors: null,
+  annotations: [],
+  editors: [],
+  existingUnchanged: [],
+  lastSave: null,
+};
+
 const CSP_META_REGEX = /<meta\s+http-equiv="Content-Security-Policy"[\s\S]*?\/>\s*/u;
 
 function withTrailingSlash(uri: Uri): string {
@@ -88,7 +109,20 @@ function stripViewerTags(html: string): string {
     .replace(/* html */ `<link rel="stylesheet" href="viewer.css" />`, "");
 }
 
-export class PdfCaseReviewEditorProvider implements CustomReadonlyEditorProvider<PdfDocument> {
+function sourceFor(uri: Uri, info: PdfInfo): SidecarSource {
+  const source: SidecarSource = {
+    fileName: baseName(uri),
+    sha256: info.sha256,
+    byteLength: info.byteLength,
+    pageCount: info.pageCount,
+  };
+  if (info.title) {
+    source.title = info.title;
+  }
+  return source;
+}
+
+export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocument> {
   static readonly viewType = "pdfCaseReview.pdf";
 
   static register(context: ExtensionContext, output: LogOutputChannel) {
@@ -101,18 +135,34 @@ export class PdfCaseReviewEditorProvider implements CustomReadonlyEditorProvider
   }
 
   private readonly webviews = new WebviewCollection();
+  private readonly documents = new Map<string, PdfDocument>();
   private readonly states = new Map<string, ViewerState>();
   private readonly _onDidChangeViewerState = new EventEmitter<{ uri: Uri; state: ViewerState }>();
   readonly onDidChangeViewerState = this._onDidChangeViewerState.event;
+  private readonly _onDidChangeCustomDocument = new EventEmitter<
+    CustomDocumentContentChangeEvent<PdfDocument>
+  >();
+  readonly onDidChangeCustomDocument = this._onDidChangeCustomDocument.event;
+  /** Fired when a document's model, dirty state or save status changed (the views listen). */
+  private readonly _onDidChangeDocument = new EventEmitter<PdfDocument>();
+  readonly onDidChangeDocument = this._onDidChangeDocument.event;
   private viewerHtmlTemplate: Promise<string> | undefined;
+  private readonly generator: string;
 
   constructor(
     private readonly context: ExtensionContext,
     private readonly output: LogOutputChannel,
-  ) {}
+  ) {
+    const manifest = context.extension.packageJSON as { version?: unknown };
+    this.generator = `pdf-case-review/${typeof manifest.version === "string" ? manifest.version : "0.0.0"}`;
+  }
 
   getViewerState(uri: Uri): ViewerState | undefined {
     return this.states.get(uri.toString());
+  }
+
+  getDocument(uri: Uri): PdfDocument | undefined {
+    return this.documents.get(uri.toString());
   }
 
   /** Posts a message to every webview showing `uri`; returns how many received it. */
@@ -125,9 +175,58 @@ export class PdfCaseReviewEditorProvider implements CustomReadonlyEditorProvider
     return count;
   }
 
-  async openCustomDocument(uri: Uri): Promise<PdfDocument> {
-    const document = new PdfDocument(uri);
-    document.contentHash = await contentHash(uri);
+  private updateState(uri: Uri, patch: Partial<ViewerState>): ViewerState {
+    const key = uri.toString();
+    const next = { ...(this.states.get(key) ?? EMPTY_VIEWER_STATE), ...patch };
+    this.states.set(key, next);
+    this._onDidChangeViewerState.fire({ uri, state: next });
+    return next;
+  }
+
+  async openCustomDocument(uri: Uri, openContext: CustomDocumentOpenContext): Promise<PdfDocument> {
+    const bytes = await workspace.fs.readFile(uri);
+    const info: PdfInfo = {
+      sha256: await hashBytes(bytes),
+      byteLength: bytes.byteLength,
+      pageCount: 0,
+      title: null,
+    };
+    const sidecarUri = sidecarUriFor(uri, sidecarLocation(uri));
+    const onDisk = await this.loadSidecar(sidecarUri);
+    const fresh = () =>
+      emptySidecar(sourceFor(uri, info), configuredCategories(uri, this.output), this.generator);
+
+    let model: Sidecar;
+    let snapshot: string;
+    switch (onDisk.kind) {
+      case "loaded":
+        model = onDisk.model;
+        snapshot = onDisk.snapshot;
+        if (model.source.sha256 !== info.sha256) {
+          this.output.warn(`pdf changed since the sidecar was saved: ${uri.fsPath}`);
+        }
+        break;
+      case "missing":
+        model = fresh();
+        snapshot = serializeSidecar(model);
+        break;
+      case "invalid":
+        model = fresh();
+        snapshot = serializeSidecar(model);
+        break;
+    }
+    if (openContext.backupId) {
+      const backup = await this.loadSidecar(Uri.parse(openContext.backupId));
+      if (backup.kind === "loaded") {
+        model = backup.model;
+        this.output.info(`restored unsaved highlights from backup: ${uri.fsPath}`);
+      }
+    }
+
+    const document = new PdfDocument(uri, sidecarUri, model, snapshot, info);
+    document.readOnly = onDisk.kind === "invalid";
+    const key = uri.toString();
+    this.documents.set(key, document);
     const listeners: Disposable[] = [];
     listeners.push(
       document.onDidChange((changed) => {
@@ -139,15 +238,45 @@ export class PdfCaseReviewEditorProvider implements CustomReadonlyEditorProvider
           }
           document.contentHash = hash;
           this.output.info(`pdf changed on disk, reloading: ${changed.fsPath}`);
-          this.postMessage(changed, { type: "reload" });
+          void workspace.fs.stat(changed).then((stat) => {
+            document.info = { ...document.info, sha256: hash, byteLength: stat.size };
+          });
+          this.reloadViewer(document);
         });
       }),
     );
     document.onDidDelete(() => {
       disposeAll(listeners);
-      this.states.delete(uri.toString());
+      this.states.delete(key);
+      this.documents.delete(key);
     });
     return document;
+  }
+
+  private async loadSidecar(uri: Uri): Promise<SidecarLoad> {
+    const load = await readSidecar(uri);
+    if (load.kind === "invalid") {
+      this.output.error(`sidecar ${uri.fsPath} is invalid: ${load.error.message}`);
+      void window
+        .showWarningMessage(
+          `PDF Case Review: ${baseName(uri)} could not be read (${load.error.message}). Highlights will not be saved until it is fixed.`,
+          "Open sidecar",
+        )
+        .then((choice) => {
+          if (choice === "Open sidecar") {
+            void commands.executeCommand("vscode.open", uri);
+          }
+        });
+    } else if (load.kind === "loaded" && load.migrated) {
+      this.output.info(`migrated sidecar ${uri.fsPath} to the current format`);
+    }
+    return load;
+  }
+
+  /** Reloads the PDF in the viewer; snapshots are ignored until the viewer reports the new load. */
+  private reloadViewer(document: PdfDocument): void {
+    this.updateState(document.uri, { loaded: false });
+    this.postMessage(document.uri, { type: "reload" });
   }
 
   async resolveCustomEditor(document: PdfDocument, webviewPanel: WebviewPanel): Promise<void> {
@@ -157,87 +286,65 @@ export class PdfCaseReviewEditorProvider implements CustomReadonlyEditorProvider
       enableScripts: true,
       localResourceRoots: [resourceRoot, this.context.extensionUri],
     };
-    this.states.set(document.uri.toString(), {
-      loaded: false,
-      loads: this.states.get(document.uri.toString())?.loads ?? 0,
-      rendered: 0,
-      pagesCount: 0,
-      annotationEditorMode: -1,
-      highlightEditorColors: null,
-      annotations: [],
-      editors: [],
-      existingUnchanged: [],
-      lastSave: null,
+    this.updateState(document.uri, {
+      ...EMPTY_VIEWER_STATE,
+      loads: this.getViewerState(document.uri)?.loads ?? 0,
     });
     webviewPanel.webview.html = await this.getHtmlForWebview(document, webviewPanel.webview, resourceRoot);
-    webviewPanel.webview.onDidReceiveMessage((message: unknown) => {
+    const listener = webviewPanel.webview.onDidReceiveMessage((message: unknown) => {
       this.handleMessage(document, webviewPanel.webview, resourceRoot, message);
     });
+    webviewPanel.onDidDispose(() => listener.dispose());
   }
 
   private handleMessage(document: PdfDocument, webview: Webview, resourceRoot: Uri, message: unknown): void {
     if (!isWebviewToHostMessage(message)) {
       return;
     }
-    const key = document.uri.toString();
-    const state = this.states.get(key);
+    const state = this.getViewerState(document.uri);
     switch (message.type) {
       case "ready":
         this.output.debug(`webview ready: ${document.uri.fsPath}`);
         return;
       case "viewerLoaded": {
-        const next: ViewerState = {
+        document.session.reset();
+        document.pageLabels = message.pageLabels;
+        document.info = { ...document.info, pageCount: message.pagesCount, title: message.title };
+        this.updateState(document.uri, {
           loaded: true,
           loads: (state?.loads ?? 0) + 1,
-          rendered: state?.rendered ?? 0,
           pagesCount: message.pagesCount,
           annotationEditorMode: message.annotationEditorMode,
           highlightEditorColors: message.highlightEditorColors,
           annotations: message.annotations,
-          editors: state?.editors ?? [],
-          existingUnchanged: state?.existingUnchanged ?? [],
-          lastSave: state?.lastSave ?? null,
-        };
-        this.states.set(key, next);
+        });
         this.output.info(
           `viewer loaded: ${document.uri.fsPath} (${message.pagesCount} pages, ${message.annotations.length} embedded highlight(s), editor mode ${message.annotationEditorMode}, colors ${message.highlightEditorColors ?? "none"})`,
         );
-        this._onDidChangeViewerState.fire({ uri: document.uri, state: next });
         return;
       }
       case "editorsChanged": {
-        const next: ViewerState = {
-          loaded: state?.loaded ?? false,
-          loads: state?.loads ?? 0,
+        const next = this.updateState(document.uri, {
           rendered: message.rendered,
-          pagesCount: state?.pagesCount ?? 0,
-          annotationEditorMode: state?.annotationEditorMode ?? -1,
-          highlightEditorColors: state?.highlightEditorColors ?? null,
-          annotations: state?.annotations ?? [],
           editors: message.editors,
           existingUnchanged: message.existingUnchanged,
-          lastSave: state?.lastSave ?? null,
-        };
-        this.states.set(key, next);
+        });
         this.output.info(
           `editors changed: ${message.editors.length} highlight(s), ${message.existingUnchanged.length} unchanged from file, ${message.rendered} drawn`,
         );
-        this._onDidChangeViewerState.fire({ uri: document.uri, state: next });
+        if (next.loaded) {
+          this.reconcile(document, message);
+        }
         return;
       }
       case "savedDocument": {
-        if (state) {
-          const bytes = message.bytes ? new Uint8Array(message.bytes) : null;
-          const next: ViewerState = {
-            ...state,
-            lastSave: { byteLength: bytes?.byteLength ?? 0, error: message.error, bytes },
-          };
-          this.states.set(key, next);
-          this.output.info(
-            `saveDocument: ${bytes?.byteLength ?? 0} bytes${message.error ? ` (error: ${message.error})` : ""}`,
-          );
-          this._onDidChangeViewerState.fire({ uri: document.uri, state: next });
-        }
+        const bytes = message.bytes ? new Uint8Array(message.bytes) : null;
+        this.updateState(document.uri, {
+          lastSave: { byteLength: bytes?.byteLength ?? 0, error: message.error, bytes },
+        });
+        this.output.info(
+          `saveDocument: ${bytes?.byteLength ?? 0} bytes${message.error ? ` (error: ${message.error})` : ""}`,
+        );
         return;
       }
       case "openLink":
@@ -247,6 +354,103 @@ export class PdfCaseReviewEditorProvider implements CustomReadonlyEditorProvider
         this.output[message.level](`[webview] ${message.message}`);
         return;
     }
+  }
+
+  /** Folds a viewer snapshot into the sidecar model and tells VS Code when that made it dirty. */
+  private reconcile(
+    document: PdfDocument,
+    snapshot: { editors: SerializedHighlight[]; existingUnchanged: string[]; deletedAnnotationIds: string[] },
+  ): void {
+    const result = reconcileSnapshot(document.model.highlights, snapshot, document.session, {
+      categories: document.model.categories,
+      now: () => new Date().toISOString(),
+      newId: newHighlightId,
+      pageLabels: document.pageLabels,
+    });
+    if (result.ignored.length > 0) {
+      this.output.debug(`ignoring ${result.ignored.length} foreign annotation editor(s)`);
+    }
+    if (!result.changed) {
+      return;
+    }
+    document.model = { ...document.model, highlights: result.highlights };
+    this.output.debug(
+      `reconciled: +${result.created.length} ~${result.updated.length} -${result.deleted.length} restored ${result.restored.length}`,
+    );
+    this._onDidChangeCustomDocument.fire({ document });
+    this._onDidChangeDocument.fire(document);
+  }
+
+  async saveCustomDocument(document: PdfDocument, _token: CancellationToken): Promise<void> {
+    if (document.readOnly) {
+      throw new Error(
+        `PDF Case Review: ${baseName(document.sidecarUri)} could not be read when the PDF was opened; fix or remove it, then reopen the PDF.`,
+      );
+    }
+    document.model = {
+      ...document.model,
+      generator: this.generator,
+      source: sourceFor(document.uri, document.info),
+    };
+    document.savedSnapshot = await writeSidecar(document.sidecarUri, document.model);
+    this.output.info(
+      `saved sidecar: ${document.sidecarUri.fsPath} (${document.model.highlights.length} highlight(s))`,
+    );
+    this._onDidChangeDocument.fire(document);
+  }
+
+  /** Save As exports a copy: the PDF bytes plus a sidecar beside the destination. */
+  async saveCustomDocumentAs(
+    document: PdfDocument,
+    destination: Uri,
+    _token: CancellationToken,
+  ): Promise<void> {
+    await workspace.fs.copy(document.uri, destination, { overwrite: true });
+    const model: Sidecar = {
+      ...document.model,
+      generator: this.generator,
+      source: sourceFor(destination, document.info),
+    };
+    const sidecarUri = sidecarUriFor(destination, sidecarLocation(destination));
+    await writeSidecar(sidecarUri, model);
+    this.output.info(`exported copy: ${destination.fsPath} + ${sidecarUri.fsPath}`);
+  }
+
+  async revertCustomDocument(document: PdfDocument, _token: CancellationToken): Promise<void> {
+    const onDisk = await this.loadSidecar(document.sidecarUri);
+    document.model =
+      onDisk.kind === "loaded"
+        ? onDisk.model
+        : emptySidecar(
+            sourceFor(document.uri, document.info),
+            configuredCategories(document.uri, this.output),
+            this.generator,
+          );
+    document.savedSnapshot = serializeSidecar(document.model);
+    this.reloadViewer(document);
+    this._onDidChangeDocument.fire(document);
+  }
+
+  async backupCustomDocument(
+    document: PdfDocument,
+    context: CustomDocumentBackupContext,
+    _token: CancellationToken,
+  ): Promise<CustomDocumentBackup> {
+    await workspace.fs.createDirectory(parentUri(context.destination));
+    await workspace.fs.writeFile(
+      context.destination,
+      new TextEncoder().encode(serializeSidecar(document.model)),
+    );
+    return {
+      id: context.destination.toString(),
+      delete: async () => {
+        try {
+          await workspace.fs.delete(context.destination);
+        } catch {
+          // Already gone.
+        }
+      },
+    };
   }
 
   /** Opens a link that points inside the PDF's own folder with VS Code; ignores everything else. */
@@ -269,22 +473,6 @@ export class PdfCaseReviewEditorProvider implements CustomReadonlyEditorProvider
     } catch {
       // Malformed or non-local URL: ignore.
     }
-  }
-
-  private categoriesFor(uri: Uri): Category[] {
-    const configured = workspace
-      .getConfiguration("pdfCaseReview", uri)
-      .get<Category[]>("categories", [...DEFAULT_CATEGORIES]);
-    const errors = validateCategories(configured);
-    if (errors.length > 0) {
-      const detail = errors.map((error) => `#${error.index + 1}: ${error.message}`).join("; ");
-      this.output.warn(`pdfCaseReview.categories is invalid, using defaults: ${detail}`);
-      void window.showWarningMessage(
-        `PDF Case Review: category settings are invalid (${detail}). Using defaults.`,
-      );
-      return [...DEFAULT_CATEGORIES];
-    }
-    return normalizeCategories(configured);
   }
 
   private loadViewerHtmlTemplate(): Promise<string> {
@@ -314,7 +502,8 @@ export class PdfCaseReviewEditorProvider implements CustomReadonlyEditorProvider
       resourceRoot: withTrailingSlash(webview.asWebviewUri(resourceRoot)),
       defaultZoomValue: settings.get<string>("defaultZoom", "auto"),
       sidebarViewOnLoad: settings.get<number>("sidebarOnLoad", 0),
-      highlightEditorColors: toHighlightEditorColors(this.categoriesFor(document.uri)),
+      // The palette comes from the document's own categories: the sidecar is self-describing.
+      highlightEditorColors: toHighlightEditorColors(document.model.categories),
       sandboxBundleSrc: `${pdfjs("build", "pdf.sandbox.mjs")}`,
       cMapUrl: withTrailingSlash(pdfjs("web", "cmaps")),
       iccUrl: withTrailingSlash(pdfjs("web", "iccs")),

@@ -127,6 +127,20 @@
             }
           }
         },
+        "pdfCaseReview.sidecar.location": {
+          "type": "string",
+          "scope": "resource",
+          "default": "beside",
+          "enum": [
+            "beside",
+            "folder"
+          ],
+          "enumDescriptions": [
+            "Next to the PDF, as <name>.pdf.review.json",
+            "Under <workspace>/.pdf-case-review/<relative path>.review.json"
+          ],
+          "markdownDescription": "Where highlights and notes are stored. `folder` keeps them out of directories you do not control; a PDF outside the workspace always gets its file beside it."
+        },
         "pdfCaseReview.viewer.defaultZoom": {
           "type": "string",
           "scope": "resource",
