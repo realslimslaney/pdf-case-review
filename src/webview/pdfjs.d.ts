@@ -6,7 +6,6 @@
 declare module "pdfjs-viewer" {
   export interface PdfJsEventBus {
     on(name: string, listener: (event: Record<string, unknown>) => void): void;
-    off(name: string, listener: (event: Record<string, unknown>) => void): void;
     dispatch(name: string, data: Record<string, unknown>): void;
   }
 
@@ -15,19 +14,37 @@ declare module "pdfjs-viewer" {
     pageIndex: number;
     /** Set when the editor was created from an annotation already in the file. */
     annotationElementId: string | null;
-    color?: string | number[];
+    /** The editor's DOM element once rendered; highlight editors carry their text as aria-label. */
+    div?: HTMLElement | null;
     serialize(isForCopying?: boolean): Record<string, unknown> | null;
     updateParams(type: number, value: unknown): void;
+    /** Called by the layer on every attach; PDF.js registers an undo command and focuses here. */
+    onceAdded(focus: boolean): void;
+  }
+
+  /** One page's AnnotationEditorLayer; exists once the page has been rendered. */
+  export interface PdfJsEditorLayer {
+    readonly div: HTMLElement;
+    deserialize(data: Record<string, unknown>): Promise<PdfJsEditor | null>;
+    add(editor: PdfJsEditor): void;
   }
 
   export interface PdfJsUiManager {
     getEditors(pageIndex: number): Iterable<PdfJsEditor>;
-    getEditor(id: string): PdfJsEditor | undefined;
+    getLayer(pageIndex: number): PdfJsEditorLayer | undefined;
     highlightSelection(methodOfCreation?: string, comment?: boolean): void;
     updateParams(type: number, value: unknown): void;
     setSelected(editor: PdfJsEditor): void;
+    unselectAll(): void;
+    /** Deletes the selected editors as one undoable command. */
+    delete(): void;
+    undo(): void;
+    redo(): void;
+    /** True once a file-backed editor was deleted (the annotation is dropped on save). */
+    isDeletedAnnotationElement(annotationElementId: string): boolean;
     getMode(): number;
-    readonly highlightColors: Map<string, string> | null;
+    /** True while at least one editor is selected. */
+    readonly hasSelection: boolean;
   }
 
   export interface PdfJsViewer {
@@ -40,11 +57,14 @@ declare module "pdfjs-viewer" {
 
   export interface PdfJsPageProxy {
     getAnnotations(): Promise<Record<string, unknown>[]>;
+    getTextContent(): Promise<{ items: Record<string, unknown>[] }>;
   }
 
   export interface PdfJsDocumentProxy {
     readonly numPages: number;
     getPage(pageNumber: number): Promise<PdfJsPageProxy>;
+    getPageLabels(): Promise<string[] | null>;
+    getMetadata(): Promise<{ info: Record<string, unknown> }>;
     saveDocument(): Promise<Uint8Array>;
   }
 
@@ -55,6 +75,10 @@ declare module "pdfjs-viewer" {
     readonly pdfDocument: PdfJsDocumentProxy | null;
     readonly pdfLinkService: { setHash(hash: string): void };
     open(args: Record<string, unknown>): Promise<void>;
+    /** PDF.js "save" = download the (edited) file; replaced with no-ops, saving is VS Code's job. */
+    download(): Promise<void>;
+    save(): Promise<void>;
+    downloadOrSave(): Promise<void>;
   }
 
   export const PDFViewerApplication: PdfJsApplication;
@@ -66,6 +90,4 @@ declare module "pdfjs-viewer" {
 
 declare function acquireVsCodeApi(): {
   postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
 };

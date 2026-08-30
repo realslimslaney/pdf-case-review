@@ -11,7 +11,7 @@
 .release-please-manifest.json
 release-please-config.json
 biome.json
-vitest.config.ts
+vitest.config.mts
 tsup.config.ts
 **/tsconfig*.json
 pnpm-lock.yaml

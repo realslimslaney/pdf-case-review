@@ -4,7 +4,13 @@
 import type { PdfJsApplication, PdfJsEditor, PdfJsUiManager } from "pdfjs-viewer";
 
 import { rgbToHex } from "../core/categories";
-import type { EmbeddedAnnotation, SerializedHighlight, WebviewToHostMessage } from "../shared/protocol";
+import { type TextItemGeometry, textInQuads } from "../core/text/quadText";
+import type {
+  EmbeddedAnnotation,
+  InjectableHighlight,
+  SerializedHighlight,
+  WebviewToHostMessage,
+} from "../shared/protocol";
 
 // PDF.js constants (src/shared/util.js). Hard-coded because the viewer does not export them;
 // the spike log in docs/explanation/decisions.md records the vendored build they were checked against.
@@ -46,7 +52,20 @@ export class PdfjsAdapter {
   private snapshotTimer: ReturnType<typeof setTimeout> | undefined;
   private lastSnapshotJson = "";
   private readonly textById = new Map<string, string>();
+  /** Sidecar uuids for editors the host created or injected, keyed by PDF.js editor id. */
+  private readonly sidecarIdByEditorId = new Map<string, string>();
+  /** Highlight annotation ids found in the file at load time. */
+  private annotationIds: string[] = [];
   private lastSelection: { text: string; at: number } | null = null;
+  /** Sidecar highlights waiting for their page's editor layer, keyed by page index. */
+  private readonly pendingInjections = new Map<number, InjectableHighlight[]>();
+  private readonly injectedSidecarIds = new Set<string>();
+  private readonly textItemsByPage = new Map<number, Promise<TextItemGeometry[]>>();
+  /** Quad-intersection text per editor id, keyed by the quads it was computed for. */
+  private readonly quadTextById = new Map<string, { key: string; text: string }>();
+  private readonly quadTextInFlight = new Set<string>();
+  /** Editors already reported once; only a first sighting may pair with the last selection. */
+  private readonly seenEditorIds = new Set<string>();
 
   constructor(
     private readonly app: PdfJsApplication,
@@ -60,14 +79,29 @@ export class PdfjsAdapter {
     eventBus.on("annotationeditoruimanager", (event) => {
       this.uiManager = (event["uiManager"] as PdfJsUiManager | undefined) ?? null;
     });
-    for (const name of [
-      "editingstateschanged",
-      "annotationeditormodechanged",
-      "pagerendered",
-      "editorsrendered",
-    ]) {
+    for (const name of ["editingstateschanged", "annotationeditormodechanged"]) {
       eventBus.on(name, () => this.scheduleSnapshot());
     }
+    for (const name of ["pagerendered", "editorsrendered"]) {
+      eventBus.on(name, () => this.scheduleSnapshot());
+    }
+    // A page's editor layer exists only after annotationeditorlayerrendered (pagerendered fires
+    // before it is built); editorsrendered covers layers enabled by a mode switch.
+    for (const name of ["annotationeditorlayerrendered", "editorsrendered"]) {
+      eventBus.on(name, (event) => {
+        const pageNumber = event["pageNumber"];
+        if (typeof pageNumber === "number") {
+          void this.tryInject(pageNumber - 1);
+        }
+      });
+    }
+    eventBus.on("pagechanging", (event) => {
+      const page = event["pageNumber"];
+      if (typeof page === "number") {
+        const label = event["pageLabel"];
+        this.post({ type: "pageChanged", page, pageLabel: typeof label === "string" ? label : null });
+      }
+    });
     document.addEventListener("selectionchange", () => {
       const selection = document.getSelection();
       if (selection && !selection.isCollapsed) {
@@ -81,14 +115,38 @@ export class PdfjsAdapter {
 
   async reportLoaded(): Promise<void> {
     const colors = this.options.get("highlightEditorColors");
+    const annotations = await this.collectHighlightAnnotations();
+    this.annotationIds = annotations.map((annotation) => annotation.id);
+    // Editor ids do not survive a load: forget per-load bookkeeping and force a fresh snapshot.
+    this.sidecarIdByEditorId.clear();
+    this.textById.clear();
+    this.lastSnapshotJson = "";
+    this.pendingInjections.clear();
+    this.injectedSidecarIds.clear();
+    this.textItemsByPage.clear();
+    this.quadTextById.clear();
+    this.quadTextInFlight.clear();
+    this.seenEditorIds.clear();
     this.post({
       type: "viewerLoaded",
       pagesCount: this.app.pdfViewer.pagesCount,
+      pageLabels: (await this.app.pdfDocument?.getPageLabels()) ?? null,
+      title: await this.documentTitle(),
       annotationEditorMode: this.app.pdfViewer.annotationEditorMode,
       highlightEditorColors: typeof colors === "string" ? colors : null,
-      annotations: await this.collectHighlightAnnotations(),
+      annotations,
     });
     this.scheduleSnapshot();
+  }
+
+  private async documentTitle(): Promise<string | null> {
+    try {
+      const metadata = await this.app.pdfDocument?.getMetadata();
+      const title = metadata?.info["Title"];
+      return typeof title === "string" && title.trim() !== "" ? title.trim() : null;
+    } catch {
+      return null;
+    }
   }
 
   /** Highlight annotations already present in the file, straight from the PDF.js document proxy. */
@@ -124,16 +182,42 @@ export class PdfjsAdapter {
     this.app.eventBus.dispatch("switchannotationeditormode", { source: this, mode });
   }
 
-  /** Finds an editor by our id: the annotation id for file-backed editors, else PDF.js's editor id. */
-  private findEditor(id: string): PdfJsEditor | undefined {
+  /** Every editor PDF.js currently holds, page by page. */
+  private *editors(): Iterable<PdfJsEditor> {
     if (!this.uiManager) {
-      return undefined;
+      return;
     }
     for (let pageIndex = 0; pageIndex < this.app.pdfViewer.pagesCount; pageIndex += 1) {
-      for (const editor of this.uiManager.getEditors(pageIndex)) {
-        if (editor.annotationElementId === id || editor.id === id) {
-          return editor;
-        }
+      yield* this.uiManager.getEditors(pageIndex);
+    }
+  }
+
+  /** Finds an editor by our id: the annotation id for file-backed editors, else PDF.js's editor id. */
+  private findEditor(id: string): PdfJsEditor | undefined {
+    for (const editor of this.editors()) {
+      if (editor.annotationElementId === id || editor.id === id) {
+        return editor;
+      }
+    }
+    return undefined;
+  }
+
+  private editorIdForSidecar(sidecarId: string): string | undefined {
+    for (const [editorId, candidate] of this.sidecarIdByEditorId) {
+      if (candidate === sidecarId) {
+        return editorId;
+      }
+    }
+    return undefined;
+  }
+
+  /** Polls `probe` every 50 ms for up to a second (PDF.js defers creation behind mode switches). */
+  private async pollFor<T>(probe: () => T | undefined): Promise<T | undefined> {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const value = probe();
+      if (value !== undefined) {
+        return value;
       }
     }
     return undefined;
@@ -162,6 +246,241 @@ export class PdfjsAdapter {
     }
   }
 
+  /** Queues sidecar-only highlights; each page's queue is injected once its editor layer exists. */
+  loadHighlights(highlights: readonly InjectableHighlight[]): void {
+    for (const highlight of highlights) {
+      if (this.injectedSidecarIds.has(highlight.sidecarId)) {
+        continue;
+      }
+      const queue = this.pendingInjections.get(highlight.pageIndex) ?? [];
+      queue.push(highlight);
+      this.pendingInjections.set(highlight.pageIndex, queue);
+    }
+    for (const pageIndex of [...this.pendingInjections.keys()]) {
+      void this.tryInject(pageIndex);
+    }
+  }
+
+  private async tryInject(pageIndex: number): Promise<void> {
+    const queue = this.pendingInjections.get(pageIndex);
+    const layer = this.uiManager?.getLayer(pageIndex);
+    if (!queue || queue.length === 0 || !layer) {
+      return;
+    }
+    this.pendingInjections.delete(pageIndex);
+    for (const item of queue) {
+      if (this.injectedSidecarIds.has(item.sidecarId)) {
+        continue;
+      }
+      try {
+        const editor = await layer.deserialize({ ...item.data, pageIndex });
+        if (!editor) {
+          this.post({
+            type: "log",
+            level: "warn",
+            message: `inject ${item.sidecarId}: PDF.js returned no editor`,
+          });
+          continue;
+        }
+        // Not an edit: PDF.js's onceAdded() would register an undo command and focus the editor
+        // on every attach (the layer re-adds every editor when a page is recycled), so it is
+        // neutralized on the instance before the first add().
+        editor.onceAdded = () => {};
+        layer.add(editor);
+        // In NONE mode PDF.js renders an empty layer hidden and only un-hides it on a mode
+        // change; an editor added afterwards would stay invisible.
+        layer.div.hidden = false;
+        this.sidecarIdByEditorId.set(editor.id, item.sidecarId);
+        this.injectedSidecarIds.add(item.sidecarId);
+        this.post({
+          type: "log",
+          level: "info",
+          message: `drew sidecar highlight ${item.sidecarId} on page ${pageIndex + 1}`,
+        });
+      } catch (error) {
+        this.post({
+          type: "log",
+          level: "error",
+          message: `inject ${item.sidecarId}: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    }
+    this.scheduleSnapshot();
+  }
+
+  /**
+   * Finds an editor by viewer id, materializing file-backed annotations first when needed: outside
+   * highlight mode PDF.js keeps them as plain annotation elements without editors, and it only
+   * materializes annotations on pages whose layer has been rendered.
+   */
+  private async withEditor(viewerId: string): Promise<PdfJsEditor | undefined> {
+    const editor = this.findEditor(viewerId);
+    if (editor || !this.uiManager || !/^[0-9]+R/.test(viewerId)) {
+      return editor;
+    }
+    if (this.uiManager.getMode() !== ANNOTATION_EDITOR_TYPE_HIGHLIGHT) {
+      this.setEditorMode(ANNOTATION_EDITOR_TYPE_HIGHLIGHT);
+    }
+    return this.pollFor(() => this.findEditor(viewerId));
+  }
+
+  /** Runs `work` and puts the editor mode back afterwards when materializing had to switch it. */
+  private async keepingMode<T>(work: () => Promise<T>): Promise<T> {
+    const before = this.uiManager?.getMode();
+    try {
+      return await work();
+    } finally {
+      if (before !== undefined && this.uiManager && this.uiManager.getMode() !== before) {
+        this.setEditorMode(before);
+      }
+    }
+  }
+
+  private cancelInjection(sidecarId: string): void {
+    for (const [pageIndex, queue] of this.pendingInjections) {
+      this.pendingInjections.set(
+        pageIndex,
+        queue.filter((item) => item.sidecarId !== sidecarId),
+      );
+    }
+    this.injectedSidecarIds.add(sidecarId);
+  }
+
+  /**
+   * Deletes highlights through PDF.js so the deletion lands on its undo stack, and reports the
+   * ones it could not reach (no editor: the host removes those from the model itself).
+   */
+  async deleteHighlights(items: readonly { sidecarId: string; viewerId?: string }[]): Promise<void> {
+    const deleted: string[] = [];
+    const failed: string[] = [];
+    await this.keepingMode(async () => {
+      for (const item of items) {
+        this.cancelInjection(item.sidecarId);
+        const viewerId = item.viewerId ?? this.editorIdForSidecar(item.sidecarId);
+        const editor = viewerId === undefined ? undefined : await this.withEditor(viewerId);
+        if (!editor || !this.uiManager) {
+          failed.push(item.sidecarId);
+          continue;
+        }
+        this.uiManager.setSelected(editor);
+        this.uiManager.delete();
+        deleted.push(item.sidecarId);
+      }
+      this.uiManager?.unselectAll();
+    });
+    this.scheduleSnapshot();
+    this.post({ type: "highlightsDeleted", deleted, failed });
+  }
+
+  async recolorHighlights(items: readonly { viewerId: string; color: string }[]): Promise<void> {
+    await this.keepingMode(async () => {
+      for (const { viewerId, color } of items) {
+        const editor = await this.withEditor(viewerId);
+        if (!editor) {
+          this.post({ type: "log", level: "warn", message: `recolor: no editor with id ${viewerId}` });
+          continue;
+        }
+        editor.updateParams(PARAMS_HIGHLIGHT_COLOR, color);
+      }
+    });
+    this.scheduleSnapshot();
+  }
+
+  /** Scrolls so the highlight's top-left corner is near the top of the view, then flashes it. */
+  goTo(page: number, rect: readonly number[] | undefined, viewerId: string | undefined): void {
+    const [x1, , , y2] = rect ?? [];
+    this.app.pdfViewer.scrollPageIntoView({
+      pageNumber: page,
+      destArray:
+        x1 !== undefined && y2 !== undefined ? [null, { name: "XYZ" }, x1 - 20, y2 + 20, null] : null,
+    });
+    const editor = viewerId === undefined ? undefined : this.findEditor(viewerId);
+    const div = editor?.div;
+    if (div) {
+      div.classList.add("pdfCaseReview-flash");
+      setTimeout(() => div.classList.remove("pdfCaseReview-flash"), 1_500);
+    }
+  }
+
+  /** Spike instrumentation: select an editor. On an unfocused window PDF.js drops editor selection. */
+  spikeSelectEditor(viewerId: string): void {
+    const editor = this.findEditor(viewerId);
+    if (editor && this.uiManager) {
+      this.uiManager.setSelected(editor);
+    }
+  }
+
+  undo(): void {
+    this.uiManager?.undo();
+    this.scheduleSnapshot();
+  }
+
+  redo(): void {
+    this.uiManager?.redo();
+    this.scheduleSnapshot();
+  }
+
+  private textItems(pageIndex: number): Promise<TextItemGeometry[]> {
+    let items = this.textItemsByPage.get(pageIndex);
+    if (!items) {
+      items = (async () => {
+        const pdfDocument = this.app.pdfDocument;
+        if (!pdfDocument) {
+          return [];
+        }
+        const page = await pdfDocument.getPage(pageIndex + 1);
+        const content = await page.getTextContent();
+        return content.items.flatMap((item): TextItemGeometry[] => {
+          const str = item["str"];
+          const transform = numberList(toPlain(item["transform"]));
+          const width = item["width"];
+          const height = item["height"];
+          if (
+            typeof str !== "string" ||
+            transform.length < 6 ||
+            typeof width !== "number" ||
+            typeof height !== "number"
+          ) {
+            return [];
+          }
+          return [
+            {
+              str,
+              x: transform[4] ?? 0,
+              y: transform[5] ?? 0,
+              width,
+              height,
+              hasEOL: item["hasEOL"] === true,
+            },
+          ];
+        });
+      })();
+      this.textItemsByPage.set(pageIndex, items);
+    }
+    return items;
+  }
+
+  /** Computes the quad-intersection text once per editor and geometry, then re-snapshots. */
+  private async computeQuadText(editorId: string, pageIndex: number, quadPoints: number[], key: string) {
+    if (this.quadTextInFlight.has(editorId)) {
+      return;
+    }
+    this.quadTextInFlight.add(editorId);
+    try {
+      const text = textInQuads(await this.textItems(pageIndex), quadPoints);
+      this.quadTextById.set(editorId, { key, text });
+      this.scheduleSnapshot();
+    } catch (error) {
+      this.post({
+        type: "log",
+        level: "warn",
+        message: `quad text for ${editorId}: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    } finally {
+      this.quadTextInFlight.delete(editorId);
+    }
+  }
+
   scheduleSnapshot(): void {
     if (this.snapshotTimer !== undefined) {
       clearTimeout(this.snapshotTimer);
@@ -176,23 +495,23 @@ export class PdfjsAdapter {
     }
     const editors: SerializedHighlight[] = [];
     const existingUnchanged: string[] = [];
-    for (let pageIndex = 0; pageIndex < this.app.pdfViewer.pagesCount; pageIndex += 1) {
-      for (const editor of this.uiManager.getEditors(pageIndex)) {
-        const serialized = this.serialize(editor);
-        if (serialized) {
-          editors.push(serialized);
-        } else if (editor.annotationElementId) {
-          existingUnchanged.push(editor.annotationElementId);
-        }
+    for (const editor of this.editors()) {
+      const serialized = this.serialize(editor);
+      if (serialized) {
+        editors.push(serialized);
+      } else if (editor.annotationElementId) {
+        existingUnchanged.push(editor.annotationElementId);
       }
     }
+    const uiManager = this.uiManager;
+    const deletedAnnotationIds = this.annotationIds.filter((id) => uiManager.isDeletedAnnotationElement(id));
     const rendered = [...document.querySelectorAll(".annotationEditorLayer .highlightEditor")].filter(
       (element) => element.getBoundingClientRect().width > 0,
     ).length;
-    const json = JSON.stringify({ editors, existingUnchanged, rendered });
+    const json = JSON.stringify({ editors, existingUnchanged, deletedAnnotationIds, rendered });
     if (json !== this.lastSnapshotJson) {
       this.lastSnapshotJson = json;
-      this.post({ type: "editorsChanged", editors, existingUnchanged, rendered });
+      this.post({ type: "editorsChanged", editors, existingUnchanged, deletedAnnotationIds, rendered });
     }
   }
 
@@ -203,16 +522,28 @@ export class PdfjsAdapter {
     if (!raw || raw["annotationType"] !== ANNOTATION_EDITOR_TYPE_HIGHLIGHT || raw["deleted"] === true) {
       return null;
     }
-    if (!this.textById.has(editor.id) && this.lastSelection) {
-      if (Date.now() - this.lastSelection.at <= SELECTION_PAIRING_WINDOW_MS) {
-        this.textById.set(editor.id, this.lastSelection.text);
-      }
+    // Pair the last selection only with an editor the viewer itself just created: injected or
+    // file-backed editors would otherwise adopt whatever the user selected last.
+    const firstSighting = !this.seenEditorIds.has(editor.id);
+    this.seenEditorIds.add(editor.id);
+    if (
+      firstSighting &&
+      !editor.annotationElementId &&
+      !this.sidecarIdByEditorId.has(editor.id) &&
+      !this.textById.has(editor.id) &&
+      this.lastSelection &&
+      Date.now() - this.lastSelection.at <= SELECTION_PAIRING_WINDOW_MS
+    ) {
+      this.textById.set(editor.id, this.lastSelection.text);
     }
     // PDF.js serializes geometry as typed arrays (Float32Array); flatten to plain numbers so the
     // payload survives postMessage and JSON alike.
     const plain = toPlain(raw) as Record<string, unknown>;
     const color = numberList(plain["color"]);
-    return {
+    // PDF.js keeps the highlighted text private (#text); the aria-label it writes at render time
+    // is overwritten by the localized editor name, so the selection pairing above is the source
+    // and `quadText` (computed below) is the cross-check and the fallback.
+    const serialized: SerializedHighlight = {
       id: editor.annotationElementId ?? editor.id,
       pageIndex: editor.pageIndex,
       color: color.length === 3 ? rgbToHex(color as [number, number, number]) : String(plain["color"]),
@@ -220,24 +551,34 @@ export class PdfjsAdapter {
       rect: numberList(plain["rect"]),
       rotation: typeof plain["rotation"] === "number" ? plain["rotation"] : 0,
       text: this.textById.get(editor.id) ?? null,
+      annotationElementId: editor.annotationElementId ?? null,
       raw: plain,
     };
+    const sidecarId = this.sidecarIdByEditorId.get(editor.id);
+    if (sidecarId !== undefined) {
+      serialized.sidecarId = sidecarId;
+    }
+    if (serialized.quadPoints.length > 0) {
+      const key = serialized.quadPoints.join(",");
+      const cached = this.quadTextById.get(editor.id);
+      if (cached?.key === key) {
+        serialized.quadText = cached.text;
+      } else {
+        void this.computeQuadText(editor.id, editor.pageIndex, serialized.quadPoints, key);
+      }
+    }
+    return serialized;
   }
 
   /**
-   * Spike instrumentation: programmatically select the first `spanCount` text-layer spans of
-   * `page`, create a highlight from that selection exactly as the floating button would, and
-   * recolor it. Used by the integration tests; harmless otherwise.
+   * Spike instrumentation: programmatically select the first `spanCount` non-empty text-layer
+   * spans of `page`, exactly as a mouse drag would. Returns false when the page is not rendered.
    */
-  spikeHighlightText(page: number, spanCount: number, color: string): void {
+  spikeSelectText(page: number, spanCount: number): boolean {
     const textLayer = document.querySelector(`.page[data-page-number="${page}"] .textLayer`);
-    if (!textLayer || !this.uiManager) {
-      this.post({
-        type: "log",
-        level: "error",
-        message: `spike: page ${page} text layer or UI manager missing`,
-      });
-      return;
+    if (!textLayer) {
+      this.post({ type: "log", level: "error", message: `spike: page ${page} text layer missing` });
+      return false;
     }
     const spans = [...textLayer.querySelectorAll("span")].filter(
       (span) => (span.textContent ?? "").trim() !== "",
@@ -246,41 +587,104 @@ export class PdfjsAdapter {
     const last = spans[Math.min(spanCount, spans.length) - 1];
     if (!first || !last) {
       this.post({ type: "log", level: "error", message: `spike: page ${page} has no text spans` });
-      return;
+      return false;
     }
     const range = document.createRange();
     range.setStartBefore(first);
     range.setEndAfter(last);
     const selection = document.getSelection();
     if (!selection) {
-      return;
+      return false;
     }
     selection.removeAllRanges();
     selection.addRange(range);
     this.lastSelection = { text: selection.toString(), at: Date.now() };
+    return true;
+  }
 
-    const before = new Set([...this.uiManager.getEditors(page - 1)].map((editor) => editor.id));
-    this.uiManager.highlightSelection("pdfCaseReview.spike");
+  private allEditorIds(): Set<string> {
+    return new Set([...this.editors()].map((editor) => editor.id));
+  }
 
-    // Creation is deferred behind a mode switch; recolor once the new editor exists.
-    const recolor = (attempt: number) => {
-      if (!this.uiManager) {
-        return;
-      }
-      const created = [...this.uiManager.getEditors(page - 1)].filter((editor) => !before.has(editor.id));
-      if (created.length === 0) {
-        if (attempt < 20) {
-          setTimeout(() => recolor(attempt + 1), 50);
-        } else {
-          this.post({ type: "log", level: "error", message: "spike: no highlight editor was created" });
-        }
-        return;
-      }
-      for (const editor of created) {
+  /**
+   * Creates a highlight from the viewer's current text selection the way the floating button does,
+   * in `color`, tagged with `sidecarId` when the host pre-assigned one. PDF.js 6.3 has no
+   * HIGHLIGHT_DEFAULT_COLOR param: the default is set through `updateParams` with nothing selected,
+   * and creation is deferred behind a mode switch, so the new editor is polled for and recolored.
+   */
+  private async createHighlightFromSelection(color: string, sidecarId?: string): Promise<PdfJsEditor[]> {
+    const selection = document.getSelection();
+    if (!this.uiManager || !selection || selection.isCollapsed || selection.toString().trim() === "") {
+      return [];
+    }
+    const uiManager = this.uiManager;
+    const text = selection.toString();
+    this.lastSelection = { text, at: Date.now() };
+    const before = this.allEditorIds();
+    // Without an editor selection updateParams sets the default color (there is no
+    // HIGHLIGHT_DEFAULT_COLOR param in PDF.js 6.3); with one it would recolor that editor, so the
+    // new editor is recolored afterwards instead. Nothing here may await before highlightSelection:
+    // the pending selectionchange event would otherwise create a highlight of its own.
+    if (!uiManager.hasSelection) {
+      uiManager.updateParams(PARAMS_HIGHLIGHT_COLOR, color);
+    }
+    uiManager.highlightSelection("keyboard");
+    // The mode switch also materializes file-backed annotations as editors; only viewer-created
+    // editors that were not there before are the new highlight.
+    const created =
+      (await this.pollFor(() => {
+        const fresh = [...this.editors()].filter(
+          (editor) => !before.has(editor.id) && !editor.annotationElementId,
+        );
+        return fresh.length > 0 ? fresh : undefined;
+      })) ?? [];
+    this.post({
+      type: "log",
+      level: "info",
+      message: `create from selection: ${before.size} editor(s) before, ${created.length} created (${created.map((editor) => editor.id).join(", ")}), mode ${uiManager.getMode()}`,
+    });
+    for (const editor of created) {
+      this.textById.set(editor.id, text);
+      if (colorToHex(editor.serialize(false)?.["color"]) !== color.toUpperCase()) {
         editor.updateParams(PARAMS_HIGHLIGHT_COLOR, color);
       }
-      this.scheduleSnapshot();
-    };
-    recolor(0);
+      if (sidecarId !== undefined) {
+        this.sidecarIdByEditorId.set(editor.id, sidecarId);
+      }
+    }
+    this.scheduleSnapshot();
+    return created;
+  }
+
+  /**
+   * The Ctrl+Alt+N path: a text selection becomes a highlight of that category; failing that, the
+   * selected editors (in highlight mode PDF.js has already turned the mouse selection into one)
+   * are recolored; and the color becomes the default for the next highlight either way.
+   */
+  async applyCategory(id: string, color: string): Promise<void> {
+    const created = await this.createHighlightFromSelection(color, id);
+    if (created.length > 0) {
+      this.post({ type: "createFromSelectionResult", id, created: true, recolored: false });
+      return;
+    }
+    const recolored = this.uiManager?.hasSelection === true;
+    this.uiManager?.updateParams(PARAMS_HIGHLIGHT_COLOR, color);
+    this.scheduleSnapshot();
+    this.post({ type: "createFromSelectionResult", id, created: false, recolored });
+  }
+
+  /**
+   * Spike instrumentation: select text and create a highlight from that selection exactly as the
+   * floating button would. Used by the integration tests; harmless otherwise.
+   */
+  spikeHighlightText(page: number, spanCount: number, color: string): void {
+    if (!this.spikeSelectText(page, spanCount)) {
+      return;
+    }
+    void this.createHighlightFromSelection(color).then((created) => {
+      if (created.length === 0) {
+        this.post({ type: "log", level: "error", message: "spike: no highlight editor was created" });
+      }
+    });
   }
 }

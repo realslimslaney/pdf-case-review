@@ -2,6 +2,9 @@
 // Pure module: no vscode, DOM or Node. Layout decisions live in layout.ts; this file only
 // organizes and formats.
 
+import { UNCATEGORIZED_CATEGORY } from "../categories";
+import { normalizeCapturedText } from "../text/normalize";
+
 export interface ReportCategory {
   id: string;
   name: string;
@@ -118,14 +121,11 @@ export interface ReportModel {
   uncategorized: ReportItem[];
 }
 
-const UNCATEGORIZED: ReportCategory = { id: "uncategorized", name: "Uncategorized", color: "#CCCCCC" };
+const UNCATEGORIZED: ReportCategory = UNCATEGORIZED_CATEGORY;
 
 /** Collapses whitespace and re-joins words hyphenated across line breaks. */
 export function normalizeQuote(text: string): string {
-  return text
-    .replace(/(\w)-\s*\n\s*(\w)/g, "$1$2")
-    .replace(/\s+/g, " ")
-    .trim();
+  return normalizeCapturedText(text);
 }
 
 /** Truncates at a word boundary and appends an ellipsis; `maxChars` 0 = unlimited. */

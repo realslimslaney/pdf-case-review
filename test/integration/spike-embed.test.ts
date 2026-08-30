@@ -12,24 +12,7 @@ import {
   isProtectedPdf,
   readEmbeddedHighlights,
 } from "../../src/core/pdfExport/embedHighlights";
-import type {
-  EmbeddedAnnotation,
-  HostToWebviewMessage,
-  SerializedHighlight,
-} from "../../src/shared/protocol";
-
-interface ViewerState {
-  loaded: boolean;
-  loads: number;
-  rendered: number;
-  pagesCount: number;
-  annotationEditorMode: number;
-  highlightEditorColors: string | null;
-  annotations: EmbeddedAnnotation[];
-  editors: SerializedHighlight[];
-  existingUnchanged: string[];
-  lastSave: { byteLength: number; error: string | null; bytes: Uint8Array | null } | null;
-}
+import { closeAll, fixtureUri, openWith, send, viewerState, waitFor, waitForLoaded } from "./helpers";
 
 const HIGHLIGHT_MODE = 9;
 
@@ -56,44 +39,9 @@ const HIGHLIGHTS: EmbeddableHighlight[] = [
   },
 ];
 
-async function waitFor<T>(
-  description: string,
-  probe: () => Promise<T | undefined>,
-  timeoutMs = 60_000,
-): Promise<T> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const value = await probe();
-    if (value !== undefined) {
-      return value;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw new Error(`Timed out waiting for ${description}`);
-}
-
-function fixturesFolder(): vscode.Uri {
-  const folder = vscode.workspace.workspaceFolders?.[0];
-  assert.ok(folder, "test workspace folder missing (expected test/fixtures)");
-  return folder.uri;
-}
-
-async function viewerState(uri: vscode.Uri): Promise<ViewerState | undefined> {
-  return vscode.commands.executeCommand<ViewerState | undefined>("pdfCaseReview.debug.getViewerState", uri);
-}
-
-async function send(uri: vscode.Uri, message: HostToWebviewMessage): Promise<void> {
-  const delivered = await vscode.commands.executeCommand<number>(
-    "pdfCaseReview.debug.postMessage",
-    uri,
-    message,
-  );
-  assert.equal(delivered, 1, `message ${message.type} should reach exactly one webview`);
-}
-
 suite("Spike 4: embedded highlights round-trip", () => {
-  const sourceUri = vscode.Uri.joinPath(fixturesFolder(), "generated", "sample-case.pdf");
-  const embeddedUri = vscode.Uri.joinPath(fixturesFolder(), "generated", "sample-case.embedded.pdf");
+  const sourceUri = fixtureUri("generated", "sample-case.pdf");
+  const embeddedUri = fixtureUri("generated", "sample-case.embedded.pdf");
   let written: { id: string; pdfjsId: string }[] = [];
 
   suiteSetup(async () => {
@@ -101,18 +49,15 @@ suite("Spike 4: embedded highlights round-trip", () => {
     const result = await embedHighlights(source, HIGHLIGHTS, { author: "spike" });
     written = result.written;
     await vscode.workspace.fs.writeFile(embeddedUri, result.bytes);
-    await vscode.commands.executeCommand("vscode.openWith", embeddedUri, "pdfCaseReview.pdf");
+    await openWith(embeddedUri);
   });
 
   suiteTeardown(async () => {
-    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+    await closeAll();
   });
 
   test("PDF.js reports the embedded highlights with the ids pdf-lib predicted", async () => {
-    const state = await waitFor("viewer to load", async () => {
-      const current = await viewerState(embeddedUri);
-      return current?.loaded ? current : undefined;
-    });
+    const state = await waitForLoaded(embeddedUri);
     assert.equal(state.loads, 1, "the freshly written file must not trigger a spurious reload");
     assert.equal(state.annotations.length, 2);
     assert.deepEqual(
@@ -150,6 +95,7 @@ suite("Spike 4: embedded highlights round-trip", () => {
     const edited = state.editors.find((editor) => editor.id === target);
     assert.ok(edited);
     assert.equal(edited.raw["id"], target, "serialize() carries the annotation id for edited annotations");
+    assert.equal(edited.annotationElementId, target, "the editor reports which annotation it backs");
     assert.equal(edited.pageIndex, 1);
   });
 
@@ -169,21 +115,18 @@ suite("Spike 4: embedded highlights round-trip", () => {
 });
 
 suite("Spike 4b: encrypted (publisher-style) PDF", () => {
-  const encryptedUri = vscode.Uri.joinPath(fixturesFolder(), "static", "encrypted-case.pdf");
+  const encryptedUri = fixtureUri("static", "encrypted-case.pdf");
 
   suiteSetup(async () => {
-    await vscode.commands.executeCommand("vscode.openWith", encryptedUri, "pdfCaseReview.pdf");
+    await openWith(encryptedUri);
   });
 
   suiteTeardown(async () => {
-    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+    await closeAll();
   });
 
   test("opens with an empty user password and accepts a highlight", async () => {
-    const loaded = await waitFor("encrypted viewer to load", async () => {
-      const current = await viewerState(encryptedUri);
-      return current?.loaded ? current : undefined;
-    });
+    const loaded = await waitForLoaded(encryptedUri);
     assert.equal(loaded.pagesCount, 3);
     await send(encryptedUri, { type: "spike.highlightText", page: 1, spanCount: 2, color: "#FFFF98" });
     const state = await waitFor("a highlight on the encrypted PDF", async () => {

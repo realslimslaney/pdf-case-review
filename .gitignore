@@ -33,3 +33,6 @@ test/fixtures/generated/
 .DS_Store
 Thumbs.db
 *.swp
+
+# Sidecars written by the integration tests with pdfCaseReview.sidecar.location = folder
+test/fixtures/.pdf-case-review/

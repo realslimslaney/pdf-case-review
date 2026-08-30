@@ -5,80 +5,30 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
 
-import type { HostToWebviewMessage, SerializedHighlight } from "../../src/shared/protocol";
-
-interface ViewerState {
-  loaded: boolean;
-  loads: number;
-  rendered: number;
-  pagesCount: number;
-  annotationEditorMode: number;
-  highlightEditorColors: string | null;
-  editors: SerializedHighlight[];
-}
+import { closeAll, fixtureUri, openWith, send, sleep, viewerState, waitFor, waitForLoaded } from "./helpers";
 
 const EXPECTED_PALETTE = "fact=#FFFF98,financial=#53FFBC,strategic=#80EBFF,concern=#FF4F5F,question=#FFCBE6";
 
-async function waitFor<T>(
-  description: string,
-  probe: () => Promise<T | undefined>,
-  timeoutMs = 60_000,
-): Promise<T> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const value = await probe();
-    if (value !== undefined) {
-      return value;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw new Error(`Timed out waiting for ${description}`);
-}
-
-function fixtureUri(): vscode.Uri {
-  const folder = vscode.workspace.workspaceFolders?.[0];
-  assert.ok(folder, "test workspace folder missing (expected test/fixtures)");
-  return vscode.Uri.joinPath(folder.uri, "generated", "sample-case.pdf");
-}
-
-async function viewerState(uri: vscode.Uri): Promise<ViewerState | undefined> {
-  return vscode.commands.executeCommand<ViewerState | undefined>("pdfCaseReview.debug.getViewerState", uri);
-}
-
 suite("PDF Case Review editor", () => {
-  const uri = fixtureUri();
+  const uri = fixtureUri("generated", "sample-case.pdf");
 
   suiteSetup(async () => {
-    await vscode.commands.executeCommand("vscode.openWith", uri, "pdfCaseReview.pdf");
+    await openWith(uri);
   });
 
   suiteTeardown(async () => {
-    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+    await closeAll();
   });
 
   test("loads the fixture under the webview CSP with the category palette", async () => {
-    const state = await waitFor("viewer to load", async () => {
-      const current = await viewerState(uri);
-      return current?.loaded ? current : undefined;
-    });
+    const state = await waitForLoaded(uri);
     assert.equal(state.pagesCount, 3);
     assert.equal(state.annotationEditorMode, 0, "editor mode NONE keeps the floating button available");
     assert.equal(state.highlightEditorColors, EXPECTED_PALETTE);
   });
 
   test("creates a highlight from a text selection and reports it back", async () => {
-    const message: HostToWebviewMessage = {
-      type: "spike.highlightText",
-      page: 1,
-      spanCount: 2,
-      color: "#53FFBC",
-    };
-    const delivered = await vscode.commands.executeCommand<number>(
-      "pdfCaseReview.debug.postMessage",
-      uri,
-      message,
-    );
-    assert.equal(delivered, 1, "exactly one webview should be showing the fixture");
+    await send(uri, { type: "spike.highlightText", page: 1, spanCount: 2, color: "#53FFBC" });
 
     const state = await waitFor("a highlight editor", async () => {
       const current = await viewerState(uri);
@@ -93,6 +43,7 @@ suite("PDF Case Review editor", () => {
       "quadPoints come in 8s",
     );
     assert.ok(highlight.text && highlight.text.length > 0, "selected text is captured");
+    assert.equal(highlight.annotationElementId, null, "a new editor is not file-backed");
     assert.equal(highlight.raw["annotationType"], 9, "AnnotationEditorType.HIGHLIGHT");
   });
 
@@ -102,11 +53,11 @@ suite("PDF Case Review editor", () => {
     const loadsBefore = before.loads;
 
     await vscode.commands.executeCommand("workbench.action.files.newUntitledFile");
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
-    await vscode.commands.executeCommand("vscode.openWith", uri, "pdfCaseReview.pdf");
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
-    await vscode.commands.executeCommand("pdfCaseReview.debug.postMessage", uri, { type: "dumpEditors" });
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await sleep(1_500);
+    await openWith(uri);
+    await sleep(1_500);
+    await send(uri, { type: "dumpEditors" });
+    await sleep(500);
 
     const after = await viewerState(uri);
     assert.ok(after);
