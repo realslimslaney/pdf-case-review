@@ -105,7 +105,7 @@ suite("Phase B: sidecar save, revert and location", () => {
     assert.equal(entry.pageLabel, "i", "page labels from the PDF are recorded");
     assert.equal(entry.kind, "text");
     assert.ok(entry.text.length > 0, "the highlighted text is captured");
-    assert.equal(entry.pdfjsId, undefined, "phase B does not embed into the PDF yet");
+    assert.match(entry.pdfjsId ?? "", /^[0-9]+R$/, "the highlight was embedded into the PDF (phase C)");
     assert.equal(model.source.fileName, "case with späce.pdf");
     assert.equal(model.source.pageCount, 3);
     assert.match(model.source.sha256, /^[0-9a-f]{64}$/);

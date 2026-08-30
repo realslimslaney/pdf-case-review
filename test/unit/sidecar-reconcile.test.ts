@@ -285,6 +285,42 @@ describe("reconcileSnapshot", () => {
     expect(session.uuidFor("e7")).toBe(id);
   });
 
+  it("still deletes a viewer-created editor after its highlight was embedded during the load", () => {
+    const context = makeContext();
+    const session = new ReconcileSession();
+    const first = reconcileSnapshot([], snapshot([editor({ id: "e0" })]), session, context);
+    const embeddedNow = first.highlights.map((entry) => ({ ...entry, pdfjsId: "20R" }));
+    const gone = reconcileSnapshot(embeddedNow, snapshot([]), session, context);
+    expect(gone.deleted).toEqual([embeddedNow[0]?.id]);
+  });
+
+  it("maps a stale annotation id aliased after a re-embed instead of ignoring it", () => {
+    const context = makeContext();
+    const session = new ReconcileSession();
+    const model = [embedded("8f6c1b2e-3d4a-4f5b-9c6d-7e8f9a0b1c2d", "30R")];
+    session.bind("12R", model[0]?.id ?? "", true);
+    const result = reconcileSnapshot(
+      model,
+      snapshot([editor({ id: "12R", annotationElementId: "12R", color: CONCERN, text: null })]),
+      session,
+      context,
+    );
+    expect(result.ignored).toEqual([]);
+    expect(result.updated).toEqual([model[0]?.id]);
+    expect(result.highlights[0]?.categoryId).toBe("concern");
+
+    const leftEditMode = reconcileSnapshot(result.highlights, snapshot([]), session, context);
+    expect(leftEditMode.changed).toBe(false);
+
+    const deleted = reconcileSnapshot(
+      leftEditMode.highlights,
+      snapshot([], { deletedAnnotationIds: ["12R"] }),
+      session,
+      context,
+    );
+    expect(deleted.deleted).toEqual([model[0]?.id]);
+  });
+
   it("forgets viewer bindings on reset so a reload cannot cause deletions", () => {
     const context = makeContext();
     const session = new ReconcileSession();

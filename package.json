@@ -141,6 +141,12 @@
           ],
           "markdownDescription": "Where highlights and notes are stored. `folder` keeps them out of directories you do not control; a PDF outside the workspace always gets its file beside it."
         },
+        "pdfCaseReview.pdf.embedOnSave": {
+          "type": "boolean",
+          "scope": "resource",
+          "default": true,
+          "markdownDescription": "On save, rewrite the PDF so your highlights become real annotations other readers can see. Only applies to unencrypted PDFs; publisher-protected files are never modified. Turn off to keep PDFs byte-identical (for example in a git repository) and store highlights in the sidecar only."
+        },
         "pdfCaseReview.viewer.defaultZoom": {
           "type": "string",
           "scope": "resource",

@@ -7,7 +7,7 @@ import { migrateSidecar } from "../../core/sidecar/migrate";
 import { serializeSidecar } from "../../core/sidecar/serialize";
 import type { Sidecar } from "../../core/sidecar/types";
 import { SidecarError, validateSidecar } from "../../core/sidecar/validate";
-import { writeAtomic } from "../util/atomicWrite";
+import { writeBytes } from "../util/writeBytes";
 
 export type SidecarLoad =
   | { kind: "missing" }
@@ -49,9 +49,9 @@ export async function readSidecar(uri: Uri): Promise<SidecarLoad> {
   }
 }
 
-/** Writes the sidecar atomically and returns the text written (the new saved snapshot). */
+/** Writes the sidecar and returns the text written (the new saved snapshot). */
 export async function writeSidecar(uri: Uri, model: Sidecar): Promise<string> {
   const text = serializeSidecar(model);
-  await writeAtomic(uri, new TextEncoder().encode(text));
+  await writeBytes(uri, new TextEncoder().encode(text));
   return text;
 }

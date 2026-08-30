@@ -24,7 +24,7 @@ import { type CustomDocument, EventEmitter, RelativePattern, Uri, workspace } fr
 
 import { ReconcileSession } from "../../core/sidecar/reconcile";
 import { serializeSidecar } from "../../core/sidecar/serialize";
-import type { Sidecar } from "../../core/sidecar/types";
+import type { Sidecar, SidecarSource } from "../../core/sidecar/types";
 import { Disposable } from "../util/disposable";
 
 function areUriEqual(left: Uri, right: Uri) {
@@ -57,6 +57,20 @@ export interface PdfInfo {
   title: string | null;
 }
 
+/** The `source` block for `uri` as the sidecar should record it now. */
+export function sourceFor(uri: Uri, info: PdfInfo): SidecarSource {
+  const source: SidecarSource = {
+    fileName: baseName(uri),
+    sha256: info.sha256,
+    byteLength: info.byteLength,
+    pageCount: info.pageCount,
+  };
+  if (info.title) {
+    source.title = info.title;
+  }
+  return source;
+}
+
 /** The custom document behind a PDF Case Review editor: the PDF on disk plus its sidecar model. */
 export class PdfDocument extends Disposable implements CustomDocument {
   private readonly _uri: Uri;
@@ -70,6 +84,10 @@ export class PdfDocument extends Disposable implements CustomDocument {
   pageLabels: string[] | null = null;
   /** Set when the sidecar on disk could not be read; saving is refused until it is fixed. */
   readOnly = false;
+  /** Encrypted or permission-restricted: the PDF is never written, highlights stay sidecar-only. */
+  protected = false;
+  /** The one-time "this PDF is protected" notice was shown for this document. */
+  protectedNoticeShown = false;
 
   constructor(
     uri: Uri,

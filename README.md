@@ -16,6 +16,10 @@ Built for reading business-school cases (Fact, Financial, Strategic implication,
 - Highlights are stored beside the PDF in `case.pdf.review.json` and synced into the PDF as real annotations when the file allows it. Publisher-protected PDFs are never modified.
 - Optional, off by default: an AI executive summary via Claude Code, Codex, Copilot or an API key, always behind an eligibility confirmation that shows which account is used.
 
+## Purchased and protected PDFs
+
+Commercially published case PDFs are usually encrypted with an owner password and a "no modify" permission. PDF Case Review never removes encryption or permission flags, not even for an exported copy. For those files your highlights and notes live in `case.pdf.review.json` beside the PDF (the sidecar is the canonical store in every case), you see a one-time notice, and everything else works: the sidebar, notes and the report. For unencrypted PDFs the highlights are also written into the file as real annotations on save, so other readers show them too; set `pdfCaseReview.pdf.embedOnSave` to `false` to keep PDFs byte-identical.
+
 ## Privacy & responsibility
 
 The extension makes no network requests and collects no telemetry. If you enable an AI provider, only your highlighted excerpts and notes are sent (never the PDF), and only after you confirm the account being used. **You are responsible for using this tool on appropriate content; the developers of this extension are not liable for misuse.**

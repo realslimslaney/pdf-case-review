@@ -16,6 +16,11 @@ export function sidecarLocation(uri: Uri): SidecarLocation {
   return value === "folder" ? "folder" : "beside";
 }
 
+/** `pdfCaseReview.pdf.embedOnSave`: rewrite unencrypted PDFs with real annotations on save. */
+export function embedOnSave(uri: Uri): boolean {
+  return workspace.getConfiguration("pdfCaseReview.pdf", uri).get<boolean>("embedOnSave", true);
+}
+
 /** `pdfCaseReview.categories`, or the defaults (with a warning) when the setting is invalid. */
 export function configuredCategories(uri: Uri, output: LogOutputChannel): Category[] {
   const configured = workspace

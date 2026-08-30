@@ -13,6 +13,7 @@ All settings live under `pdfCaseReview.*`. Unless noted, they have `resource` sc
 | Setting | Default | Meaning |
 |---|---|---|
 | `pdfCaseReview.sidecar.location` | `beside` | Where highlights and notes are stored. `beside`: `case.pdf.review.json` next to the PDF. `folder`: `<workspace>/.pdf-case-review/<relative path>.review.json`, which keeps them out of directories you do not control. A PDF outside the workspace always gets its file beside it. Changing this does not move existing files. |
+| `pdfCaseReview.pdf.embedOnSave` | `true` | On save, rewrite an unencrypted PDF so the highlights become real annotations that other readers show (the sidecar stays canonical). Publisher-protected PDFs are never modified regardless. Turn off to keep PDFs byte-identical, for example when they are committed to git. |
 
 ## Viewer
 

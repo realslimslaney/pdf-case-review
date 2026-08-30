@@ -46,6 +46,8 @@ export interface ReconcileResult {
 export class ReconcileSession {
   private readonly uuidByViewerId = new Map<string, string>();
   private readonly viewerIdByUuid = new Map<string, string>();
+  /** Viewer ids that belong to file-backed editors (PDF.js drops those whenever it leaves edit mode). */
+  private readonly fileBackedViewerIds = new Set<string>();
   /** Deleted highlights keyed by viewer id: an undo re-adds the same editor, so its id comes back. */
   private readonly tombstones = new Map<string, SidecarHighlight>();
 
@@ -57,13 +59,28 @@ export class ReconcileSession {
     return this.viewerIdByUuid.get(uuid);
   }
 
-  bind(viewerId: string, uuid: string): void {
+  isFileBacked(viewerId: string): boolean {
+    return this.fileBackedViewerIds.has(viewerId);
+  }
+
+  /**
+   * Binds a viewer id to a highlight. `fileBacked` says whether the editor backs an annotation in
+   * the file (`annotationElementId` set); it decides whether absence from a snapshot means deleted.
+   * Also used after an embed to alias the annotation ids the current load still uses.
+   */
+  bind(viewerId: string, uuid: string, fileBacked: boolean): void {
     const previous = this.viewerIdByUuid.get(uuid);
     if (previous !== undefined && previous !== viewerId) {
       this.uuidByViewerId.delete(previous);
+      this.fileBackedViewerIds.delete(previous);
     }
     this.uuidByViewerId.set(viewerId, uuid);
     this.viewerIdByUuid.set(uuid, viewerId);
+    if (fileBacked) {
+      this.fileBackedViewerIds.add(viewerId);
+    } else {
+      this.fileBackedViewerIds.delete(viewerId);
+    }
   }
 
   unbind(uuid: string): void {
@@ -71,6 +88,7 @@ export class ReconcileSession {
     if (viewerId !== undefined) {
       this.uuidByViewerId.delete(viewerId);
       this.viewerIdByUuid.delete(uuid);
+      this.fileBackedViewerIds.delete(viewerId);
     }
   }
 
@@ -112,6 +130,7 @@ export class ReconcileSession {
   reset(): void {
     this.uuidByViewerId.clear();
     this.viewerIdByUuid.clear();
+    this.fileBackedViewerIds.clear();
     this.tombstones.clear();
   }
 }
@@ -233,10 +252,10 @@ function withEditorState(
  *
  * Resolution order for each editor: an existing session binding, the `sidecarId` the host gave the
  * editor, a model highlight with the same `pdfjsId`, a tombstone from a recent delete (undo), else
- * a new highlight. Deletion must be proven: an editor the viewer created (no `pdfjsId`) vanished
- * from the snapshot, or PDF.js reports the embedded annotation deleted. Absence alone never
- * deletes an embedded highlight, because PDF.js drops unchanged file-backed editors whenever it
- * leaves highlight mode; and highlights never materialized in the viewer are kept as they are.
+ * a new highlight. Deletion must be proven: an editor the viewer created vanished from the
+ * snapshot, or PDF.js reports a file-backed annotation deleted. Absence alone never deletes a
+ * highlight bound to a file-backed editor, because PDF.js drops those whenever it leaves
+ * highlight mode; and highlights never materialized in the viewer are kept as they are.
  */
 export function reconcileSnapshot(
   highlights: readonly SidecarHighlight[],
@@ -265,6 +284,7 @@ export function reconcileSnapshot(
       session.uuidFor(viewerId) ??
       editor.sidecarId ??
       (editor.annotationElementId ? uuidByPdfjsId.get(editor.annotationElementId) : undefined);
+    const fileBacked = editor.annotationElementId !== null;
     const current = known === undefined ? undefined : result.get(known);
     if (known !== undefined && current !== undefined) {
       const next = withEditorState(current, editor, context);
@@ -272,7 +292,7 @@ export function reconcileSnapshot(
         result.set(known, next);
         updated.push(known);
       }
-      session.bind(viewerId, known);
+      session.bind(viewerId, known, fileBacked);
       continue;
     }
     const tombstone =
@@ -280,17 +300,17 @@ export function reconcileSnapshot(
     if (tombstone) {
       result.set(tombstone.id, withEditorState(tombstone, editor, context));
       restored.push(tombstone.id);
-      session.bind(viewerId, tombstone.id);
+      session.bind(viewerId, tombstone.id, fileBacked);
       continue;
     }
-    if (editor.annotationElementId && known === undefined) {
+    if (fileBacked && known === undefined) {
       ignored.push(viewerId);
       continue;
     }
     const id = known ?? context.newId();
     result.set(id, createHighlight(id, editor, context));
     created.push(id);
-    session.bind(viewerId, id);
+    session.bind(viewerId, id, fileBacked);
   }
 
   for (const viewerId of snapshot.existingUnchanged) {
@@ -299,11 +319,11 @@ export function reconcileSnapshot(
     if (tombstone) {
       result.set(tombstone.id, tombstone);
       restored.push(tombstone.id);
-      session.bind(viewerId, tombstone.id);
+      session.bind(viewerId, tombstone.id, true);
     } else if (session.uuidFor(viewerId) === undefined) {
       const uuid = uuidByPdfjsId.get(viewerId);
       if (uuid !== undefined) {
-        session.bind(viewerId, uuid);
+        session.bind(viewerId, uuid, true);
       }
     }
   }
@@ -314,8 +334,10 @@ export function reconcileSnapshot(
       continue;
     }
     const viewerId = session.viewerIdFor(highlight.id);
-    const vanished = highlight.pdfjsId === undefined && viewerId !== undefined && !seen.has(viewerId);
-    const deletedInFile = highlight.pdfjsId !== undefined && deletedAnnotations.has(highlight.pdfjsId);
+    const vanished = viewerId !== undefined && !session.isFileBacked(viewerId) && !seen.has(viewerId);
+    const deletedInFile =
+      (viewerId !== undefined && deletedAnnotations.has(viewerId)) ||
+      (highlight.pdfjsId !== undefined && deletedAnnotations.has(highlight.pdfjsId));
     if (vanished || deletedInFile) {
       result.delete(highlight.id);
       deleted.push(highlight.id);

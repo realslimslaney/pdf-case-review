@@ -43,10 +43,11 @@ import {
 } from "vscode";
 
 import { toHighlightEditorColors } from "../../core/categories";
+import { adoptEmbedded, repairPdfjsIds } from "../../core/pdfExport/syncPlan";
 import { newHighlightId } from "../../core/sidecar/ids";
 import { reconcileSnapshot } from "../../core/sidecar/reconcile";
 import { serializeSidecar } from "../../core/sidecar/serialize";
-import { emptySidecar, type Sidecar, type SidecarSource } from "../../core/sidecar/types";
+import { emptySidecar, type Sidecar } from "../../core/sidecar/types";
 import {
   type EmbeddedAnnotation,
   type HostToWebviewMessage,
@@ -54,13 +55,22 @@ import {
   type SerializedHighlight,
   type ViewerConfig,
 } from "../../shared/protocol";
-import { configuredCategories, sidecarLocation } from "../settings";
+import { exportCopy, inspectPdf, type SyncContext, syncOnSave } from "../pdfSync/pdfSync";
+import { configuredCategories, embedOnSave, sidecarLocation } from "../settings";
 import { sidecarUriFor } from "../sidecar/sidecarLocation";
-import { readSidecar, type SidecarLoad, writeSidecar } from "../sidecar/sidecarStore";
+import { readSidecar, type SidecarLoad } from "../sidecar/sidecarStore";
 import { disposeAll } from "../util/disposable";
 import { escapeAttribute } from "../util/escapeAttribute";
 import { WebviewCollection } from "../util/webviewCollection";
-import { baseName, contentHash, hashBytes, PdfDocument, type PdfInfo, parentUri } from "./pdfDocument";
+import {
+  baseName,
+  contentHash,
+  hashBytes,
+  PdfDocument,
+  type PdfInfo,
+  parentUri,
+  sourceFor,
+} from "./pdfDocument";
 
 export interface ViewerState {
   loaded: boolean;
@@ -93,6 +103,8 @@ const EMPTY_VIEWER_STATE: ViewerState = {
   lastSave: null,
 };
 
+const PROTECTED_NOTICE_KEY = "pdfCaseReview.notices.protectedPdf.dismissed";
+
 const CSP_META_REGEX = /<meta\s+http-equiv="Content-Security-Policy"[\s\S]*?\/>\s*/u;
 
 function withTrailingSlash(uri: Uri): string {
@@ -107,19 +119,6 @@ function stripViewerTags(html: string): string {
     .replace(/* html */ `<script src="../build/pdf.mjs" type="module"></script>`, "")
     .replace(/* html */ `<script src="viewer.mjs" type="module"></script>`, "")
     .replace(/* html */ `<link rel="stylesheet" href="viewer.css" />`, "");
-}
-
-function sourceFor(uri: Uri, info: PdfInfo): SidecarSource {
-  const source: SidecarSource = {
-    fileName: baseName(uri),
-    sha256: info.sha256,
-    byteLength: info.byteLength,
-    pageCount: info.pageCount,
-  };
-  if (info.title) {
-    source.title = info.title;
-  }
-  return source;
 }
 
 export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocument> {
@@ -223,8 +222,41 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
       }
     }
 
+    // Look inside the PDF once: protected files are never written, and for the others the
+    // annotations we embedded earlier refresh (or rebuild) the sidecar's bookkeeping.
+    const inspection =
+      model.source.encrypted === true ? { protected: true, embedded: null } : await inspectPdf(bytes);
+    if (inspection.embedded !== null) {
+      const now = new Date().toISOString();
+      const rebuild =
+        onDisk.kind === "missing" &&
+        !openContext.backupId &&
+        model.highlights.length === 0 &&
+        inspection.embedded.length > 0;
+      if (rebuild) {
+        model = {
+          ...model,
+          highlights: adoptEmbedded(inspection.embedded, model.categories, now, newHighlightId),
+        };
+        snapshot = serializeSidecar(model);
+        this.output.info(
+          `no sidecar for ${uri.fsPath}; rebuilt ${model.highlights.length} highlight(s) from its annotations`,
+        );
+      } else {
+        const repaired = repairPdfjsIds(model, inspection.embedded);
+        if (repaired.changed) {
+          model = repaired.model;
+          if (!openContext.backupId) {
+            snapshot = serializeSidecar(model);
+          }
+          this.output.info(`refreshed annotation ids from ${uri.fsPath}`);
+        }
+      }
+    }
+
     const document = new PdfDocument(uri, sidecarUri, model, snapshot, info);
     document.readOnly = onDisk.kind === "invalid";
+    document.protected = inspection.protected;
     const key = uri.toString();
     this.documents.set(key, document);
     const listeners: Disposable[] = [];
@@ -387,33 +419,48 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
         `PDF Case Review: ${baseName(document.sidecarUri)} could not be read when the PDF was opened; fix or remove it, then reopen the PDF.`,
       );
     }
-    document.model = {
-      ...document.model,
-      generator: this.generator,
-      source: sourceFor(document.uri, document.info),
-    };
-    document.savedSnapshot = await writeSidecar(document.sidecarUri, document.model);
-    this.output.info(
-      `saved sidecar: ${document.sidecarUri.fsPath} (${document.model.highlights.length} highlight(s))`,
-    );
+    await syncOnSave(document, this.syncContext(document.uri));
     this._onDidChangeDocument.fire(document);
   }
 
-  /** Save As exports a copy: the PDF bytes plus a sidecar beside the destination. */
+  /** Save As exports a copy: the PDF (with highlights embedded when allowed) plus a sidecar beside it. */
   async saveCustomDocumentAs(
     document: PdfDocument,
     destination: Uri,
     _token: CancellationToken,
   ): Promise<void> {
-    await workspace.fs.copy(document.uri, destination, { overwrite: true });
-    const model: Sidecar = {
-      ...document.model,
+    await exportCopy(document, destination, this.syncContext(destination));
+  }
+
+  private syncContext(uri: Uri): SyncContext {
+    return {
+      output: this.output,
       generator: this.generator,
-      source: sourceFor(destination, document.info),
+      embedOnSave: embedOnSave(uri),
+      onProtected: (document) => this.notifyProtected(document),
     };
-    const sidecarUri = sidecarUriFor(destination, sidecarLocation(destination));
-    await writeSidecar(sidecarUri, model);
-    this.output.info(`exported copy: ${destination.fsPath} + ${sidecarUri.fsPath}`);
+  }
+
+  /** One notice per document, and none at all once the user has dismissed it for good. */
+  private notifyProtected(document: PdfDocument): void {
+    if (document.protectedNoticeShown) {
+      return;
+    }
+    document.protectedNoticeShown = true;
+    if (this.context.globalState.get<boolean>(PROTECTED_NOTICE_KEY) === true) {
+      return;
+    }
+    const dismiss = "Don't show again";
+    void window
+      .showInformationMessage(
+        `PDF Case Review: ${baseName(document.uri)} is protected by its publisher and is left untouched. Highlights and notes are stored beside it in ${baseName(document.sidecarUri)}.`,
+        dismiss,
+      )
+      .then((choice) => {
+        if (choice === dismiss) {
+          void this.context.globalState.update(PROTECTED_NOTICE_KEY, true);
+        }
+      });
   }
 
   async revertCustomDocument(document: PdfDocument, _token: CancellationToken): Promise<void> {
