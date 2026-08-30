@@ -3,7 +3,7 @@
 // "Export annotated PDF" command; PDF.js loads what this writes as editable highlight editors.
 //
 // Identity: our highlight UUID is stored in /NM for other readers, but PDF.js does not surface
-// /NM — it identifies annotations by object reference (`12R`), which pdf-lib knows at write time
+// /NM; it identifies annotations by object reference (`12R`), which pdf-lib knows at write time
 // (`written[].pdfjsId`) and which a full save keeps stable. Every annotation we own also carries a
 // /PdfCaseReview true marker so a re-sync can strip and rewrite ours without touching annotations
 // made in other tools.
@@ -158,7 +158,7 @@ function textString(value: string): PDFHexString {
 
 /**
  * Returns a copy of `bytes` with every PdfCaseReview annotation replaced by `highlights`.
- * Throws `ProtectedPdfError` for encrypted input — never strips protection.
+ * Throws `ProtectedPdfError` for encrypted input; never strips protection.
  */
 export async function embedHighlights(
   bytes: Uint8Array,

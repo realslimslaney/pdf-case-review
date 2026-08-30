@@ -1,5 +1,5 @@
 // The report model: everything the renderers need, computed once from the sidecar data.
-// Pure module — no vscode, DOM or Node. Layout decisions live in layout.ts; this file only
+// Pure module: no vscode, DOM or Node. Layout decisions live in layout.ts; this file only
 // organizes and formats.
 
 export interface ReportCategory {

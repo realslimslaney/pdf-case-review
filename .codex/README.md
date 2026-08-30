@@ -1,6 +1,6 @@
 # Codex configuration
 
-Codex and Claude Code follow the same policy in this repository; the files differ only in where each tool looks.
+Codex and Claude Code follow the same policy in this repository; the files differ only in where each tool looks. The writing rule in `.claude/CLAUDE.md` applies to Codex too: avoid em-dashes in docs, comments, commits or PR bodies.
 
 | Concern | Claude Code | Codex |
 |---|---|---|

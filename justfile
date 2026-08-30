@@ -4,7 +4,7 @@ set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 default:
     @just --list
 
-# Vendor PDF.js, generate fixtures, build — everything a fresh clone needs
+# Vendor PDF.js, generate fixtures, build: everything a fresh clone needs
 setup:
     pnpm install
     pnpm prepare-pdfjs

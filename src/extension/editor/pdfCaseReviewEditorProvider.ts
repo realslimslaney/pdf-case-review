@@ -278,7 +278,7 @@ export class PdfCaseReviewEditorProvider implements CustomReadonlyEditorProvider
     const errors = validateCategories(configured);
     if (errors.length > 0) {
       const detail = errors.map((error) => `#${error.index + 1}: ${error.message}`).join("; ");
-      this.output.warn(`pdfCaseReview.categories is invalid, using defaults — ${detail}`);
+      this.output.warn(`pdfCaseReview.categories is invalid, using defaults: ${detail}`);
       void window.showWarningMessage(
         `PDF Case Review: category settings are invalid (${detail}). Using defaults.`,
       );

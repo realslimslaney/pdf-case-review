@@ -42,7 +42,7 @@ export function validateCategories(categories: readonly Category[]): CategoryVal
     }
     const color = category.color.toUpperCase();
     if (seenColors.has(color)) {
-      errors.push({ index, message: `duplicate color ${color} — colors identify categories in the viewer` });
+      errors.push({ index, message: `duplicate color ${color}: colors identify categories in the viewer` });
     }
     seenColors.add(color);
     if (category.name.trim() === "") {

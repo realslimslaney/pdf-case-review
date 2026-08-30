@@ -4,7 +4,7 @@
 //   pnpm prepare-pdfjs --force   redo even when vendor/pdfjs/.version already matches the lockfile
 //   pnpm prepare-pdfjs --maps    keep the *.map files (default: dropped, they are ~2/3 of the archive)
 //
-// The lockfile is pdfjs.lock.json. Patches live in patches/pdfjs/*.patch (ideally none — see
+// The lockfile is pdfjs.lock.json. Patches live in patches/pdfjs/*.patch (ideally none; see
 // docs/explanation/decisions.md) and are applied with `git apply --directory=vendor/pdfjs`.
 
 import { execFileSync } from "node:child_process";

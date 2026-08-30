@@ -50,15 +50,15 @@ MSG_NO_VERIFY = (
     "fails, fix the underlying issue instead of bypassing it."
 )
 MSG_ON_MAIN = (
-    f"BLOCKED: HEAD is on '{DEFAULT_BRANCH}' — never commit to {DEFAULT_BRANCH}. Create a feature "
-    "branch first: git switch -c <type>/<slug> --no-track && git push -u origin <type>/<slug> — then retry."
+    f"BLOCKED: HEAD is on '{DEFAULT_BRANCH}'; never commit to {DEFAULT_BRANCH}. Create a feature "
+    "branch first: git switch -c <type>/<slug> --no-track && git push -u origin <type>/<slug>, then retry."
 )
 MSG_VERSION = (
-    f"BLOCKED: {LOCKFILE} is staged but package.json's version matches {DEFAULT_BRANCH} — dependency "
+    f"BLOCKED: {LOCKFILE} is staged but package.json's version matches {DEFAULT_BRANCH}; dependency "
     "changes require a version bump. Bump \"version\" in package.json, run pnpm install, stage both, then retry."
 )
 MSG_TEST_FAILED = (
-    "BLOCKED: test suite is red — commits require a green 'pnpm run test:unit'. Fix the failures below; "
+    "BLOCKED: test suite is red; commits require a green 'pnpm run test:unit'. Fix the failures below; "
     "if they look pre-existing or unrelated, stop and tell the user instead of committing. If the "
     "failures are module-resolution errors the install may be stale: run 'pnpm install' and retry."
 )
@@ -136,7 +136,7 @@ def run_checks(payload: dict, command: str) -> int:
         return block(MSG_DELEGATE)
     if uses_no_verify(command):
         return block(MSG_NO_VERIFY)
-    # symbolic-ref (not rev-parse) so an unborn branch — a repo before its first commit — still
+    # symbolic-ref (not rev-parse) so an unborn branch (a repo before its first commit) still
     # reports "main" instead of an empty string that would slip past this rule.
     if run_git(["symbolic-ref", "--short", "-q", "HEAD"], cwd).stdout.strip() == DEFAULT_BRANCH:
         return block(MSG_ON_MAIN)
@@ -168,7 +168,7 @@ if __name__ == "__main__":
         sys.exit(main())
     except Exception as exc:
         print(
-            f"gate_commit.py internal error before commit detection ({exc!r}) — the gate did NOT run; "
+            f"gate_commit.py internal error before commit detection ({exc!r}): the gate did NOT run; "
             "do not commit until this is fixed.",
             file=sys.stderr,
         )

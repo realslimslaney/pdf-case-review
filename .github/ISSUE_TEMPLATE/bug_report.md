@@ -19,5 +19,5 @@ labels: bug
 - VS Code version (Help → About):
 - PDF Case Review version:
 - OS:
-- PDF source (own document / open-licensed / commercially published — don't attach protected PDFs):
+- PDF source (own document / open-licensed / commercially published; don't attach protected PDFs):
 - Output panel → "PDF Case Review" log excerpt:
