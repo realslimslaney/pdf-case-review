@@ -20,6 +20,9 @@ declare module "pdfjs-viewer" {
     color?: string | number[];
     serialize(isForCopying?: boolean): Record<string, unknown> | null;
     updateParams(type: number, value: unknown): void;
+    isAttachedToDOM: boolean;
+    render(): HTMLElement;
+    fixAndSetPosition(): void;
   }
 
   /** One page's AnnotationEditorLayer; exists once the page has been rendered. */
@@ -28,11 +31,15 @@ declare module "pdfjs-viewer" {
     readonly div: HTMLElement;
     deserialize(data: Record<string, unknown>): Promise<PdfJsEditor | null>;
     add(editor: PdfJsEditor): void;
+    changeParent(editor: PdfJsEditor): void;
+    attach(editor: PdfJsEditor): void;
   }
 
   export interface PdfJsUiManager {
     getEditors(pageIndex: number): Iterable<PdfJsEditor>;
     getEditor(id: string): PdfJsEditor | undefined;
+    addEditor(editor: PdfJsEditor): void;
+    addToAnnotationStorage(editor: PdfJsEditor): void;
     getLayer(pageIndex: number): PdfJsEditorLayer | undefined;
     highlightSelection(methodOfCreation?: string, comment?: boolean): void;
     updateParams(type: number, value: unknown): void;

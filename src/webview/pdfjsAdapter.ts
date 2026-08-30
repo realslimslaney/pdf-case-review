@@ -1,7 +1,7 @@
 // Everything that touches PDF.js editor internals lives here (ADR-0003). If an upgrade breaks
 // the highlight editor, this is the one file to fix, or to swap for an overlay-based adapter.
 
-import type { PdfJsApplication, PdfJsEditor, PdfJsUiManager } from "pdfjs-viewer";
+import type { PdfJsApplication, PdfJsEditor, PdfJsEditorLayer, PdfJsUiManager } from "pdfjs-viewer";
 
 import { rgbToHex } from "../core/categories";
 import { type TextItemGeometry, textInQuads } from "../core/text/quadText";
@@ -249,7 +249,7 @@ export class PdfjsAdapter {
           });
           continue;
         }
-        layer.add(editor);
+        this.addWithoutUndo(layer, editor);
         // In NONE mode PDF.js renders an empty layer hidden and only un-hides it on a mode
         // change; an editor added afterwards would stay invisible.
         layer.div.hidden = false;
@@ -288,6 +288,26 @@ export class PdfjsAdapter {
       editor = this.findEditor(viewerId);
     }
     return editor;
+  }
+
+  /**
+   * What `AnnotationEditorLayer.add()` does minus `onceAdded()`: an injected highlight must not
+   * become an undo command (a late injection would otherwise sit on top of the stack and the
+   * next Ctrl+Z would remove it instead of undoing the user's edit) and must not steal focus.
+   */
+  private addWithoutUndo(layer: PdfJsEditorLayer, editor: PdfJsEditor): void {
+    if (!this.uiManager) {
+      return;
+    }
+    layer.changeParent(editor);
+    this.uiManager.addEditor(editor);
+    layer.attach(editor);
+    if (!editor.isAttachedToDOM) {
+      layer.div.append(editor.render());
+      editor.isAttachedToDOM = true;
+    }
+    editor.fixAndSetPosition();
+    this.uiManager.addToAnnotationStorage(editor);
   }
 
   /** Deletes editors through PDF.js so the deletion lands on its undo stack. */

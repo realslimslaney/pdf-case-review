@@ -173,7 +173,14 @@ suite("Phase D: sidecar-only highlights render on open; delete, undo and redo", 
       assert.equal(other.color, "#FF4F5F");
       assert.equal(other.pageIndex, 1);
     }
+    // Injected highlights are not undo commands: Ctrl+Z right after opening must do nothing.
+    await send(pdf, { type: "spike.undo" });
     await sleep(750);
+    const stillThere = await viewerState(pdf);
+    assert.ok(
+      stillThere?.editors.some((editor) => editor.sidecarId === KEEP),
+      "undo right after opening must not remove an injected highlight",
+    );
     const document = await documentState(pdf);
     const diagnostics = JSON.stringify(
       {
