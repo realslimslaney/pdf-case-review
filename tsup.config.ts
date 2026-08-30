@@ -35,7 +35,7 @@ export default defineConfig([
     loader: { ".html": "text" },
   },
   {
-    entry: { "webview/main": "src/webview/main.ts" },
+    entry: { "webview/main": "src/webview/main.ts", "webview/noteEditor": "src/webview/noteEditor.ts" },
     format: "esm",
     platform: "browser",
     target: "es2022",

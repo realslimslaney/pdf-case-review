@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { serializeSidecar, sortHighlights, stableStringify } from "../../src/core/sidecar/serialize";
-import type { SidecarHighlight } from "../../src/core/sidecar/types";
+import { countNotes, type SidecarHighlight } from "../../src/core/sidecar/types";
 import { parseSidecar } from "../../src/core/sidecar/validate";
 import { sampleSidecar } from "./helpers/sampleSidecar";
 
@@ -68,13 +68,44 @@ describe("serializeSidecar", () => {
     expect(serializeSidecar(parseSidecar(text))).toBe(text);
   });
 
-  it("does not depend on the input order of highlights or categories", () => {
+  it("does not depend on the input order of highlights, categories or notes", () => {
     const sidecar = sampleSidecar();
+    sidecar.documentNotes?.push({
+      id: "later",
+      title: "Later",
+      note: "",
+      createdAt: "2026-09-02T09:00:00.000Z",
+      updatedAt: "2026-09-02T09:00:00.000Z",
+    });
+    sidecar.pageNotes?.push({
+      page: 1,
+      note: "First page.",
+      createdAt: "2026-09-02T09:00:00.000Z",
+      updatedAt: "2026-09-02T09:00:00.000Z",
+    });
     const shuffled = {
       ...sidecar,
       categories: [...sidecar.categories].reverse(),
       highlights: [...sidecar.highlights].reverse(),
+      pageNotes: [...(sidecar.pageNotes ?? [])].reverse(),
+      documentNotes: [...(sidecar.documentNotes ?? [])].reverse(),
     };
     expect(serializeSidecar(shuffled)).toBe(serializeSidecar(sidecar));
+  });
+});
+
+describe("countNotes", () => {
+  it("counts non-empty highlight and page notes plus every document note", () => {
+    const sidecar = sampleSidecar();
+    expect(countNotes(sidecar)).toBe(3);
+    sidecar.pageNotes?.push({
+      page: 1,
+      note: "   ",
+      createdAt: "2026-09-02T09:00:00.000Z",
+      updatedAt: "2026-09-02T09:00:00.000Z",
+    });
+    expect(countNotes(sidecar)).toBe(3);
+    const { pageNotes: _pageNotes, documentNotes: _documentNotes, ...bare } = sidecar;
+    expect(countNotes(bare)).toBe(1);
   });
 });
