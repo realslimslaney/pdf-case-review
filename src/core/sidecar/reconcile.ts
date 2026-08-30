@@ -40,6 +40,8 @@ export interface ReconcileResult {
   /** Viewer ids of file-backed editors the sidecar does not know (foreign annotations), left alone. */
   ignored: string[];
   changed: boolean;
+  /** Every change is bookkeeping (page label, late text, pdfjsId), nothing the user did. */
+  derivedOnly: boolean;
 }
 
 /** Per-viewer-load bookkeeping, owned by the host and never persisted. */
@@ -135,8 +137,14 @@ export class ReconcileSession {
   }
 }
 
+/** PDF user-space units; a deserialize round trip through PDF.js moves geometry by far less. */
+const GEOMETRY_TOLERANCE = 0.05;
+
 function sameNumbers(left: readonly number[], right: readonly number[]): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
+  return (
+    left.length === right.length &&
+    left.every((value, index) => Math.abs(value - (right[index] ?? Number.NaN)) <= GEOMETRY_TOLERANCE)
+  );
 }
 
 function toRect(values: readonly number[]): [number, number, number, number] | undefined {
@@ -186,7 +194,7 @@ function createHighlight(
     highlight.rotation = editor.rotation;
   }
   const outlines = editor.raw["outlines"];
-  if (outlines !== undefined) {
+  if (highlight.kind === "free" && outlines !== undefined) {
     highlight.outlines = outlines;
   }
   return highlight;
@@ -194,14 +202,14 @@ function createHighlight(
 
 /**
  * Applies the editor's current state to a known highlight. Returns the same object when nothing
- * changed; `updatedAt` moves only for user-visible edits (category, geometry), not for derived
- * data such as `pdfjsId`, a filled-in page label or late-arriving text.
+ * changed; `edited` (and a new `updatedAt`) only for user-visible edits (category, geometry), not
+ * for derived data such as `pdfjsId`, a filled-in page label or late-arriving text.
  */
 function withEditorState(
   current: SidecarHighlight,
   editor: SerializedHighlight,
   context: ReconcileContext,
-): SidecarHighlight {
+): { highlight: SidecarHighlight; edited: boolean } {
   const changes: Partial<SidecarHighlight> = {};
   let edited = false;
   const category = categoryForColor(context.categories, editor.color);
@@ -209,10 +217,12 @@ function withEditorState(
     changes.categoryId = category.id;
     edited = true;
   }
+  // For text highlights the quads are the geometry; PDF.js derives the rect from them with its
+  // own margins, so a rect-only difference (a hand-written or re-created highlight) is bookkeeping.
   const rect = toRect(editor.rect);
   if (rect && !sameNumbers(rect, current.rect)) {
     changes.rect = rect;
-    edited = true;
+    edited ||= current.kind === "free";
   }
   if (!sameNumbers(editor.quadPoints, current.quadPoints)) {
     changes.quadPoints = [...editor.quadPoints];
@@ -223,9 +233,8 @@ function withEditorState(
     edited = true;
   }
   const outlines = editor.raw["outlines"];
-  if (outlines !== undefined && JSON.stringify(outlines) !== JSON.stringify(current.outlines)) {
+  if (current.kind === "free" && edited && outlines !== undefined) {
     changes.outlines = outlines;
-    edited = true;
   }
   if (current.text === "") {
     const text = capturedText(editor);
@@ -241,9 +250,12 @@ function withEditorState(
     changes.pdfjsId = editor.annotationElementId;
   }
   if (Object.keys(changes).length === 0) {
-    return current;
+    return { highlight: current, edited: false };
   }
-  return edited ? { ...current, ...changes, updatedAt: context.now() } : { ...current, ...changes };
+  return {
+    highlight: edited ? { ...current, ...changes, updatedAt: context.now() } : { ...current, ...changes },
+    edited,
+  };
 }
 
 /**
@@ -276,6 +288,7 @@ export function reconcileSnapshot(
   const deleted: string[] = [];
   const restored: string[] = [];
   const ignored: string[] = [];
+  let userEdited = false;
 
   for (const editor of snapshot.editors) {
     const viewerId = editor.id;
@@ -288,9 +301,10 @@ export function reconcileSnapshot(
     const current = known === undefined ? undefined : result.get(known);
     if (known !== undefined && current !== undefined) {
       const next = withEditorState(current, editor, context);
-      if (next !== current) {
-        result.set(known, next);
+      if (next.highlight !== current) {
+        result.set(known, next.highlight);
         updated.push(known);
+        userEdited ||= next.edited;
       }
       session.bind(viewerId, known, fileBacked);
       continue;
@@ -298,7 +312,7 @@ export function reconcileSnapshot(
     const tombstone =
       session.exhume(viewerId) ?? (known === undefined ? undefined : session.exhumeById(known));
     if (tombstone) {
-      result.set(tombstone.id, withEditorState(tombstone, editor, context));
+      result.set(tombstone.id, withEditorState(tombstone, editor, context).highlight);
       restored.push(tombstone.id);
       session.bind(viewerId, tombstone.id, fileBacked);
       continue;
@@ -354,5 +368,6 @@ export function reconcileSnapshot(
     restored,
     ignored,
     changed: created.length + updated.length + deleted.length + restored.length > 0,
+    derivedOnly: !userEdited && updated.length > 0 && created.length + deleted.length + restored.length === 0,
   };
 }

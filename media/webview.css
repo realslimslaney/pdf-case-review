@@ -13,8 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Modified by Brennen Slaney for PDF Case Review, 2026. Changes: renamed file;
- * otherwise unchanged from mathematic-inc/vscode-pdf assets/main.css.
+ * Modified by Brennen Slaney for PDF Case Review, 2026. Changes: renamed file; hides
+ * PDF.js's save/download buttons (saving is VS Code's job); otherwise unchanged from
+ * mathematic-inc/vscode-pdf assets/main.css.
  */
 
 body {
@@ -29,4 +30,10 @@ body.vscode-high-contrast-light {
 body.vscode-dark,
 body.vscode-high-contrast {
   color-scheme: dark;
+}
+
+/* PDF.js "Save" downloads a copy of the file; VS Code's Save (Ctrl+S) is the only save here. */
+#outerContainer #downloadButton,
+#outerContainer #secondaryDownload {
+  display: none;
 }

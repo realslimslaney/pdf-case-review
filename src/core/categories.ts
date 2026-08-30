@@ -71,3 +71,12 @@ export function categoryForColor(categories: readonly Category[], color: string)
   const wanted = color.toUpperCase();
   return categories.find((category) => category.color.toUpperCase() === wanted);
 }
+
+/** Color for highlights whose category is unknown, in the viewer and the PDF. */
+export const UNCATEGORIZED_COLOR = "#CCCCCC";
+
+/** `#RRGGBB` to 0-255 components (what PDF.js editors take). */
+export function hexToRgb(color: string): [number, number, number] {
+  const value = Number.parseInt(color.slice(1), 16);
+  return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
+}

@@ -60,13 +60,27 @@ PDFViewerApplicationOptions.set("highlightEditorColors", config.highlightEditorC
 PDFViewerApplicationOptions.set("enableComment", false);
 PDFViewerApplicationOptions.set("enableSignatureEditor", false);
 
-// Prevent PDF.js from intercepting Ctrl+P/Cmd+P and triggering the print dialog.
+// PDF.js "saves" by downloading the file: on Ctrl+S, from its toolbar buttons, and from close()
+// whenever its annotation storage changed, which every reload would trigger. Inside VS Code that
+// drops a copy into the Downloads folder, so all three are no-ops; saving is the host's job.
+PDFViewerApplication.download = async () => {};
+PDFViewerApplication.save = async () => {};
+PDFViewerApplication.downloadOrSave = async () => {};
+
+// Keep PDF.js from intercepting Ctrl+P/Cmd+P (print dialog) and route Ctrl+S/Cmd+S to VS Code.
 document.addEventListener(
   "keydown",
   (event) => {
-    if ((event.ctrlKey || event.metaKey) && event.key === "p") {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) {
+      return;
+    }
+    const key = event.key.toLowerCase();
+    if (key === "p" || (key === "s" && !event.shiftKey)) {
       event.preventDefault();
       event.stopImmediatePropagation();
+      if (key === "s") {
+        post({ type: "saveRequested" });
+      }
     }
   },
   true,
@@ -121,6 +135,21 @@ window.addEventListener("message", async (event: MessageEvent<HostToWebviewMessa
       return;
     case "saveDocument":
       await adapter.saveDocument();
+      return;
+    case "loadHighlights":
+      adapter.loadHighlights(message.highlights);
+      return;
+    case "deleteHighlights":
+      adapter.deleteHighlights(message.viewerIds);
+      return;
+    case "spike.selectText":
+      adapter.spikeSelectText(message.page, message.spanCount);
+      return;
+    case "spike.undo":
+      adapter.undo();
+      return;
+    case "spike.redo":
+      adapter.redo();
       return;
     case "spike.highlightText":
       adapter.spikeHighlightText(message.page, message.spanCount, message.color);

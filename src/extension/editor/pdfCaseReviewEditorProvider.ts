@@ -45,12 +45,14 @@ import {
 import { toHighlightEditorColors } from "../../core/categories";
 import { adoptEmbedded, repairPdfjsIds } from "../../core/pdfExport/syncPlan";
 import { newHighlightId } from "../../core/sidecar/ids";
+import { missingFromFile, toInjectable } from "../../core/sidecar/inject";
 import { reconcileSnapshot } from "../../core/sidecar/reconcile";
 import { serializeSidecar } from "../../core/sidecar/serialize";
 import { emptySidecar, type Sidecar } from "../../core/sidecar/types";
 import {
   type EmbeddedAnnotation,
   type HostToWebviewMessage,
+  type InjectableHighlight,
   isWebviewToHostMessage,
   type SerializedHighlight,
   type ViewerConfig,
@@ -88,6 +90,10 @@ export interface ViewerState {
   existingUnchanged: string[];
   /** Result of the last `saveDocument` round-trip, if any. */
   lastSave: { byteLength: number; error: string | null; bytes: Uint8Array | null } | null;
+  /** 1-based page the viewer is showing (0 until the first `pageChanged`). */
+  currentPage: number;
+  /** The last webview log lines, newest last (diagnostics for tests). */
+  logs: string[];
 }
 
 const EMPTY_VIEWER_STATE: ViewerState = {
@@ -101,6 +107,8 @@ const EMPTY_VIEWER_STATE: ViewerState = {
   editors: [],
   existingUnchanged: [],
   lastSave: null,
+  currentPage: 0,
+  logs: [],
 };
 
 const PROTECTED_NOTICE_KEY = "pdfCaseReview.notices.protectedPdf.dismissed";
@@ -353,6 +361,10 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
         this.output.info(
           `viewer loaded: ${document.uri.fsPath} (${message.pagesCount} pages, ${message.annotations.length} embedded highlight(s), editor mode ${message.annotationEditorMode}, colors ${message.highlightEditorColors ?? "none"})`,
         );
+        this.injectMissing(
+          document,
+          message.annotations.map((annotation) => annotation.id),
+        );
         return;
       }
       case "editorsChanged": {
@@ -379,13 +391,34 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
         );
         return;
       }
+      case "pageChanged":
+        this.updateState(document.uri, { currentPage: message.page });
+        return;
+      case "saveRequested":
+        void commands.executeCommand("workbench.action.files.save");
+        return;
       case "openLink":
         void this.openLocalLink(webview, resourceRoot, message.url);
         return;
-      case "log":
+      case "log": {
         this.output[message.level](`[webview] ${message.message}`);
+        const logs = [...(state?.logs ?? []), `${message.level}: ${message.message}`].slice(-30);
+        this.updateState(document.uri, { logs });
         return;
+      }
     }
+  }
+
+  /** Draws the highlights the file holds no annotation for (protected PDF, embedding off, unsaved). */
+  private injectMissing(document: PdfDocument, annotationIdsInFile: readonly string[]): void {
+    const injectable = missingFromFile(document.model.highlights, new Set(annotationIdsInFile))
+      .map((highlight) => toInjectable(highlight, document.model.categories))
+      .filter((entry): entry is InjectableHighlight => entry !== undefined);
+    if (injectable.length === 0) {
+      return;
+    }
+    this.output.info(`drawing ${injectable.length} sidecar-only highlight(s) in the viewer`);
+    this.postMessage(document.uri, { type: "loadHighlights", highlights: injectable });
   }
 
   /** Folds a viewer snapshot into the sidecar model and tells VS Code when that made it dirty. */
@@ -405,10 +438,18 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
     if (!result.changed) {
       return;
     }
+    const wasDirty = document.isDirty;
     document.model = { ...document.model, highlights: result.highlights };
     this.output.debug(
-      `reconciled: +${result.created.length} ~${result.updated.length} -${result.deleted.length} restored ${result.restored.length}`,
+      `reconciled: +${result.created.length} ~${result.updated.length} -${result.deleted.length} restored ${result.restored.length}${result.derivedOnly ? " (bookkeeping only)" : ""}`,
     );
+    if (result.derivedOnly && !wasDirty) {
+      // Page labels, late text and annotation ids are facts about the file, not edits: a clean
+      // document stays clean and picks them up with the next real save.
+      document.savedSnapshot = serializeSidecar(document.model);
+      this._onDidChangeDocument.fire(document);
+      return;
+    }
     this._onDidChangeCustomDocument.fire({ document });
     this._onDidChangeDocument.fire(document);
   }

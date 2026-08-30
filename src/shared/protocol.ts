@@ -34,6 +34,14 @@ export interface EmbeddedAnnotation {
   modificationDate: string | null;
 }
 
+/** A sidecar highlight the file holds no annotation for, in the shape PDF.js can deserialize. */
+export interface InjectableHighlight {
+  sidecarId: string;
+  pageIndex: number;
+  /** `AnnotationEditorLayer.deserialize` payload: annotationType 9, color, opacity, rect, quads or outlines. */
+  data: Record<string, unknown>;
+}
+
 export interface ViewerConfig {
   url: string;
   resourceRoot: string;
@@ -73,6 +81,10 @@ export type WebviewToHostMessage =
       rendered: number;
     }
   | { type: "savedDocument"; bytes: Uint8Array | null; error: string | null }
+  /** The viewer scrolled to another page (1-based). */
+  | { type: "pageChanged"; page: number; pageLabel: string | null }
+  /** Ctrl+S / Cmd+S pressed inside the viewer; the host runs VS Code's save. */
+  | { type: "saveRequested" }
   | { type: "openLink"; url: string }
   | { type: "log"; level: "info" | "warn" | "error"; message: string };
 
@@ -83,6 +95,15 @@ export type HostToWebviewMessage =
   | { type: "setEditorMode"; mode: number }
   /** Ask PDF.js to serialize the document with its annotation edits applied (incremental save). */
   | { type: "saveDocument" }
+  /** Draw sidecar highlights the file holds no annotation for; each page is injected once rendered. */
+  | { type: "loadHighlights"; highlights: InjectableHighlight[] }
+  /** Delete editors by viewer id through PDF.js (undoable there). */
+  | { type: "deleteHighlights"; viewerIds: string[] }
+  /** Spike instrumentation: select `spanCount` text-layer spans on `page` without creating anything. */
+  | { type: "spike.selectText"; page: number; spanCount: number }
+  /** Spike instrumentation: PDF.js undo / redo. */
+  | { type: "spike.undo" }
+  | { type: "spike.redo" }
   /** Spike instrumentation: select `spanCount` text-layer spans on `page` and highlight them. */
   | { type: "spike.highlightText"; page: number; spanCount: number; color: string }
   /** Spike instrumentation: recolor an existing editor (id = PDF.js editor / annotation id). */

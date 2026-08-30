@@ -2,12 +2,12 @@
 // how the model changes once the embed step has decided, how to roll back when the PDF write
 // fails, and how to repair or rebuild the sidecar from the annotations found in a PDF on open.
 
-import { type Category, categoryForColor } from "../categories";
+import { type Category, categoryForColor, UNCATEGORIZED_COLOR } from "../categories";
 import { UNCATEGORIZED_ID } from "../sidecar/reconcile";
 import type { PdfWriteStatus, Sidecar, SidecarHighlight, SidecarSource } from "../sidecar/types";
 import type { EmbeddableHighlight, EmbeddedHighlight } from "./embedHighlights";
 
-export const UNCATEGORIZED_COLOR = "#CCCCCC";
+export { UNCATEGORIZED_COLOR } from "../categories";
 export const UNCATEGORIZED_NAME = "Uncategorized";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

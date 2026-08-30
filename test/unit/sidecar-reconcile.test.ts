@@ -112,6 +112,7 @@ describe("reconcileSnapshot", () => {
     expect(second.created).toEqual([]);
     expect(second.updated).toEqual([created?.id]);
     expect(second.highlights[0]?.categoryId).toBe("concern");
+    expect(second.derivedOnly).toBe(false);
     expect(second.highlights[0]?.createdAt).toBe(created?.createdAt);
     expect(created?.updatedAt).toBe("2026-09-01T14:00:00.000Z");
     expect(second.highlights[0]?.updatedAt).toBe("2026-09-01T14:00:01.000Z");
@@ -176,6 +177,7 @@ describe("reconcileSnapshot", () => {
     expect(second.updated).toHaveLength(1);
     expect(second.highlights[0]?.text).toBe("late text");
     expect(second.highlights[0]?.updatedAt).toBe(blank[0]?.updatedAt);
+    expect(second.derivedOnly).toBe(true);
   });
 
   it("deletes a viewer-created highlight when its editor vanishes and restores it on undo", () => {
@@ -319,6 +321,34 @@ describe("reconcileSnapshot", () => {
       context,
     );
     expect(deleted.deleted).toEqual([model[0]?.id]);
+  });
+
+  it("ignores sub-point geometry noise such as a deserialize round trip", () => {
+    const context = makeContext();
+    const session = new ReconcileSession();
+    const first = reconcileSnapshot([], snapshot([editor({ id: "e0" })]), session, context);
+    const noisy = editor({
+      id: "e0",
+      rect: RECT.map((value) => value + 0.004),
+      quadPoints: QUAD.map((value) => value - 0.003),
+    });
+    const second = reconcileSnapshot(first.highlights, snapshot([noisy]), session, context);
+    expect(second.changed).toBe(false);
+  });
+
+  it("treats a rect-only difference on a text highlight as bookkeeping, not an edit", () => {
+    const context = makeContext();
+    const session = new ReconcileSession();
+    const first = reconcileSnapshot([], snapshot([editor({ id: "e0" })]), session, context);
+    const padded = editor({ id: "e0", rect: [71.36, 683.18, 500.62, 700.84] });
+    const second = reconcileSnapshot(first.highlights, snapshot([padded]), session, context);
+    expect(second.derivedOnly).toBe(true);
+    expect(second.highlights[0]?.rect).toEqual([71.36, 683.18, 500.62, 700.84]);
+    expect(second.highlights[0]?.updatedAt).toBe(first.highlights[0]?.updatedAt);
+
+    const moved = editor({ id: "e0", quadPoints: QUAD.map((value) => value + 10) });
+    const third = reconcileSnapshot(second.highlights, snapshot([moved]), session, context);
+    expect(third.derivedOnly).toBe(false);
   });
 
   it("forgets viewer bindings on reset so a reload cannot cause deletions", () => {
