@@ -129,5 +129,5 @@ Every reviewed PDF gets one sidecar file. It is the canonical store for highligh
 
 - Keys are sorted at every level, indentation is two spaces, line endings are LF and the file ends with a newline, so diffs stay small.
 - `highlights` are in reading order: page, then top edge descending, then left edge, then `id`. `categories` are ordered by `order`, `pageNotes` by `page`.
-- The sidecar is written before the PDF, so an interrupted save never loses notes. Writes go through VS Code's file API rather than a temp-and-rename, because VS Code closes any editor whose file is renamed over from inside the application.
+- The sidecar is written before the PDF, so an interrupted save never loses notes (see ADR-0005 in `docs/explanation/decisions.md` for why writes are not temp-and-rename).
 - Editing the file by hand is fine; unknown properties and malformed values are rejected on open with the JSON path of the problem, and the document then opens read-only until the file is fixed.

@@ -7,7 +7,7 @@ Open-source VS Code extension: open a PDF, highlight passages by user-defined ca
 - `src/extension/`: extension host code (VS Code API). **No Node built-ins here** except under `src/extension/desktop/`; everything else must work in the web extension host (`vscode.workspace.fs`, `Uri.joinPath`, `TextDecoder`).
 - `src/core/`: pure TypeScript: model, categories, report pipeline. No `vscode` import, no DOM, no Node. Unit-tested with vitest.
 - `src/shared/protocol.ts`: the typed message contract between host and webview.
-- `src/webview/`: the PDF.js viewer bootstrap and the `ViewerAdapter`. Every touch of PDF.js internals lives here.
+- `src/webview/`: the PDF.js viewer bootstrap and the `PdfjsAdapter` (`pdfjsAdapter.ts`). Every touch of PDF.js internals lives here.
 - `vendor/pdfjs/`: the pinned PDF.js prebuilt viewer, produced by `pnpm prepare-pdfjs` from `pdfjs.lock.json`. Gitignored; shipped in the VSIX. Patches (ideally none) go in `patches/pdfjs/`.
 - `media/`: icon and webview CSS. `schemas/`: the sidecar JSON schema. `scripts/`: Node maintenance scripts. `test/{unit,integration,fixtures}`. `docs/`: diataxis.
 
