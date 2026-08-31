@@ -5,14 +5,19 @@ import { type ConsentTestResponder, setConsentTestResponder } from "./ai/consent
 import { registerAiManualCommands } from "./ai/manualCommands";
 import { registerAiProviderCommands } from "./ai/summarize";
 import { registerCategoryCommands } from "./commands/categories";
+import { registerExportCommands } from "./commands/exportPdf";
 import { GROUP_BY_KEY, registerHighlightCommands } from "./commands/highlights";
 import { registerNoteCommands } from "./commands/notes";
 import { registerReportCommands } from "./commands/report";
 import { ActiveDocumentTracker } from "./editor/activeDocument";
-import { PdfCaseReviewEditorProvider } from "./editor/pdfCaseReviewEditorProvider";
+import {
+  type HashMismatchTestResponder,
+  PdfCaseReviewEditorProvider,
+  setHashMismatchTestResponder,
+} from "./editor/pdfCaseReviewEditorProvider";
 import { highlightsGroupBy } from "./settings";
 import { HighlightsTreeProvider, type TreeNode } from "./views/highlightsTree";
-import { NoteEditorViewProvider } from "./views/noteEditorView";
+import { NoteEditorViewProvider, setNoteDeleteTestResponder } from "./views/noteEditorView";
 import { HighlightsStatusBar, statusText } from "./views/statusBar";
 
 interface SampleReportResult {
@@ -58,6 +63,14 @@ export function activate(context: ExtensionContext): void {
         tree.refresh();
       }
     }),
+    window.onDidChangeActiveColorTheme(() => {
+      void provider.handleThemeChange();
+      tree.onThemeChanged();
+    }),
+    workspace.onDidGrantWorkspaceTrust(() => {
+      output.info("workspace trust granted; AI commands and report.outputFolder are available again");
+      tree.refresh();
+    }),
   );
 
   context.subscriptions.push(
@@ -70,9 +83,10 @@ export function activate(context: ExtensionContext): void {
     noteEditor,
     window.registerWebviewViewProvider(NoteEditorViewProvider.viewType, noteEditor),
     ...registerHighlightCommands({ provider, tracker, tree, treeView }),
-    ...registerCategoryCommands({ provider, tracker, output }),
+    ...registerCategoryCommands({ provider, tracker, output, treeView }),
     ...registerNoteCommands({ provider, tracker, treeView, noteEditor }),
     ...registerReportCommands({ tracker, output }),
+    ...registerExportCommands({ provider, tracker }),
     ...registerAiManualCommands({ provider, tracker, output, extensionContext: context }),
     ...registerAiProviderCommands({ provider, tracker, output, extensionContext: context }),
     // Internal commands (not contributed to the palette) used by integration tests and,
@@ -82,6 +96,9 @@ export function activate(context: ExtensionContext): void {
     ),
     commands.registerCommand("pdfCaseReview.debug.postMessage", (uri: Uri, message: HostToWebviewMessage) =>
       provider.postMessage(uri, message),
+    ),
+    commands.registerCommand("pdfCaseReview.debug.request", (uri: Uri, message: HostToWebviewMessage) =>
+      provider.request(uri, message),
     ),
     commands.registerCommand("pdfCaseReview.debug.getTrace", () => [...provider.trace]),
     commands.registerCommand("pdfCaseReview.debug.getTreeSnapshot", () => ({
@@ -104,7 +121,15 @@ export function activate(context: ExtensionContext): void {
     commands.registerCommand("pdfCaseReview.debug.autoConsent", (responder?: ConsentTestResponder | null) =>
       setConsentTestResponder(responder ?? undefined),
     ),
+    commands.registerCommand(
+      "pdfCaseReview.debug.autoHashMismatch",
+      (choice?: ReturnType<HashMismatchTestResponder> | null) =>
+        setHashMismatchTestResponder(choice ? () => choice : undefined),
+    ),
     commands.registerCommand("pdfCaseReview.debug.getNoteEditorState", () => noteEditor.state()),
+    commands.registerCommand("pdfCaseReview.debug.autoConfirmDelete", (confirm?: boolean | null) =>
+      setNoteDeleteTestResponder(typeof confirm === "boolean" ? () => confirm : undefined),
+    ),
     commands.registerCommand("pdfCaseReview.debug.postNoteEditorMessage", (message: unknown) =>
       noteEditor.handleMessage(message),
     ),
