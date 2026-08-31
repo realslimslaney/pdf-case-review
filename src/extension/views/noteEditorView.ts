@@ -371,6 +371,7 @@ export class NoteEditorViewProvider extends Disposable implements WebviewViewPro
 <div id="empty" class="empty">Select a highlight or note in the Highlights view.</div>
 <form id="editor" hidden>
   <h1 id="title"></h1>
+  <div id="scope" class="scope"></div>
   <div><span id="citation" aria-label="Page"></span></div>
   <blockquote id="quote" aria-label="Quoted passage" hidden></blockquote>
   <label class="visually-hidden" for="category">Category</label>

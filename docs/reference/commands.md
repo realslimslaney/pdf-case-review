@@ -9,7 +9,7 @@ The **PDF Case Review** activity-bar icon opens the **Highlights** view for the 
 | Command | Where | What it does |
 |---|---|---|
 | `PDF Case Review: Go to Highlight` | click a row, `Ctrl+Alt+G`, palette | Scrolls the PDF to the highlight and flashes it. Invoked with nothing selected, it shows a picker of every highlight, so the viewer is reachable without a mouse. |
-| `PDF Case Review: Edit Note` | `Ctrl+Alt+N`, click a note row, row context menu, palette | Opens the target in the **Note** view (below). With no selection it targets the current page's note. |
+| `PDF Case Review: Edit Note` | `Ctrl+Alt+N`, click a note row, row context menu, palette | Opens the target in the **Note** view (below). With no selection it asks where the note should go (the page in view, or a document note). |
 | `PDF Case Review: Set Category` | row context menu, palette | Picks another category for the highlight; the viewer recolors it and the PDF is updated on the next save. |
 | `PDF Case Review: Delete Highlight` | row context menu (inline trash icon), palette | Deletes the highlight. When the viewer shows it, the deletion goes through PDF.js and `Ctrl+Z` inside the viewer brings it back with its note. |
 | `PDF Case Review: Delete Note` | note row context menu (inline trash icon), palette | Deletes a page or document note. |
@@ -40,8 +40,8 @@ Every path below goes through the eligibility question first: the dialog names t
 
 | Command | What it does |
 |---|---|
-| `PDF Case Review: Choose AI Provider...` | Probes the `claude` and `codex` CLIs and sets `pdfCaseReview.ai.provider`; unavailable options show a one-line fix. |
-| `PDF Case Review: Summarize with AI` | Runs the configured CLI on your highlights and notes and caches the executive summary in the sidecar. Cancellable; 120 second timeout. |
+| `PDF Case Review: Choose AI Provider...` | Probes the `claude` and `codex` CLIs and sets `pdfCaseReview.ai.provider`; unavailable options show a one-line fix. Picking Manual starts the clipboard flow. |
+| `PDF Case Review: Summarize with AI` | The one entry point: with no provider configured it opens the provider picker first, then runs the configured CLI on your highlights and notes and caches the executive summary in the sidecar. Cancellable; 120 second timeout. |
 | `PDF Case Review: Copy Summary Prompt` | Puts the summary prompt and your notes on the clipboard for any chat. Works with the provider off. |
 | `PDF Case Review: Paste AI Summary` | Saves the clipboard as the document's AI summary, labeled `manual`. |
 | `PDF Case Review: Review AI Consent` | Shows the recorded attestation (account, provider, dates) and offers to revoke it. |

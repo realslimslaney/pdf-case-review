@@ -48,6 +48,18 @@ export type NoteEditorToHostMessage =
   | { type: "deleteTarget"; documentUri: string; target: NoteTarget }
   | { type: "revealTarget"; documentUri: string; target: NoteTarget };
 
+/** One line under the title saying what kind of note this is and where it lands in the report. */
+export function noteScopeLine(target: NoteTarget): string {
+  switch (target.kind) {
+    case "highlight":
+      return "Highlight note · shown beneath its quote in the report";
+    case "page":
+      return `Page note · shown with page ${target.page} in the report`;
+    case "document":
+      return "Document note · shown under Document notes at the top of the report";
+  }
+}
+
 export function isNoteTarget(value: unknown): value is NoteTarget {
   if (typeof value !== "object" || value === null) {
     return false;
