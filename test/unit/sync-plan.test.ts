@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CATEGORIES } from "../../src/core/categories";
+import { adoptEmbedded, toEmbeddable } from "../../src/core/highlight/convert";
 import type { EmbeddedHighlight } from "../../src/core/pdfExport/embedHighlights";
 import {
-  adoptEmbedded,
   applyEmbedOutcome,
   markPdfWriteFailed,
   repairPdfjsIds,
+  resolveSyncMode,
   staleIdPairs,
-  toEmbeddable,
+  syncModeOnOpen,
 } from "../../src/core/pdfExport/syncPlan";
 import type { Sidecar, SidecarHighlight, SidecarSource } from "../../src/core/sidecar/types";
 import { sampleSidecar } from "./helpers/sampleSidecar";
@@ -198,5 +199,22 @@ describe("adoptEmbedded", () => {
       createdAt: NOW,
     });
     expect(adopted[1]).toMatchObject({ id: "aaaaaaaa-0000-4000-8000-000000000001", categoryId: "question" });
+  });
+});
+
+describe("syncModeOnOpen and resolveSyncMode", () => {
+  it("maps the open-time inspection onto the document's mode", () => {
+    expect(syncModeOnOpen({ protected: true, embedded: null }, false)).toBe("sidecar-only:protected");
+    expect(syncModeOnOpen({ protected: false, embedded: [] }, false)).toBe("embed");
+    expect(syncModeOnOpen({ protected: false, embedded: null }, false)).toBe("uninspected");
+    expect(syncModeOnOpen({ protected: false, embedded: null }, true)).toBe("embed");
+  });
+
+  it("resolves the embedOnSave setting per save, with the setting taking precedence", () => {
+    expect(resolveSyncMode("embed", true)).toBe("embed");
+    expect(resolveSyncMode("uninspected", true)).toBe("uninspected");
+    expect(resolveSyncMode("sidecar-only:protected", true)).toBe("sidecar-only:protected");
+    expect(resolveSyncMode("embed", false)).toBe("sidecar-only:setting");
+    expect(resolveSyncMode("sidecar-only:protected", false)).toBe("sidecar-only:setting");
   });
 });

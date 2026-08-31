@@ -51,6 +51,28 @@ PDFViewerApplicationOptions.set("iccUrl", config.iccUrl);
 PDFViewerApplicationOptions.set("standardFontDataUrl", config.standardFontDataUrl);
 PDFViewerApplicationOptions.set("wasmUrl", config.wasmUrl);
 PDFViewerApplicationOptions.set("imageResourcesPath", config.imageResourcesPath);
+// Memory limits for very large documents; null keeps the vendored PDF.js defaults.
+if (config.maxCanvasPixels !== null) {
+  PDFViewerApplicationOptions.set("maxCanvasPixels", config.maxCanvasPixels);
+}
+if (config.maxImageSize !== null) {
+  PDFViewerApplicationOptions.set("maxImageSize", config.maxImageSize);
+}
+// High-contrast themes force the theme's page colors onto rendered pages (ADR-0008). PDF.js
+// captures these at viewer construction, so a theme change rebuilds the webview host-side.
+if (config.themeKind === "high-contrast" || config.themeKind === "high-contrast-light") {
+  const styles = getComputedStyle(document.documentElement);
+  const dark = config.themeKind === "high-contrast";
+  PDFViewerApplicationOptions.set("forcePageColors", true);
+  PDFViewerApplicationOptions.set(
+    "pageColorsBackground",
+    styles.getPropertyValue("--vscode-editor-background").trim() || (dark ? "#000000" : "#FFFFFF"),
+  );
+  PDFViewerApplicationOptions.set(
+    "pageColorsForeground",
+    styles.getPropertyValue("--vscode-editor-foreground").trim() || (dark ? "#FFFFFF" : "#000000"),
+  );
+}
 // Highlight editing: NONE mode keeps the floating "highlight" button available on text
 // selection without putting the whole viewer into edit mode. Comments are ours, not PDF.js's.
 PDFViewerApplicationOptions.set("enableScripting", false);
@@ -110,12 +132,7 @@ void (async () => {
   await adapter.reportLoaded();
 })();
 
-window.addEventListener("message", async (event: MessageEvent<HostToWebviewMessage>) => {
-  if (event.origin !== window.origin) {
-    return;
-  }
-  await PDFViewerApplication.initializedPromise;
-  const message = event.data;
+async function handleHostMessage(message: HostToWebviewMessage): Promise<void> {
   switch (message.type) {
     case "reload": {
       const currentPageNumber = PDFViewerApplication.pdfViewer.currentPageNumber;
@@ -152,13 +169,13 @@ window.addEventListener("message", async (event: MessageEvent<HostToWebviewMessa
       await adapter.getPageText(message.requestId, message.page);
       return;
     case "createFromSelection":
-      await adapter.applyCategory(message.id, message.color);
+      await adapter.applyCategory(message.id, message.color, message.fallbackViewerId);
       return;
     case "spike.selectText":
       adapter.spikeSelectText(message.page, message.spanCount);
       return;
-    case "spike.selectEditor":
-      adapter.spikeSelectEditor(message.viewerId);
+    case "spike.probeTextLayer":
+      adapter.spikeProbeTextLayer(message.page);
       return;
     case "spike.undo":
       adapter.undo();
@@ -167,10 +184,40 @@ window.addEventListener("message", async (event: MessageEvent<HostToWebviewMessa
       adapter.redo();
       return;
     case "spike.highlightText":
-      adapter.spikeHighlightText(message.page, message.spanCount, message.color);
+      await adapter.spikeHighlightText(message.page, message.spanCount, message.color);
       return;
     case "spike.recolorEditor":
       adapter.recolorEditor(message.id, message.color);
       return;
+  }
+}
+
+window.addEventListener("message", async (event: MessageEvent<HostToWebviewMessage>) => {
+  if (event.origin !== window.origin) {
+    return;
+  }
+  await PDFViewerApplication.initializedPromise;
+  const message = event.data;
+  const { requestId } = message;
+  try {
+    await handleHostMessage(message);
+    if (requestId !== undefined) {
+      post({ type: "done", requestId, ok: true });
+    }
+  } catch (error) {
+    if (requestId !== undefined) {
+      post({
+        type: "done",
+        requestId,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } else {
+      post({
+        type: "log",
+        level: "error",
+        message: `${message.type}: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
   }
 });

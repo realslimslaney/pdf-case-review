@@ -7,8 +7,8 @@
 // viewer load). Only the session below knows viewer ids; the host resets it on every load.
 
 import type { SerializedHighlight } from "../../shared/protocol";
-import { type Category, categoryForColor, UNCATEGORIZED_CATEGORY } from "../categories";
-import { normalizeCapturedText } from "../text/normalize";
+import { type Category, categoryForColor } from "../categories";
+import { capturedText, createHighlight } from "../highlight/convert";
 import { type SidecarHighlight, toRect } from "./types";
 
 const RECENTLY_DELETED_LIMIT = 200;
@@ -146,49 +146,8 @@ function sameNumbers(left: readonly number[], right: readonly number[]): boolean
   );
 }
 
-/** The editor's own text first, then the quad-intersection fallback, normalized either way. */
-function capturedText(editor: SerializedHighlight): string {
-  return normalizeCapturedText(editor.text ?? editor.quadText ?? "");
-}
-
 function pageLabelFor(context: ReconcileContext, pageIndex: number): string | undefined {
   return context.pageLabels?.[pageIndex];
-}
-
-function createHighlight(
-  id: string,
-  editor: SerializedHighlight,
-  context: ReconcileContext,
-): SidecarHighlight {
-  const now = context.now();
-  const category = categoryForColor(context.categories, editor.color);
-  const highlight: SidecarHighlight = {
-    id,
-    categoryId: category?.id ?? UNCATEGORIZED_CATEGORY.id,
-    page: editor.pageIndex + 1,
-    rect: toRect(editor.rect) ?? [0, 0, 0, 0],
-    quadPoints: [...editor.quadPoints],
-    kind: editor.quadPoints.length > 0 ? "text" : "free",
-    text: capturedText(editor),
-    note: "",
-    createdAt: now,
-    updatedAt: now,
-  };
-  const pageLabel = pageLabelFor(context, editor.pageIndex);
-  if (pageLabel !== undefined) {
-    highlight.pageLabel = pageLabel;
-  }
-  if (editor.annotationElementId) {
-    highlight.pdfjsId = editor.annotationElementId;
-  }
-  if (editor.rotation !== 0) {
-    highlight.rotation = editor.rotation;
-  }
-  const outlines = editor.raw["outlines"];
-  if (highlight.kind === "free" && outlines !== undefined) {
-    highlight.outlines = outlines;
-  }
-  return highlight;
 }
 
 /**
