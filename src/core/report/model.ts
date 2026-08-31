@@ -3,6 +3,7 @@
 // organizes and formats.
 
 import { UNCATEGORIZED_CATEGORY } from "../categories";
+import type { HighlightKind } from "../sidecar/types";
 import { normalizeCapturedText } from "../text/normalize";
 
 export interface ReportCategory {
@@ -21,6 +22,8 @@ export interface ReportHighlightInput {
   /** Top edge in PDF user space; higher = earlier on the page. Used only for ordering. */
   top?: number;
   left?: number;
+  /** `free` = drawn over an image (scanned page); absent means `text`. */
+  kind?: HighlightKind;
   text: string;
   note: string;
 }
@@ -79,6 +82,7 @@ export interface ReportItem {
   page: number;
   /** e.g. `p. 12` or `p. iv [4]`. */
   citation: string;
+  kind: HighlightKind;
   quote: string;
   note: string;
 }
@@ -184,6 +188,7 @@ export function buildReportModel(
     category: categoriesById.get(highlight.categoryId) ?? UNCATEGORIZED,
     page: highlight.page,
     citation: formatCitation(highlight.page, highlight.pageLabel, options.usePageLabels),
+    kind: highlight.kind ?? "text",
     quote: truncateQuote(normalizeQuote(highlight.text), options.quoteMaxChars),
     note: highlight.note.trim(),
   }));

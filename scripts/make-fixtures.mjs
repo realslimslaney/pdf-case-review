@@ -103,7 +103,126 @@ async function makeSampleCase() {
   return pdf.save({ useObjectStreams: false });
 }
 
+/** A "scanned" case: page images only, no embedded fonts, no text layer anywhere. */
+async function makeScannedCase() {
+  const pdf = await PDFDocument.create();
+  pdf.setTitle("Scanned Case (no text layer)");
+  pdf.setCreationDate(new Date("2026-01-01T00:00:00Z"));
+  pdf.setModificationDate(new Date("2026-01-01T00:00:00Z"));
+  for (let index = 0; index < 2; index += 1) {
+    const page = pdf.addPage([PAGE.width, PAGE.height]);
+    // Grey "photograph" of a page: a border, rule lines and a figure, drawn as vector shapes so
+    // the file stays tiny while still containing nothing a text layer could be built from.
+    page.drawRectangle({
+      x: PAGE.margin / 2,
+      y: PAGE.margin / 2,
+      width: PAGE.width - PAGE.margin,
+      height: PAGE.height - PAGE.margin,
+      borderColor: rgb(0.6, 0.6, 0.6),
+      borderWidth: 1,
+    });
+    for (let line = 0; line < 30; line += 1) {
+      const width = (PAGE.width - 2 * PAGE.margin) * (line % 5 === 4 ? 0.6 : 0.94);
+      page.drawRectangle({
+        x: PAGE.margin,
+        y: PAGE.height - PAGE.margin - 20 * (line + 1),
+        width,
+        height: 6,
+        color: rgb(0.75, 0.75, 0.75),
+      });
+    }
+    page.drawEllipse({
+      x: PAGE.width / 2,
+      y: PAGE.margin + 90,
+      xScale: 90,
+      yScale: 45 + 20 * index,
+      color: rgb(0.55, 0.55, 0.55),
+    });
+  }
+  return pdf.save({ useObjectStreams: false });
+}
+
+const LARGE_PAGES = 300;
+
+/** A 300-page case with deterministic text on every page; small on disk, heavy to render. */
+async function makeLargeCase() {
+  const pdf = await PDFDocument.create();
+  pdf.setTitle("Omega Industries (B): The Long Annual Report");
+  pdf.setAuthor("PDF Case Review fixtures");
+  pdf.setCreationDate(new Date("2026-01-01T00:00:00Z"));
+  pdf.setModificationDate(new Date("2026-01-01T00:00:00Z"));
+  const serif = await pdf.embedFont(StandardFonts.TimesRoman);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const maxWidth = PAGE.width - 2 * PAGE.margin;
+  for (let index = 0; index < LARGE_PAGES; index += 1) {
+    const page = pdf.addPage([PAGE.width, PAGE.height]);
+    let y = PAGE.height - PAGE.margin;
+    page.drawText(`Section ${index + 1}: Operating Review`, { x: PAGE.margin, y, size: 14, font: bold });
+    y -= 28;
+    const source = pages[index % pages.length];
+    for (const paragraph of source.paragraphs) {
+      const text = `Item ${index + 1}. ${paragraph}`;
+      for (const line of wrap(text, serif, 11, maxWidth)) {
+        page.drawText(line, { x: PAGE.margin, y, size: 11, font: serif, color: rgb(0.1, 0.1, 0.1) });
+        y -= 15;
+      }
+      y -= 9;
+    }
+    page.drawText(`Omega Industries (B) · page ${index + 1} of ${LARGE_PAGES}`, {
+      x: PAGE.margin,
+      y: PAGE.margin / 2,
+      size: 8,
+      font: serif,
+      color: rgb(0.4, 0.4, 0.4),
+    });
+  }
+  return pdf.save({ useObjectStreams: false });
+}
+
+const HEAVY_ATTACHMENT_BYTES = 80 * 1024 * 1024;
+
+/** Deterministic incompressible bytes from a xorshift32 stream, so the heavy file is ~80 MB. */
+function noiseBytes(length) {
+  const bytes = new Uint8Array(length);
+  let state = 0x2f6e2b1e;
+  for (let index = 0; index < length; index += 4) {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    bytes[index] = state & 0xff;
+    if (index + 1 < length) bytes[index + 1] = (state >>> 8) & 0xff;
+    if (index + 2 < length) bytes[index + 2] = (state >>> 16) & 0xff;
+    if (index + 3 < length) bytes[index + 3] = (state >>> 24) & 0xff;
+  }
+  return bytes;
+}
+
+/**
+ * The 300-page case grown to ~80 MB with an incompressible attachment. Opt-in only
+ * (`pnpm fixtures --heavy` or FIXTURES_HEAVY=1): it exists for the manual memory pass
+ * (test/manual/memory-pass.md), never for CI or automated tests.
+ */
+async function makeHeavyCase() {
+  const pdf = await PDFDocument.load(await makeLargeCase());
+  pdf.setTitle("Omega Industries (B): The Heavy Annual Report");
+  await pdf.attach(noiseBytes(HEAVY_ATTACHMENT_BYTES), "exhibit-archive.bin", {
+    mimeType: "application/octet-stream",
+    description: "Synthetic incompressible payload to reach a realistic file size.",
+  });
+  return pdf.save({ useObjectStreams: false });
+}
+
+const heavy = process.argv.includes("--heavy") || process.env.FIXTURES_HEAVY === "1";
+const fixtures = [
+  ["sample-case.pdf", makeSampleCase],
+  ["scanned-case.pdf", makeScannedCase],
+  ["large-case.pdf", makeLargeCase],
+  ...(heavy ? [["heavy-case.pdf", makeHeavyCase]] : []),
+];
+
 mkdirSync(outDir, { recursive: true });
-const bytes = await makeSampleCase();
-writeFileSync(join(outDir, "sample-case.pdf"), bytes);
-process.stdout.write(`Wrote test/fixtures/generated/sample-case.pdf (${bytes.length} bytes)\n`);
+for (const [name, make] of fixtures) {
+  const bytes = await make();
+  writeFileSync(join(outDir, name), bytes);
+  process.stdout.write(`Wrote test/fixtures/generated/${name} (${bytes.length} bytes)\n`);
+}

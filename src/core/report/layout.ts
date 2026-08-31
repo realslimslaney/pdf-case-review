@@ -3,6 +3,7 @@
 
 import { lexer, type Token, type Tokens } from "marked";
 
+import { IMAGE_REGION_LABEL, NO_TEXT_LABEL } from "../tree";
 import type { ReportItem, ReportModel } from "./model";
 
 export interface TextRun {
@@ -107,11 +108,16 @@ export function noteToBlocks(note: string): ReportBlock[] {
 
 function itemBlocks(item: ReportItem, withCategoryPrefix: boolean): ReportBlock[] {
   const blocks: ReportBlock[] = [];
-  const quote = item.quote === "" ? `[image region, ${item.citation}]` : item.quote;
+  // The same labels the Highlights tree uses: a free highlight marks a region of a scanned page,
+  // while an empty text highlight simply failed to capture its passage. The block's own citation
+  // carries the page either way.
+  const quote = item.quote !== "" ? item.quote : item.kind === "free" ? IMAGE_REGION_LABEL : NO_TEXT_LABEL;
   blocks.push({
     kind: "quote",
     text: withCategoryPrefix ? `${item.category.name}: ${quote}` : quote,
-    citation: item.citation,
+    // Without the prefix, the color bar would be the only per-quote category marker, which fails
+    // without color vision or when a quote is read out of its section; name it in the citation.
+    citation: withCategoryPrefix ? item.citation : `${item.citation} · ${item.category.name}`,
     color: item.category.color,
   });
   blocks.push(...noteToBlocks(item.note));
