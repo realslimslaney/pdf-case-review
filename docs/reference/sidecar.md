@@ -141,6 +141,8 @@ Written when the eligibility question is answered yes; shown and revoked by **Re
 
 The cached executive summary: `provider` (`claude-cli`, `codex-cli` or `manual`), optional `model` and `account`, `generatedAt`, and `text` (Markdown). Reports render it as a labeled section in grey italics; regenerating replaces it.
 
+Optional `inputDigest` and `promptVersion` record what the summary was generated from (a digest of the highlights, notes, categories and word budget, and the prompt template version). When they no longer match the current review, reports add a "may be out of date" line to the AI section and **Summarize with AI** says the cache predates your changes; the summary is never withheld. Summaries saved before these fields existed are treated as possibly out of date.
+
 ## How the file is written
 
 - Keys are sorted at every level, indentation is two spaces, line endings are LF and the file ends with a newline, so diffs stay small.

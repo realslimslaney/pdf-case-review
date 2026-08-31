@@ -150,7 +150,9 @@
         "model": { "type": "string" },
         "account": { "type": "string" },
         "generatedAt": { "type": "string", "format": "date-time" },
-        "text": { "type": "string" }
+        "text": { "type": "string" },
+        "inputDigest": { "type": "string" },
+        "promptVersion": { "type": "integer", "minimum": 1 }
       }
     }
   }

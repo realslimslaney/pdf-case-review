@@ -1,6 +1,8 @@
 // Maps the sidecar (the on-disk truth) to the report pipeline's input. Pure; the caller provides
 // only what it alone knows: the moment, the author setting, the viewer's live page data.
 
+import { summaryInputDigest } from "../ai/digest";
+import { SUMMARY_PROMPT_VERSION } from "../ai/prompt";
 import { sortDocumentNotes } from "../sidecar/serialize";
 import { type Sidecar, sortedCategories } from "../sidecar/types";
 import type { ReportAiSummary, ReportHighlightInput, ReportInput, ReportPageNoteInput } from "./model";
@@ -14,6 +16,8 @@ export interface ReportInputContext {
   /** The viewer's live page count; the sidecar carries 0 until the first save. */
   pageCount?: number;
   includeAiSummary: boolean;
+  /** Current `pdfCaseReview.ai.maxWords`, for the staleness check; defaults to `DEFAULT_MAX_WORDS`. */
+  aiMaxWords?: number;
 }
 
 export function reportInputFromSidecar(sidecar: Sidecar, context: ReportInputContext): ReportInput {
@@ -81,6 +85,12 @@ export function reportInputFromSidecar(sidecar: Sidecar, context: ReportInputCon
     if (sidecar.aiConsent && sidecar.aiConsent.documentSha256 === sidecar.source.sha256) {
       // An attestation for an earlier revision of the file must not stamp the report.
       summary.attestedAt = sidecar.aiConsent.attestedAt;
+    }
+    const fresh =
+      sidecar.aiSummary.promptVersion === SUMMARY_PROMPT_VERSION &&
+      sidecar.aiSummary.inputDigest === summaryInputDigest(sidecar, context.aiMaxWords);
+    if (!fresh) {
+      summary.stale = true;
     }
     input.aiSummary = summary;
   }

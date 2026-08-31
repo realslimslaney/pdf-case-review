@@ -111,6 +111,10 @@ export interface AiSummary {
   account?: string;
   generatedAt: string;
   text: string;
+  /** `summaryInputDigest` of the content the summary was generated from; absent on old sidecars. */
+  inputDigest?: string;
+  /** `SUMMARY_PROMPT_VERSION` at generation time. */
+  promptVersion?: number;
 }
 
 export interface Sidecar {

@@ -324,6 +324,8 @@ function readAiSummary(value: unknown, path: string): AiSummary {
   };
   setIfDefined(summary, "model", reader.optional("model", string));
   setIfDefined(summary, "account", reader.optional("account", string));
+  setIfDefined(summary, "inputDigest", reader.optional("inputDigest", string));
+  setIfDefined(summary, "promptVersion", reader.optional("promptVersion", integer(1)));
   reader.done();
   return summary;
 }

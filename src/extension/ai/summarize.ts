@@ -12,7 +12,8 @@ import {
   workspace,
 } from "vscode";
 
-import { buildSummaryPrompt } from "../../core/ai/prompt";
+import { summaryInputDigest } from "../../core/ai/digest";
+import { buildSummaryPrompt, SUMMARY_PROMPT_VERSION } from "../../core/ai/prompt";
 import type { AiSummary } from "../../core/sidecar/types";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
@@ -104,8 +105,13 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
   }
   const cached = document.model.aiSummary;
   if (cached && cached.provider === settings.provider) {
+    const fresh =
+      cached.promptVersion === SUMMARY_PROMPT_VERSION &&
+      cached.inputDigest === summaryInputDigest(document.model, settings.maxWords);
     const choice = await window.showInformationMessage(
-      `PDF Case Review: an AI summary from ${cached.generatedAt} is already cached.`,
+      fresh
+        ? `PDF Case Review: an AI summary from ${cached.generatedAt} is already cached.`
+        : `PDF Case Review: the cached AI summary from ${cached.generatedAt} predates changes to your highlights or notes.`,
       "Use cached",
       "Regenerate",
     );
@@ -169,6 +175,8 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
       generatedAt: new Date().toISOString(),
       text: trimmed,
       account: gate.attestation.record.email,
+      inputDigest: summaryInputDigest(document.model, settings.maxWords),
+      promptVersion: SUMMARY_PROMPT_VERSION,
     };
     if (settings.model !== "") {
       summary.model = settings.model;

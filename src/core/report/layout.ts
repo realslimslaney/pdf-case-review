@@ -140,9 +140,22 @@ export function layoutReport(model: ReportModel): ReportBlock[] {
   });
 
   if (model.aiSummary) {
-    const { provider, model: modelName, account, generatedAt, attestedAt, text } = model.aiSummary;
+    const { provider, model: modelName, account, generatedAt, attestedAt, text, stale } = model.aiSummary;
     blocks.push({ kind: "paragraph", muted: true, runs: [{ text: AI_LEGEND }] });
     blocks.push({ kind: "heading", level: 2, text: "AI summary" });
+    if (stale) {
+      blocks.push({
+        kind: "paragraph",
+        muted: true,
+        runs: [
+          {
+            text:
+              "This summary may be out of date: highlights or notes changed after it was generated. " +
+              "Run Summarize with AI again to refresh it.",
+          },
+        ],
+      });
+    }
     blocks.push(...markGenerated(noteToBlocks(text)));
     blocks.push({
       kind: "paragraph",

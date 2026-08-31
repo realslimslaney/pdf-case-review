@@ -86,11 +86,13 @@ async function renderTo(
     import("../../core/report/render"),
     import("../../core/report/fromSidecar"),
   ]);
+  const ai = aiSettings(document.uri, output);
   const context: Parameters<typeof reportInputFromSidecar>[1] = {
     generatedAt: new Date().toISOString(),
     author: settings.author,
     pageCount: document.info.pageCount,
-    includeAiSummary: aiSettings(document.uri, output).includeInReport,
+    includeAiSummary: ai.includeInReport,
+    aiMaxWords: ai.maxWords,
   };
   if (document.pageLabels) {
     context.pageLabels = document.pageLabels;

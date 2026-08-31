@@ -94,4 +94,25 @@ suite("M2 phase 4: AI eligibility gate and manual hand-off", () => {
     assert.ok(text.includes("A crisp executive summary of the case."), "the summary is in the report");
     assert.ok(text.toLowerCase().includes("manual"), "the section is stamped with its provider");
   });
+
+  test("a later content change marks the cached summary stale in the next report", async () => {
+    const STALE_LINE = "This summary may be out of date";
+    const state = await documentState(pdf);
+    assert.ok(state?.model.aiSummary?.inputDigest, "the pasted summary carries an input digest");
+
+    const fresh = await vscode.commands.executeCommand<vscode.Uri>("pdfCaseReview.generateReport", "markdown");
+    assert.ok(fresh);
+    const freshText = new TextDecoder().decode(await vscode.workspace.fs.readFile(fresh));
+    assert.ok(!freshText.includes(STALE_LINE), "an unchanged review renders without the caution");
+
+    await highlight(pdf, 1, "#53FFBC", 2);
+    const stale = await vscode.commands.executeCommand<vscode.Uri>("pdfCaseReview.generateReport", "markdown");
+    assert.ok(stale);
+    const staleText = new TextDecoder().decode(await vscode.workspace.fs.readFile(stale));
+    assert.ok(staleText.includes(STALE_LINE), "the report flags the summary after the change");
+    assert.ok(
+      staleText.includes("A crisp executive summary of the case."),
+      "the stale summary still renders, informing rather than policing",
+    );
+  });
 });

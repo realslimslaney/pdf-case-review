@@ -8,6 +8,9 @@ export const SUMMARY_SYSTEM_PROMPT =
   "You are helping a reader synthesize their own reading notes on a document. " +
   "Use only the highlights and notes provided; do not invent facts.";
 
+/** Bump when the template wording changes, so cached summaries from the old template read as stale. */
+export const SUMMARY_PROMPT_VERSION = 1;
+
 export const DEFAULT_MAX_WORDS = 250;
 
 export interface SummaryPrompt {

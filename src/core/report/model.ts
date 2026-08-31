@@ -46,6 +46,8 @@ export interface ReportAiSummary {
   generatedAt: string;
   text: string;
   attestedAt?: string;
+  /** The sidecar content changed after generation; renderers add a caution line. */
+  stale?: boolean;
 }
 
 export interface ReportInput {

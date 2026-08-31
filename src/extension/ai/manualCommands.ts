@@ -4,7 +4,8 @@
 
 import { commands, type Disposable, type ExtensionContext, env, type LogOutputChannel, window } from "vscode";
 
-import { buildSummaryPrompt } from "../../core/ai/prompt";
+import { summaryInputDigest } from "../../core/ai/digest";
+import { buildSummaryPrompt, SUMMARY_PROMPT_VERSION } from "../../core/ai/prompt";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
 import type { PdfDocument } from "../editor/pdfDocument";
@@ -88,6 +89,10 @@ export async function pasteSummary(context: CommandContext): Promise<boolean> {
     provider: "manual",
     generatedAt: new Date().toISOString(),
     text,
+    // The digest reflects the notes as they stand at paste time, the closest observable moment
+    // to what the pasted answer was generated from.
+    inputDigest: summaryInputDigest(document.model, aiSettings(document.uri, context.output).maxWords),
+    promptVersion: SUMMARY_PROMPT_VERSION,
   };
   const account = document.model.aiConsent?.email;
   if (account !== undefined) {
