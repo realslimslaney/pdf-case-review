@@ -76,12 +76,17 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
     void window.showWarningMessage("PDF Case Review: AI features are disabled in untrusted workspaces.");
     return false;
   }
-  const settings = aiSettings(document.uri, context.output);
+  let settings = aiSettings(document.uri, context.output);
   if (settings.provider === "off") {
-    void window
-      .showInformationMessage("PDF Case Review: no AI provider is enabled.", "Choose AI Provider...")
-      .then((pick) => (pick ? commands.executeCommand("pdfCaseReview.ai.chooseProvider") : undefined));
-    return false;
+    // The front door: no configured provider is a setup step inside the flow, not a dead end.
+    const picked = await pickProvider(context);
+    if (picked === "manual") {
+      return (await commands.executeCommand<boolean>("pdfCaseReview.ai.copySummaryPrompt")) === true;
+    }
+    if (picked !== "claude-cli" && picked !== "codex-cli") {
+      return false;
+    }
+    settings = aiSettings(document.uri, context.output);
   }
   if (!isDesktopHost()) {
     void window.showWarningMessage(
@@ -196,12 +201,19 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
   }
 }
 
-export async function chooseProvider(context: CommandContext): Promise<void> {
+type ProviderPick = "off" | "claude-cli" | "codex-cli" | "manual";
+
+/**
+ * The provider QuickPick. Applies the setting for real providers and returns what was picked, so
+ * `summarizeWithAi` can continue straight into the flow; "manual" changes no setting (the copy
+ * and paste commands work with the provider off).
+ */
+async function pickProvider(context: CommandContext): Promise<ProviderPick | undefined> {
   interface ProviderItem {
     label: string;
     description: string;
     detail?: string;
-    id: "off" | "claude-cli" | "codex-cli";
+    id: ProviderPick;
     fix?: string;
   }
   const items: ProviderItem[] = [
@@ -238,17 +250,38 @@ export async function chooseProvider(context: CommandContext): Promise<void> {
       { label: "Codex", description: `✗ ${reason}`, id: "codex-cli", fix: reason },
     );
   }
+  if (workspace.isTrusted) {
+    items.push({
+      label: "Manual",
+      description: "Copy the summary prompt, paste the answer back. Works without any CLI.",
+      id: "manual",
+    });
+  } else {
+    const reason = "AI features are disabled in untrusted workspaces.";
+    items.push({ label: "Manual", description: `✗ ${reason}`, id: "manual", fix: reason });
+  }
   const picked = await window.showQuickPick(items, { placeHolder: "AI provider for executive summaries" });
   if (!picked) {
-    return;
+    return undefined;
   }
   if (picked.fix) {
     void window.showInformationMessage(`PDF Case Review: ${picked.label} is unavailable. ${picked.fix}`);
-    return;
+    return undefined;
+  }
+  if (picked.id === "manual") {
+    return "manual";
   }
   await setAiProvider(picked.id);
   void window.showInformationMessage(`PDF Case Review: AI provider set to ${picked.label.toLowerCase()}.`);
   context.output.info(`ai.provider set to ${picked.id}`);
+  return picked.id;
+}
+
+export async function chooseProvider(context: CommandContext): Promise<void> {
+  const picked = await pickProvider(context);
+  if (picked === "manual") {
+    await commands.executeCommand("pdfCaseReview.ai.copySummaryPrompt");
+  }
 }
 
 export function registerAiProviderCommands(context: CommandContext): Disposable[] {
