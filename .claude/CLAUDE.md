@@ -36,7 +36,7 @@ Derived-from-upstream files (see `pdfjs.lock.json` → `upstreamReference.derive
 
 - **Never commit without the user's explicit yes.** Propose the commit, then wait.
 - Once approved, **delegate to the `committer` agent**, quoting the user's yes verbatim in the delegation prompt — a PreToolUse gate rejects `git commit` from anywhere else. Codex follows the same policy through `AGENTS.md`, `.agents/skills/committer` and `.codex/hooks.json` (same script, `--allow-direct`). Auto-accept mode is not approval.
-- The gate blocks any `git commit` that is on `main`, uses `--no-verify`, stages `pnpm-lock.yaml` without a `package.json` version bump, or has a red `pnpm run test:unit`. Fix the cause; never work around the gate.
+- The gate blocks any `git commit` that is on `main`, uses `--no-verify`, stages `pnpm-lock.yaml` without `package.json` staged alongside it, or has a red `pnpm run test:unit`. Fix the cause; never work around the gate. No manual version bumps: release-please derives versions from the commit history.
 - **Conventional Commits**: `feat:`/`fix:`/`docs:`/`ci:`/`refactor:`/`test:`/`chore:`, imperative, one logical change per commit. release-please turns them into versions and the CHANGELOG.
 - Always feature branch + PR: `git switch -c <type>/<slug> --no-track`, push `-u` immediately.
 
