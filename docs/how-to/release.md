@@ -4,8 +4,8 @@ One-time setup, then every release is a merged release-please PR.
 
 ## One-time
 
-1. **VS Marketplace**: sign in at <https://marketplace.visualstudio.com/manage>, create the publisher (`publisher` in `package.json`). In the publisher's settings add a *trusted publishing* policy for `realslimslaney/pdf-case-review` and the workflow `.github/workflows/release.yml`; the workflow then runs `vsce publish --oidc` with no stored secret.
-2. **Open VSX**: create an Eclipse account with the same GitHub username, sign in to <https://open-vsx.org>, sign the publisher agreement, generate an access token → repository secret `OVSX_PAT`, then `npx ovsx create-namespace <publisher> -p $OVSX_PAT`.
+1. **VS Marketplace**: sign in at <https://marketplace.visualstudio.com/manage>, create the publisher (`publisher` in `package.json`). Create an Azure DevOps personal access token at <https://dev.azure.com> (User settings → Personal access tokens → New Token; Organization "All accessible organizations", scope Marketplace → Manage) and store it as the `VSCE_PAT` secret in the `release` environment. Trusted publishing (`vsce publish --oidc`) is not yet shipped in any released vsce; switch back once it is.
+2. **Open VSX**: create an Eclipse account with the same GitHub username, sign in to <https://open-vsx.org>, sign the publisher agreement, generate an access token → `OVSX_PAT` secret in the `release` environment, then `npx ovsx create-namespace <publisher> -p $OVSX_PAT`.
 3. **GitHub**: create an environment named `release` that requires your approval; protect `main`.
 
 ### Branch protection

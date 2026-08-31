@@ -1,6 +1,7 @@
-# Publishes a tagged release to the VS Marketplace (trusted publishing / OIDC) and Open VSX.
+# Publishes a tagged release to the VS Marketplace and Open VSX.
 # One-time setup, see docs/how-to/release.md:
-#   - Marketplace: create the publisher, add a trusted-publishing policy for this repo + workflow.
+#   - Marketplace: create the publisher, store an Azure DevOps PAT as the VSCE_PAT secret.
+#     (Trusted publishing / OIDC is not yet shipped in any released vsce; revisit when it is.)
 #   - Open VSX: create the namespace, store the token as the OVSX_PAT secret.
 #   - GitHub: create a "release" environment that requires your approval.
 # Pre-release channel: odd minor versions (0.1.x, 0.3.x …) are published with --pre-release.
@@ -70,7 +71,6 @@ jobs:
     environment: release
     permissions:
       contents: read
-      id-token: write
     steps:
       - uses: actions/download-artifact@v8
         with:
@@ -78,11 +78,17 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - name: Publish (trusted publishing)
+      - name: Publish (Visual Studio Marketplace)
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "::error::VSCE_PAT secret is not set in the release environment"
+            exit 1
+          fi
           flag=""
           if [ "${{ needs.build.outputs.prerelease }}" = "true" ]; then flag="--pre-release"; fi
-          npx @vscode/vsce publish --oidc $flag --packagePath pdf-case-review.vsix
+          npx @vscode/vsce@3.9.2 publish $flag --packagePath pdf-case-review.vsix
 
   publish-openvsx:
     needs: build
@@ -96,7 +102,13 @@ jobs:
         with:
           node-version: 22
       - name: Publish to Open VSX
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
         run: |
+          if [ -z "$OVSX_PAT" ]; then
+            echo "::error::OVSX_PAT secret is not set in the release environment"
+            exit 1
+          fi
           flag=""
           if [ "${{ needs.build.outputs.prerelease }}" = "true" ]; then flag="--pre-release"; fi
-          npx ovsx publish pdf-case-review.vsix $flag -p "${{ secrets.OVSX_PAT }}"
+          npx ovsx@1.1.1 publish pdf-case-review.vsix $flag -p "$OVSX_PAT"
