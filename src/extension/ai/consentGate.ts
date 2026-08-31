@@ -2,7 +2,7 @@
 // leave the machine. Fail closed: an error, refusal or cancel means no attestation, and without an
 // attestation the prompt builder will not produce a prompt.
 
-import { type Memento, window, workspace } from "vscode";
+import { env, type Memento, Uri, window, workspace } from "vscode";
 
 import {
   type Attestation,
@@ -15,6 +15,7 @@ import {
   firstMatchingRule,
   needsReconsent,
   RESPONSIBILITY_STATEMENT,
+  switchAccountInstructions,
 } from "../../core/ai/consent";
 import type { ProviderIdentity } from "../../core/ai/identity";
 import { type AiConsent, countNotes } from "../../core/sidecar/types";
@@ -23,6 +24,33 @@ import type { PdfDocument } from "../editor/pdfDocument";
 import type { AiSettings } from "../settings";
 
 const FIRST_USE_KEY = "pdfCaseReview.ai.firstUseAcknowledged";
+
+const AI_REVIEWER_GUIDE_URL =
+  "https://github.com/realslimslaney/pdf-case-review/blob/main/docs/how-to/ai-reviewer.md";
+
+function openGuideOn(choice: string | undefined): Thenable<unknown> | undefined {
+  return choice === "Open Guide" ? env.openExternal(Uri.parse(AI_REVIEWER_GUIDE_URL)) : undefined;
+}
+
+/** Refuses with the how-to-switch steps attached, so a wrong account is always fixable in place. */
+function refuseWithSwitchHelp(reason: string, provider: string, requiredEmail?: string): GateResult {
+  void window
+    .showErrorMessage(
+      `PDF Case Review: ${reason} ${switchAccountInstructions(provider, requiredEmail)}`,
+      "Open Guide",
+    )
+    .then(openGuideOn);
+  return { ok: false, reason };
+}
+
+function showSwitchHelp(provider: string): void {
+  void window
+    .showInformationMessage(
+      `PDF Case Review: nothing was sent. ${switchAccountInstructions(provider)}`,
+      "Open Guide",
+    )
+    .then(openGuideOn);
+}
 
 export interface GateDeps {
   /** The logged-in identity, for `accountId` when a rule names a Layer 2 account; null = manual. */
@@ -107,9 +135,14 @@ interface EligibilityFacts {
   authorizationLineAvailable: boolean;
 }
 
-async function confirmEligibility(document: PdfDocument, facts: EligibilityFacts): Promise<boolean> {
+const SWITCH_BUTTON = "Wrong account? Show how to switch";
+
+async function confirmEligibility(
+  document: PdfDocument,
+  facts: EligibilityFacts,
+): Promise<"yes" | "no" | "switch"> {
   if (testResponder) {
-    return (testResponder.eligibility ?? "yes") === "yes";
+    return testResponder.eligibility ?? "yes";
   }
   const model = document.model;
   const account = `${facts.email}${facts.organization ? ` · ${facts.organization}` : ""} (${
@@ -121,6 +154,7 @@ async function confirmEligibility(document: PdfDocument, facts: EligibilityFacts
       ? "no authorization line found on page 1"
       : "authorization line unavailable (viewer closed)";
   const counts = `${model.highlights.length} highlighted excerpt(s) and ${countNotes(model)} note(s)`;
+  const yesButton = "Yes, this account is allowed to process this document";
   const choice = await window.showWarningMessage(
     ELIGIBILITY_QUESTION,
     {
@@ -131,9 +165,10 @@ async function confirmEligibility(document: PdfDocument, facts: EligibilityFacts
         `What will be sent: ${counts}. The PDF itself is never sent.\n\n` +
         `If you answer yes and are wrong, that responsibility is yours. ${RESPONSIBILITY_STATEMENT}`,
     },
-    "Yes, this account is allowed to process this document",
+    yesButton,
+    SWITCH_BUTTON,
   );
-  return choice !== undefined;
+  return choice === yesButton ? "yes" : choice === SWITCH_BUTTON ? "switch" : "no";
 }
 
 export async function ensureAttestation(document: PdfDocument, deps: GateDeps): Promise<GateResult> {
@@ -178,18 +213,14 @@ export async function ensureAttestation(document: PdfDocument, deps: GateDeps): 
   if (match.kind === "matched") {
     const check = checkRule(match.rule, { email, verified });
     if (!check.ok) {
-      const reason =
-        `This document requires ${check.requiredEmail}; the current account is ${email}. ` +
-        "Log out, sign in with the required account, then retry.";
-      void window.showErrorMessage(`PDF Case Review: ${reason}`);
-      return { ok: false, reason };
+      const reason = `This document requires ${check.requiredEmail}; the current account is ${email}.`;
+      return refuseWithSwitchHelp(reason, deps.provider, check.requiredEmail);
     }
     if (match.rule.email !== undefined && !verified && deps.provider !== "manual") {
       const reason =
         `This document requires the verified account ${match.rule.email}, but the login could not ` +
         "be verified.";
-      void window.showErrorMessage(`PDF Case Review: ${reason}`);
-      return { ok: false, reason };
+      return refuseWithSwitchHelp(reason, deps.provider, match.rule.email);
     }
   }
 
@@ -198,8 +229,7 @@ export async function ensureAttestation(document: PdfDocument, deps: GateDeps): 
       const reason =
         "This protected document requires a verified CLI login. Sign in to the provider CLI, or set " +
         "pdfCaseReview.ai.requireVerifiedAccountForProtected to false.";
-      void window.showErrorMessage(`PDF Case Review: ${reason}`);
-      return { ok: false, reason };
+      return refuseWithSwitchHelp(reason, deps.provider);
     }
     if (!(await confirmExtraAck(document.model.source.fileName))) {
       return { ok: false, reason: "Not acknowledged." };
@@ -228,7 +258,11 @@ export async function ensureAttestation(document: PdfDocument, deps: GateDeps): 
     authorizationLine,
     authorizationLineAvailable: pageText !== null,
   });
-  if (!confirmed) {
+  if (confirmed === "switch") {
+    showSwitchHelp(deps.provider);
+    return { ok: false, reason: "Account switch requested." };
+  }
+  if (confirmed !== "yes") {
     return { ok: false, reason: "Not confirmed." };
   }
 

@@ -7,6 +7,7 @@ import {
   firstMatchingRule,
   isAttestation,
   needsReconsent,
+  switchAccountInstructions,
 } from "../../src/core/ai/consent";
 import type { AiConsent } from "../../src/core/sidecar/types";
 
@@ -109,6 +110,21 @@ describe("needsReconsent", () => {
     expect(needsReconsent(consent({ wordingVersion: CONSENT_WORDING_VERSION - 1 }), current)).toBe(true);
     const { eligibilityConfirmed: _unconfirmed, ...withoutConfirmation } = consent();
     expect(needsReconsent(withoutConfirmation, current)).toBe(true);
+  });
+});
+
+describe("switchAccountInstructions", () => {
+  it("gives per-provider steps naming the required account, plus the multi-account alternative", () => {
+    const claude = switchAccountInstructions("claude-cli", "you@school.edu");
+    expect(claude).toContain("/logout");
+    expect(claude).toContain("you@school.edu");
+    expect(claude).toContain("pdfCaseReview.ai.accounts");
+    const codex = switchAccountInstructions("codex-cli", "you@school.edu");
+    expect(codex).toContain("codex logout");
+    expect(codex).toContain("codex login");
+    const manual = switchAccountInstructions("manual");
+    expect(manual).toContain("the right account");
+    expect(manual).toContain("verified");
   });
 });
 
