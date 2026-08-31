@@ -44,7 +44,7 @@ function flush(): void {
   }
   if (current && dirty) {
     dirty = false;
-    post({ type: "saveNote", target: current.target, note: note.value });
+    post({ type: "saveNote", documentUri: current.documentUri, target: current.target, note: note.value });
   }
 }
 
@@ -99,19 +99,24 @@ note.addEventListener("input", scheduleSave);
 note.addEventListener("blur", flush);
 category.addEventListener("change", () => {
   if (current) {
-    post({ type: "setCategory", target: current.target, categoryId: category.value });
+    post({
+      type: "setCategory",
+      documentUri: current.documentUri,
+      target: current.target,
+      categoryId: category.value,
+    });
   }
 });
 revealButton.addEventListener("click", () => {
   if (current) {
     flush();
-    post({ type: "revealTarget", target: current.target });
+    post({ type: "revealTarget", documentUri: current.documentUri, target: current.target });
   }
 });
 deleteButton.addEventListener("click", () => {
   if (current) {
     dirty = false;
-    post({ type: "deleteTarget", target: current.target });
+    post({ type: "deleteTarget", documentUri: current.documentUri, target: current.target });
   }
 });
 window.addEventListener("message", (event: MessageEvent) => {

@@ -5,7 +5,6 @@
 
 import {
   type CancellationToken,
-  commands,
   Uri,
   type Webview,
   type WebviewView,
@@ -42,7 +41,7 @@ export class NoteEditorViewProvider extends Disposable implements WebviewViewPro
   private view: WebviewView | undefined;
   private target: NoteTarget | undefined;
   private documentUri: string | undefined;
-  private known: { note: string; categoryId: string | null } | undefined;
+  private known: { target: NoteTarget; note: string; categoryId: string | null } | undefined;
   private lastLoad: NoteEditorLoad | undefined;
 
   constructor(
@@ -92,7 +91,11 @@ export class NoteEditorViewProvider extends Disposable implements WebviewViewPro
     };
   }
 
-  /** Applies one view message against the current model; the debug seam calls this directly. */
+  /**
+   * Applies one view message at its own address; the debug seam calls this directly. Messages are
+   * never dropped for arriving after the displayed target changed: a save flushed during a target
+   * or document switch still lands on the note it was written for.
+   */
   handleMessage(raw: unknown): void {
     if (!isNoteEditorToHostMessage(raw)) {
       return;
@@ -101,23 +104,23 @@ export class NoteEditorViewProvider extends Disposable implements WebviewViewPro
       this.refresh(true);
       return;
     }
-    const document = this.tracker.active;
-    if (
-      !document ||
-      document.uri.toString() !== this.documentUri ||
-      !this.target ||
-      !sameNoteTarget(raw.target, this.target)
-    ) {
+    const document = this.editorProvider.getDocument(Uri.parse(raw.documentUri));
+    if (!document) {
       return;
     }
+    const displayed =
+      this.target !== undefined &&
+      this.documentUri === raw.documentUri &&
+      sameNoteTarget(raw.target, this.target);
     switch (raw.type) {
       case "saveNote": {
-        this.known = { note: raw.note, categoryId: this.known?.categoryId ?? null };
+        if (displayed) {
+          this.known = { target: raw.target, note: raw.note, categoryId: this.known?.categoryId ?? null };
+        }
         if (raw.target.kind === "highlight") {
           this.editorProvider.updateHighlight(document, raw.target.id, { note: raw.note });
         } else if (raw.target.kind === "page") {
           if (raw.note.trim() === "") {
-            this.known = { ...this.known, note: "" };
             this.editorProvider.removePageNote(document, raw.target.page);
           } else {
             this.editorProvider.setPageNote(document, raw.target.page, raw.note);
@@ -131,31 +134,77 @@ export class NoteEditorViewProvider extends Disposable implements WebviewViewPro
         if (raw.target.kind !== "highlight") {
           return;
         }
-        this.known = { note: this.known?.note ?? "", categoryId: raw.categoryId };
-        void commands.executeCommand("pdfCaseReview.setCategory", raw.target.id, raw.categoryId);
+        const category = document.model.categories.find((entry) => entry.id === raw.categoryId);
+        if (!category) {
+          return;
+        }
+        if (displayed) {
+          this.known = { target: raw.target, note: this.known?.note ?? "", categoryId: raw.categoryId };
+        }
+        if (!this.editorProvider.updateHighlight(document, raw.target.id, { categoryId: category.id })) {
+          return;
+        }
+        const viewerId = this.viewerIdFor(document, raw.target.id);
+        if (viewerId !== undefined) {
+          this.editorProvider.postMessage(document.uri, {
+            type: "recolorHighlights",
+            items: [{ viewerId, color: category.color }],
+          });
+        }
         return;
       }
       case "deleteTarget": {
         if (raw.target.kind === "highlight") {
-          void commands.executeCommand("pdfCaseReview.deleteHighlight", raw.target.id);
+          const viewerId = this.viewerIdFor(document, raw.target.id);
+          const item =
+            viewerId === undefined ? { sidecarId: raw.target.id } : { sidecarId: raw.target.id, viewerId };
+          const delivered = this.editorProvider.postMessage(document.uri, {
+            type: "deleteHighlights",
+            items: [item],
+          });
+          if (delivered === 0) {
+            this.editorProvider.removeHighlight(document, raw.target.id);
+          }
         } else if (raw.target.kind === "page") {
           this.editorProvider.removePageNote(document, raw.target.page);
         } else {
           this.editorProvider.removeDocumentNote(document, raw.target.id);
         }
-        this.target = undefined;
-        this.refresh(true);
+        if (displayed) {
+          this.target = undefined;
+          this.refresh(true);
+        }
         return;
       }
       case "revealTarget": {
         if (raw.target.kind === "highlight") {
-          void commands.executeCommand("pdfCaseReview.goToHighlight", raw.target.id);
+          const targetId = raw.target.id;
+          const highlight = document.model.highlights.find((entry) => entry.id === targetId);
+          if (!highlight) {
+            return;
+          }
+          const message: Parameters<PdfCaseReviewEditorProvider["postMessage"]>[1] = {
+            type: "goTo",
+            page: highlight.page,
+            rect: highlight.rect,
+          };
+          const viewerId = this.viewerIdFor(document, raw.target.id);
+          if (viewerId !== undefined) {
+            message.viewerId = viewerId;
+          }
+          this.editorProvider.postMessage(document.uri, message);
         } else if (raw.target.kind === "page") {
           this.editorProvider.postMessage(document.uri, { type: "goTo", page: raw.target.page });
         }
         return;
       }
     }
+  }
+
+  /** The id the viewer knows this highlight by, when it has an editor or an embedded annotation. */
+  private viewerIdFor(document: PdfDocument, id: string): string | undefined {
+    const highlight = document.model.highlights.find((entry) => entry.id === id);
+    return document.session.viewerIdFor(id) ?? highlight?.pdfjsId;
   }
 
   /** Re-sends the target when the model moved away from what the view last knew. */
@@ -186,10 +235,16 @@ export class NoteEditorViewProvider extends Disposable implements WebviewViewPro
       this.post({ type: "clear", reason: "noTarget" });
       return;
     }
-    if (!force && this.known?.note === payload.note && this.known.categoryId === payload.categoryId) {
+    if (
+      !force &&
+      this.known !== undefined &&
+      sameNoteTarget(this.known.target, this.target) &&
+      this.known.note === payload.note &&
+      this.known.categoryId === payload.categoryId
+    ) {
       return;
     }
-    this.known = { note: payload.note, categoryId: payload.categoryId };
+    this.known = { target: this.target, note: payload.note, categoryId: payload.categoryId };
     this.lastLoad = payload;
     this.post(payload);
   }
@@ -204,6 +259,7 @@ export class NoteEditorViewProvider extends Disposable implements WebviewViewPro
         }
         return {
           type: "load",
+          documentUri: document.uri.toString(),
           target,
           title: "Highlight",
           quote: normalizeQuote(highlight.text) || highlightLabel(highlight),
@@ -221,6 +277,7 @@ export class NoteEditorViewProvider extends Disposable implements WebviewViewPro
         const pageNote = model.pageNotes?.find((entry) => entry.page === target.page);
         return {
           type: "load",
+          documentUri: document.uri.toString(),
           target,
           title: `Page ${target.page}`,
           quote: null,
@@ -237,6 +294,7 @@ export class NoteEditorViewProvider extends Disposable implements WebviewViewPro
         }
         return {
           type: "load",
+          documentUri: document.uri.toString(),
           target,
           title: documentNote.title,
           quote: null,

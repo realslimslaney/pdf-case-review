@@ -17,17 +17,22 @@ describe("isNoteTarget", () => {
 
 describe("isNoteEditorToHostMessage", () => {
   const target = { kind: "highlight", id: "a" };
+  const documentUri = "file:///case.pdf";
 
-  it("validates every message shape in full", () => {
+  it("validates every message shape in full, including the document address", () => {
     expect(isNoteEditorToHostMessage({ type: "ready" })).toBe(true);
-    expect(isNoteEditorToHostMessage({ type: "saveNote", target, note: "x" })).toBe(true);
-    expect(isNoteEditorToHostMessage({ type: "saveNote", target, note: 3 })).toBe(false);
-    expect(isNoteEditorToHostMessage({ type: "saveNote", note: "x" })).toBe(false);
-    expect(isNoteEditorToHostMessage({ type: "setCategory", target, categoryId: "fact" })).toBe(true);
-    expect(isNoteEditorToHostMessage({ type: "setCategory", target })).toBe(false);
-    expect(isNoteEditorToHostMessage({ type: "deleteTarget", target })).toBe(true);
-    expect(isNoteEditorToHostMessage({ type: "revealTarget", target })).toBe(true);
-    expect(isNoteEditorToHostMessage({ type: "load", target })).toBe(false);
+    expect(isNoteEditorToHostMessage({ type: "saveNote", documentUri, target, note: "x" })).toBe(true);
+    expect(isNoteEditorToHostMessage({ type: "saveNote", target, note: "x" })).toBe(false);
+    expect(isNoteEditorToHostMessage({ type: "saveNote", documentUri: "", target, note: "x" })).toBe(false);
+    expect(isNoteEditorToHostMessage({ type: "saveNote", documentUri, target, note: 3 })).toBe(false);
+    expect(isNoteEditorToHostMessage({ type: "saveNote", documentUri, note: "x" })).toBe(false);
+    expect(isNoteEditorToHostMessage({ type: "setCategory", documentUri, target, categoryId: "fact" })).toBe(
+      true,
+    );
+    expect(isNoteEditorToHostMessage({ type: "setCategory", documentUri, target })).toBe(false);
+    expect(isNoteEditorToHostMessage({ type: "deleteTarget", documentUri, target })).toBe(true);
+    expect(isNoteEditorToHostMessage({ type: "revealTarget", documentUri, target })).toBe(true);
+    expect(isNoteEditorToHostMessage({ type: "load", documentUri, target })).toBe(false);
     expect(isNoteEditorToHostMessage(undefined)).toBe(false);
   });
 });

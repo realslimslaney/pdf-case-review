@@ -25,7 +25,14 @@ export interface SpawnPlan {
   env: Record<string, string>;
 }
 
-/** Pure argv/env construction, unit-tested; `lastMessageFile` is Codex's robust output channel. */
+/**
+ * Pure argv/env construction, unit-tested; `lastMessageFile` is Codex's robust output channel.
+ * The summary is a text-in text-out call, never an agent run: `--tools=` disables every Claude
+ * tool (the `=` form survives the Windows shell join, where an empty `""` argument would vanish)
+ * and also makes the CLI ignore user and project settings; Codex gets its strictest sandbox.
+ * The caller runs both from an empty scratch directory so a prompt-injected instruction inside a
+ * highlight cannot reach project files or project agent rules.
+ */
 export function spawnPlan(
   provider: "claude-cli" | "codex-cli",
   options: { model?: string; configDir?: string; lastMessageFile?: string },
@@ -35,7 +42,7 @@ export function spawnPlan(
     if (options.configDir) {
       env["CLAUDE_CONFIG_DIR"] = expandHome(options.configDir);
     }
-    const args = ["-p", "--output-format", "text"];
+    const args = ["-p", "--output-format", "text", "--tools="];
     if (options.model) {
       args.push("--model", options.model);
     }
@@ -44,7 +51,7 @@ export function spawnPlan(
   if (options.configDir) {
     env["CODEX_HOME"] = expandHome(options.configDir);
   }
-  const args = ["exec"];
+  const args = ["exec", "--sandbox", "read-only", "--skip-git-repo-check"];
   if (options.model) {
     args.push("--model", options.model);
   }
@@ -76,10 +83,9 @@ export async function runProvider(
   options: RunProviderOptions = {},
 ): Promise<string> {
   const timeoutMs = options.timeoutMs ?? PROVIDER_TIMEOUT_MS;
-  let scratchDir: string | undefined;
+  const scratchDir = await mkdtemp(join(tmpdir(), "pdf-case-review-"));
   let lastMessageFile: string | undefined;
   if (provider === "codex-cli") {
-    scratchDir = await mkdtemp(join(tmpdir(), "pdf-case-review-"));
     lastMessageFile = join(scratchDir, "last-message.txt");
   }
   const planOptions: Parameters<typeof spawnPlan>[1] = {};
@@ -99,6 +105,7 @@ export async function runProvider(
       const child = spawn(plan.binary, plan.args, {
         shell: process.platform === "win32",
         windowsHide: true,
+        cwd: scratchDir,
         env: { ...process.env, ...plan.env },
       });
       const out: Buffer[] = [];

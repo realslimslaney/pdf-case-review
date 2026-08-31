@@ -16,6 +16,8 @@ export interface NoteEditorCategory {
 
 export interface NoteEditorLoad {
   type: "load";
+  /** The PDF document the target belongs to; echoed back on every mutating message. */
+  documentUri: string;
   target: NoteTarget;
   /** Heading: the document note's title, `Page 3`, or `Highlight`. */
   title: string;
@@ -31,12 +33,16 @@ export interface NoteEditorLoad {
 
 export type HostToNoteEditorMessage = NoteEditorLoad | { type: "clear"; reason: "noDocument" | "noTarget" };
 
+/**
+ * Every mutating message is fully addressed (document plus target), so a save flushed while the
+ * host was already switched to another note, or another document, still lands where it belongs.
+ */
 export type NoteEditorToHostMessage =
   | { type: "ready" }
-  | { type: "saveNote"; target: NoteTarget; note: string }
-  | { type: "setCategory"; target: NoteTarget; categoryId: string }
-  | { type: "deleteTarget"; target: NoteTarget }
-  | { type: "revealTarget"; target: NoteTarget };
+  | { type: "saveNote"; documentUri: string; target: NoteTarget; note: string }
+  | { type: "setCategory"; documentUri: string; target: NoteTarget; categoryId: string }
+  | { type: "deleteTarget"; documentUri: string; target: NoteTarget }
+  | { type: "revealTarget"; documentUri: string; target: NoteTarget };
 
 export function isNoteTarget(value: unknown): value is NoteTarget {
   if (typeof value !== "object" || value === null) {
@@ -59,16 +65,20 @@ export function isNoteEditorToHostMessage(value: unknown): value is NoteEditorTo
     return false;
   }
   const message = value as Record<string, unknown>;
+  const addressed =
+    typeof message["documentUri"] === "string" &&
+    message["documentUri"] !== "" &&
+    isNoteTarget(message["target"]);
   switch (message["type"]) {
     case "ready":
       return true;
     case "saveNote":
-      return isNoteTarget(message["target"]) && typeof message["note"] === "string";
+      return addressed && typeof message["note"] === "string";
     case "setCategory":
-      return isNoteTarget(message["target"]) && typeof message["categoryId"] === "string";
+      return addressed && typeof message["categoryId"] === "string";
     case "deleteTarget":
     case "revealTarget":
-      return isNoteTarget(message["target"]);
+      return addressed;
     default:
       return false;
   }

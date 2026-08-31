@@ -753,7 +753,7 @@
               }
             }
           },
-          "markdownDescription": "Separate CLI login directories for people with more than one account, e.g. `[{ \"id\": \"school\", \"provider\": \"claude-cli\", \"configDir\": \"~/.claude-school\" }]`. A `#pdfCaseReview.ai.requiredAccount#` rule selects one with `use`; the extension sets `CLAUDE_CONFIG_DIR` or `CODEX_HOME` on the spawned CLI itself."
+          "markdownDescription": "Separate CLI login directories for people with more than one account, e.g. `[{ \"id\": \"school\", \"provider\": \"claude-cli\", \"configDir\": \"~/.claude-school\" }]`. A `#pdfCaseReview.ai.requiredAccount#` rule selects one with `use`; the extension sets `CLAUDE_CONFIG_DIR` or `CODEX_HOME` on the spawned CLI itself. The account's `provider` must match `#pdfCaseReview.ai.provider#`."
         },
         "pdfCaseReview.ai.requireVerifiedAccountForProtected": {
           "type": "boolean",

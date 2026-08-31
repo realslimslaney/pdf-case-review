@@ -41,12 +41,25 @@ function activeDocument(context: CommandContext): PdfDocument | undefined {
   return document;
 }
 
+/**
+ * The account a rule names must belong to the active provider: the gate records the identity it
+ * verified, so the run may never execute under a different CLI or login directory than that.
+ */
 async function resolveIdentity(settings: AiSettings, accountId: string | undefined) {
   const desktop = await import("../desktop/identity");
   if (accountId !== undefined) {
     const account = settings.accounts.find((entry) => entry.id === accountId);
     if (!account) {
-      return null;
+      throw new Error(
+        `a requiredAccount rule names the account "${accountId}", but pdfCaseReview.ai.accounts has ` +
+          "no such entry.",
+      );
+    }
+    if (account.provider !== settings.provider) {
+      throw new Error(
+        `the matched requiredAccount rule selects account "${accountId}" (${account.provider}), but ` +
+          `pdfCaseReview.ai.provider is ${settings.provider}. Align the rule and the provider.`,
+      );
     }
     return desktop.whoAmIForAccount(account);
   }
@@ -87,13 +100,20 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
     }
   }
 
-  const gate = await ensureAttestation(document, {
-    whoAmI: (accountId) => resolveIdentity(settings, accountId),
-    provider: settings.provider,
-    settings,
-    globalState: context.extensionContext.globalState,
-    editorProvider: context.provider,
-  });
+  let gate: Awaited<ReturnType<typeof ensureAttestation>>;
+  try {
+    gate = await ensureAttestation(document, {
+      whoAmI: (accountId) => resolveIdentity(settings, accountId),
+      provider: settings.provider,
+      settings,
+      globalState: context.extensionContext.globalState,
+      editorProvider: context.provider,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    void window.showErrorMessage(`PDF Case Review: ${message}`);
+    return false;
+  }
   if (!gate.ok) {
     context.output.info(`summarizeWithAi refused: ${gate.reason}`);
     return false;
@@ -103,9 +123,8 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
     { maxWords: settings.maxWords },
     gate.attestation,
   );
-  const configDir = gate.accountId
-    ? settings.accounts.find((entry) => entry.id === gate.accountId)?.configDir
-    : undefined;
+  const account = gate.accountId ? settings.accounts.find((entry) => entry.id === gate.accountId) : undefined;
+  const configDir = account?.provider === settings.provider ? account.configDir : undefined;
 
   const { ProviderRunCancelled, runProvider } = await import("../desktop/aiProviders");
   try {

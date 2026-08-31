@@ -46,7 +46,7 @@ Nothing leaves your machine unless a provider is enabled or you copy the prompt 
 | `pdfCaseReview.ai.includeInReport` | `true` | Include the cached AI summary as a labeled, grey-italics section of generated reports. |
 | `pdfCaseReview.ai.maxWords` | `250` | Word budget for the executive summary. |
 | `pdfCaseReview.ai.requiredAccount` | `[]` | Rules refusing the AI step under the wrong login. The first rule whose `when` matches (`protected`, `authorizationLineMatches`, `pathGlob`) applies; `email` names the account that must be signed in (no override) and `use` selects an entry of `ai.accounts`. |
-| `pdfCaseReview.ai.accounts` | `[]` | Separate CLI login directories (`{id, provider, configDir}`) for people with more than one account; the extension sets `CLAUDE_CONFIG_DIR` / `CODEX_HOME` on the spawned CLI itself. |
+| `pdfCaseReview.ai.accounts` | `[]` | Separate CLI login directories (`{id, provider, configDir}`) for people with more than one account; the extension sets `CLAUDE_CONFIG_DIR` / `CODEX_HOME` on the spawned CLI itself. The account's `provider` must match `pdfCaseReview.ai.provider`; a matched rule selecting a mismatched account is refused with a configuration error, so a run can never execute under a different CLI or login than the one the consent dialog verified. |
 | `pdfCaseReview.ai.requireVerifiedAccountForProtected` | `true` | Refuse CLI providers on publisher-protected documents when the login cannot be verified from the CLI's saved credentials; the manual clipboard path asks for an extra acknowledgment instead. |
 
 ## Viewer
