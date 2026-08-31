@@ -1,12 +1,17 @@
 {
   "name": "pdf-case-review",
-  "displayName": "PDF Case Review",
+  "displayName": "%displayName%",
   "version": "0.0.0",
-  "description": "Highlight PDFs by category (fact, financial, strategic, concern, question…) and turn your notes into a printable Word/PDF report.",
+  "description": "%description%",
   "publisher": "realslimslaney",
   "author": "Brennen Slaney",
   "license": "Apache-2.0",
   "private": true,
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#1F2937",
+    "theme": "dark"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/realslimslaney/pdf-case-review.git"
@@ -42,7 +47,13 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "AI summary providers and the report output folder setting are disabled in untrusted workspaces."
+      "description": "AI summary providers and the report output folder setting are disabled in untrusted workspaces.",
+      "restrictedConfigurations": [
+        "pdfCaseReview.report.outputFolder",
+        "pdfCaseReview.ai.provider",
+        "pdfCaseReview.ai.requiredAccount",
+        "pdfCaseReview.ai.accounts"
+      ]
     },
     "virtualWorkspaces": {
       "supported": "limited",
@@ -53,7 +64,7 @@
     "customEditors": [
       {
         "viewType": "pdfCaseReview.pdf",
-        "displayName": "PDF Case Review",
+        "displayName": "%customEditor.displayName%",
         "selector": [
           {
             "filenamePattern": "*.pdf"
@@ -72,7 +83,7 @@
       "activitybar": [
         {
           "id": "pdfCaseReview",
-          "title": "PDF Case Review",
+          "title": "%viewsContainer.title%",
           "icon": "media/activity.svg"
         }
       ]
@@ -81,74 +92,140 @@
       "pdfCaseReview": [
         {
           "id": "pdfCaseReview.highlights",
-          "name": "Highlights",
+          "name": "%view.highlights%",
           "icon": "media/activity.svg",
-          "contextualTitle": "PDF Case Review"
+          "contextualTitle": "%viewsContainer.title%"
+        },
+        {
+          "id": "pdfCaseReview.noteEditor",
+          "type": "webview",
+          "name": "%view.noteEditor%",
+          "icon": "media/activity.svg",
+          "contextualTitle": "%viewsContainer.title%"
         }
       ]
     },
     "viewsWelcome": [
       {
         "view": "pdfCaseReview.highlights",
-        "contents": "Open a PDF to start highlighting.\n[Open File](command:workbench.action.files.openFile)\nSelect text in the PDF and use the highlight button; every highlight shows up here with its page.",
+        "contents": "%viewsWelcome.highlights%",
         "when": "!pdfCaseReview.hasActiveDocument"
       }
     ],
     "commands": [
       {
         "command": "pdfCaseReview.goToHighlight",
-        "title": "Go to Highlight",
-        "category": "PDF Case Review"
+        "title": "%command.goToHighlight%",
+        "category": "%commandCategory%"
       },
       {
         "command": "pdfCaseReview.setCategory",
-        "title": "Set Category",
-        "category": "PDF Case Review",
+        "title": "%command.setCategory%",
+        "category": "%commandCategory%",
         "icon": "$(symbol-color)"
       },
       {
         "command": "pdfCaseReview.deleteHighlight",
-        "title": "Delete Highlight",
-        "category": "PDF Case Review",
+        "title": "%command.deleteHighlight%",
+        "category": "%commandCategory%",
         "icon": "$(trash)"
       },
       {
         "command": "pdfCaseReview.copyQuote",
-        "title": "Copy Quote",
-        "category": "PDF Case Review"
+        "title": "%command.copyQuote%",
+        "category": "%commandCategory%"
       },
       {
         "command": "pdfCaseReview.revealSidecar",
-        "title": "Reveal Sidecar",
-        "category": "PDF Case Review",
+        "title": "%command.revealSidecar%",
+        "category": "%commandCategory%",
         "icon": "$(json)"
       },
       {
         "command": "pdfCaseReview.groupByCategory",
-        "title": "Group by Category",
-        "category": "PDF Case Review",
+        "title": "%command.groupByCategory%",
+        "category": "%commandCategory%",
         "icon": "$(symbol-class)"
       },
       {
         "command": "pdfCaseReview.groupByPage",
-        "title": "Group by Page",
-        "category": "PDF Case Review",
+        "title": "%command.groupByPage%",
+        "category": "%commandCategory%",
         "icon": "$(book)"
       },
       {
         "command": "pdfCaseReview.highlightWithCategory",
-        "title": "Highlight Selection with Category...",
-        "category": "PDF Case Review"
+        "title": "%command.highlightWithCategory%",
+        "category": "%commandCategory%"
       },
       {
         "command": "pdfCaseReview.applyCategoryPreset",
-        "title": "Apply Category Preset...",
-        "category": "PDF Case Review"
+        "title": "%command.applyCategoryPreset%",
+        "category": "%commandCategory%"
       },
       {
         "command": "pdfCaseReview.syncCategoriesFromSettings",
-        "title": "Sync Categories from Settings",
-        "category": "PDF Case Review"
+        "title": "%command.syncCategoriesFromSettings%",
+        "category": "%commandCategory%"
+      },
+      {
+        "command": "pdfCaseReview.addPageNote",
+        "title": "%command.addPageNote%",
+        "category": "%commandCategory%"
+      },
+      {
+        "command": "pdfCaseReview.addDocumentNote",
+        "title": "%command.addDocumentNote%",
+        "category": "%commandCategory%"
+      },
+      {
+        "command": "pdfCaseReview.deleteNote",
+        "title": "%command.deleteNote%",
+        "category": "%commandCategory%",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "pdfCaseReview.editNote",
+        "title": "%command.editNote%",
+        "category": "%commandCategory%",
+        "icon": "$(note)"
+      },
+      {
+        "command": "pdfCaseReview.generateReport",
+        "title": "%command.generateReport%",
+        "category": "%commandCategory%",
+        "icon": "$(output)"
+      },
+      {
+        "command": "pdfCaseReview.generateReportAs",
+        "title": "%command.generateReportAs%",
+        "category": "%commandCategory%"
+      },
+      {
+        "command": "pdfCaseReview.ai.copySummaryPrompt",
+        "title": "%command.ai.copySummaryPrompt%",
+        "category": "%commandCategory%"
+      },
+      {
+        "command": "pdfCaseReview.ai.pasteSummary",
+        "title": "%command.ai.pasteSummary%",
+        "category": "%commandCategory%"
+      },
+      {
+        "command": "pdfCaseReview.ai.reviewConsent",
+        "title": "%command.ai.reviewConsent%",
+        "category": "%commandCategory%"
+      },
+      {
+        "command": "pdfCaseReview.summarizeWithAi",
+        "title": "%command.summarizeWithAi%",
+        "category": "%commandCategory%",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "pdfCaseReview.ai.chooseProvider",
+        "title": "%command.ai.chooseProvider%",
+        "category": "%commandCategory%"
       }
     ],
     "menus": {
@@ -188,6 +265,46 @@
         {
           "command": "pdfCaseReview.syncCategoriesFromSettings",
           "when": "pdfCaseReview.hasActiveDocument"
+        },
+        {
+          "command": "pdfCaseReview.addPageNote",
+          "when": "pdfCaseReview.hasActiveDocument"
+        },
+        {
+          "command": "pdfCaseReview.addDocumentNote",
+          "when": "pdfCaseReview.hasActiveDocument"
+        },
+        {
+          "command": "pdfCaseReview.deleteNote",
+          "when": "pdfCaseReview.hasActiveDocument"
+        },
+        {
+          "command": "pdfCaseReview.editNote",
+          "when": "pdfCaseReview.hasActiveDocument"
+        },
+        {
+          "command": "pdfCaseReview.generateReport",
+          "when": "pdfCaseReview.hasActiveDocument"
+        },
+        {
+          "command": "pdfCaseReview.generateReportAs",
+          "when": "pdfCaseReview.hasActiveDocument"
+        },
+        {
+          "command": "pdfCaseReview.ai.copySummaryPrompt",
+          "when": "pdfCaseReview.hasActiveDocument && isWorkspaceTrusted"
+        },
+        {
+          "command": "pdfCaseReview.ai.pasteSummary",
+          "when": "pdfCaseReview.hasActiveDocument && isWorkspaceTrusted"
+        },
+        {
+          "command": "pdfCaseReview.ai.reviewConsent",
+          "when": "pdfCaseReview.hasActiveDocument"
+        },
+        {
+          "command": "pdfCaseReview.summarizeWithAi",
+          "when": "pdfCaseReview.hasActiveDocument && isWorkspaceTrusted"
         }
       ],
       "view/title": [
@@ -209,6 +326,11 @@
       ],
       "view/item/context": [
         {
+          "command": "pdfCaseReview.editNote",
+          "when": "view == pdfCaseReview.highlights && (viewItem == highlight || viewItem == pageNote || viewItem == documentNote)",
+          "group": "1_edit@0"
+        },
+        {
           "command": "pdfCaseReview.setCategory",
           "when": "view == pdfCaseReview.highlights && viewItem == highlight",
           "group": "1_edit@1"
@@ -226,6 +348,16 @@
         {
           "command": "pdfCaseReview.deleteHighlight",
           "when": "view == pdfCaseReview.highlights && viewItem == highlight",
+          "group": "inline"
+        },
+        {
+          "command": "pdfCaseReview.deleteNote",
+          "when": "view == pdfCaseReview.highlights && (viewItem == pageNote || viewItem == documentNote)",
+          "group": "2_danger@1"
+        },
+        {
+          "command": "pdfCaseReview.deleteNote",
+          "when": "view == pdfCaseReview.highlights && (viewItem == pageNote || viewItem == documentNote)",
           "group": "inline"
         }
       ]
@@ -311,6 +443,24 @@
         "args": {
           "index": 9
         }
+      },
+      {
+        "command": "pdfCaseReview.addDocumentNote",
+        "key": "ctrl+alt+d",
+        "mac": "cmd+alt+d",
+        "when": "activeCustomEditorId == pdfCaseReview.pdf"
+      },
+      {
+        "command": "pdfCaseReview.editNote",
+        "key": "ctrl+alt+n",
+        "mac": "cmd+alt+n",
+        "when": "activeCustomEditorId == pdfCaseReview.pdf"
+      },
+      {
+        "command": "pdfCaseReview.generateReport",
+        "key": "ctrl+alt+r",
+        "mac": "cmd+alt+r",
+        "when": "pdfCaseReview.hasActiveDocument"
       }
     ],
     "configuration": {
@@ -439,6 +589,178 @@
           ],
           "description": "How the Highlights view groups highlights."
         },
+        "pdfCaseReview.report.defaultFormat": {
+          "type": "string",
+          "scope": "resource",
+          "default": "ask",
+          "enum": [
+            "ask",
+            "markdown",
+            "docx",
+            "pdf"
+          ],
+          "enumDescriptions": [
+            "Ask with a picker every time",
+            "Markdown (.md)",
+            "Word (.docx)",
+            "PDF (.pdf)"
+          ],
+          "description": "Format used by Generate Report (Ctrl+Alt+R)."
+        },
+        "pdfCaseReview.report.organization": {
+          "type": "string",
+          "scope": "resource",
+          "default": "both",
+          "enum": [
+            "category",
+            "page",
+            "both"
+          ],
+          "enumDescriptions": [
+            "Sections per category",
+            "Sections per page, in reading order",
+            "Sections per category, plus a per-page appendix"
+          ],
+          "description": "How the report body is organized."
+        },
+        "pdfCaseReview.report.outputFolder": {
+          "type": "string",
+          "scope": "resource",
+          "default": "",
+          "markdownDescription": "Folder for generated reports. Empty writes next to the PDF; a relative path is resolved against the workspace folder. Ignored in untrusted workspaces."
+        },
+        "pdfCaseReview.report.quoteMaxChars": {
+          "type": "number",
+          "scope": "resource",
+          "default": 300,
+          "minimum": 0,
+          "description": "Longest quoted passage in the report, truncated at a word boundary. 0 means unlimited."
+        },
+        "pdfCaseReview.report.author": {
+          "type": "string",
+          "scope": "resource",
+          "default": "",
+          "description": "Author shown in the report's title block. Empty omits the line."
+        },
+        "pdfCaseReview.report.includeEmptyCategories": {
+          "type": "boolean",
+          "scope": "resource",
+          "default": false,
+          "description": "Show categories with no highlights in the report's summary table and body."
+        },
+        "pdfCaseReview.report.usePageLabels": {
+          "type": "boolean",
+          "scope": "resource",
+          "default": true,
+          "markdownDescription": "Cite the PDF's own page labels when they differ from page numbers, as `p. iv [4]`."
+        },
+        "pdfCaseReview.report.overwrite": {
+          "type": "boolean",
+          "scope": "resource",
+          "default": false,
+          "markdownDescription": "Overwrite an existing `<name>.review.<ext>` report. Off writes a numbered copy instead."
+        },
+        "pdfCaseReview.ai.provider": {
+          "type": "string",
+          "scope": "resource",
+          "default": "off",
+          "enum": [
+            "off",
+            "claude-cli",
+            "codex-cli"
+          ],
+          "enumDescriptions": [
+            "No AI. The manual Copy Summary Prompt / Paste AI Summary commands still work.",
+            "Claude Code CLI (spawns `claude`; desktop only)",
+            "Codex CLI (spawns `codex`; desktop only)"
+          ],
+          "markdownDescription": "AI provider for the optional executive summary. Off by default: nothing leaves your machine unless you enable a provider, and only your highlights and notes are ever sent, never the PDF. You are responsible for using AI on appropriate content; the developers of this extension are not liable for misuse."
+        },
+        "pdfCaseReview.ai.model": {
+          "type": "string",
+          "scope": "resource",
+          "default": "",
+          "markdownDescription": "Model passed to the provider CLI (`--model`). Empty uses the CLI's default."
+        },
+        "pdfCaseReview.ai.includeInReport": {
+          "type": "boolean",
+          "scope": "resource",
+          "default": true,
+          "description": "Include the cached AI summary as a labeled section of generated reports."
+        },
+        "pdfCaseReview.ai.maxWords": {
+          "type": "number",
+          "scope": "resource",
+          "default": 250,
+          "minimum": 1,
+          "description": "Word budget for the AI executive summary."
+        },
+        "pdfCaseReview.ai.requiredAccount": {
+          "type": "array",
+          "scope": "resource",
+          "default": [],
+          "items": {
+            "type": "object",
+            "properties": {
+              "when": {
+                "type": "object",
+                "properties": {
+                  "protected": {
+                    "type": "boolean"
+                  },
+                  "authorizationLineMatches": {
+                    "type": "string"
+                  },
+                  "pathGlob": {
+                    "type": "string"
+                  }
+                }
+              },
+              "email": {
+                "type": "string"
+              },
+              "use": {
+                "type": "string"
+              }
+            }
+          },
+          "markdownDescription": "Rules refusing the AI step under the wrong login. The first rule whose `when` conditions match applies; `email` names the account that must be signed in (no override), and `use` names an entry of `#pdfCaseReview.ai.accounts#` to run under. Example: `[{ \"when\": { \"protected\": true }, \"email\": \"you@school.edu\" }]`."
+        },
+        "pdfCaseReview.ai.accounts": {
+          "type": "array",
+          "scope": "resource",
+          "default": [],
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "provider",
+              "configDir"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "claude-cli",
+                  "codex-cli"
+                ]
+              },
+              "configDir": {
+                "type": "string"
+              }
+            }
+          },
+          "markdownDescription": "Separate CLI login directories for people with more than one account, e.g. `[{ \"id\": \"school\", \"provider\": \"claude-cli\", \"configDir\": \"~/.claude-school\" }]`. A `#pdfCaseReview.ai.requiredAccount#` rule selects one with `use`; the extension sets `CLAUDE_CONFIG_DIR` or `CODEX_HOME` on the spawned CLI itself. The account's `provider` must match `#pdfCaseReview.ai.provider#`."
+        },
+        "pdfCaseReview.ai.requireVerifiedAccountForProtected": {
+          "type": "boolean",
+          "scope": "resource",
+          "default": true,
+          "markdownDescription": "Refuse to run AI providers on publisher-protected documents when the logged-in account cannot be verified from the CLI's saved login. The manual Copy Summary Prompt asks for an extra acknowledgment instead."
+        },
         "pdfCaseReview.viewer.defaultZoom": {
           "type": "string",
           "scope": "resource",
@@ -485,6 +807,7 @@
   "scripts": {
     "prepare-pdfjs": "node scripts/prepare-pdfjs.mjs",
     "fixtures": "node scripts/make-fixtures.mjs",
+    "make-icon": "node scripts/make-icon.mjs",
     "build": "tsup",
     "watch": "tsup --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.webview.json --noEmit",

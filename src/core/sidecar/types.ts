@@ -100,6 +100,8 @@ export interface AiConsent {
   authorizationLine?: string;
   attestedAt: string;
   responsibilityAcknowledged: boolean;
+  /** The user's explicit yes to "may this document be fed into AI context on this account?". */
+  eligibilityConfirmed?: boolean;
   wordingVersion?: number;
 }
 
@@ -122,6 +124,15 @@ export interface Sidecar {
   documentNotes?: DocumentNote[];
   aiConsent?: AiConsent;
   aiSummary?: AiSummary;
+}
+
+/** Notes with content: non-empty highlight and page notes, plus every document note. */
+export function countNotes(sidecar: Sidecar): number {
+  return (
+    sidecar.highlights.filter((highlight) => highlight.note.trim() !== "").length +
+    (sidecar.pageNotes ?? []).filter((pageNote) => pageNote.note.trim() !== "").length +
+    (sidecar.documentNotes?.length ?? 0)
+  );
 }
 
 /** Copies categories into the self-describing sidecar shape, numbering them in the given order. */

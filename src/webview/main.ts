@@ -148,6 +148,9 @@ window.addEventListener("message", async (event: MessageEvent<HostToWebviewMessa
     case "goTo":
       adapter.goTo(message.page, message.rect, message.viewerId);
       return;
+    case "getPageText":
+      await adapter.getPageText(message.requestId, message.page);
+      return;
     case "createFromSelection":
       await adapter.applyCategory(message.id, message.color);
       return;

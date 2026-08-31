@@ -1,16 +1,25 @@
-// The Highlights view as data: groups (by category or by page) of highlight rows. Pure so the
-// labels, ordering and buckets are unit-tested; the extension turns these into TreeItems.
+// The Highlights view as data: groups (by category or by page) of highlight rows, plus the
+// document-notes group and per-page note rows. Pure so the labels, ordering and buckets are
+// unit-tested; the extension turns these into TreeItems.
 
 import { UNCATEGORIZED_CATEGORY } from "./categories";
 import { formatCitation, normalizeQuote, truncateQuote } from "./report/model";
-import { sortHighlights } from "./sidecar/serialize";
-import { type Sidecar, type SidecarHighlight, sortedCategories } from "./sidecar/types";
+import { sortDocumentNotes, sortHighlights } from "./sidecar/serialize";
+import {
+  type DocumentNote,
+  type PageNote,
+  type Sidecar,
+  type SidecarHighlight,
+  sortedCategories,
+} from "./sidecar/types";
 
 export type GroupBy = "category" | "page";
 
 export const LABEL_MAX_CHARS = 60;
 export const IMAGE_REGION_LABEL = "[image region]";
 export const NO_TEXT_LABEL = "(no text captured)";
+export const DOCUMENT_NOTES_LABEL = "Document notes";
+export const PAGE_NOTE_DESCRIPTION = "page note";
 
 export interface HighlightNode {
   kind: "highlight";
@@ -24,15 +33,35 @@ export interface HighlightNode {
   categoryId: string;
 }
 
-export interface GroupNode {
-  kind: "category" | "page";
-  /** Category id, or the page number as a string. */
+export interface PageNoteNode {
+  kind: "pageNote";
+  /** The page number as a string. */
+  id: string;
+  page: number;
+  label: string;
+  description: string;
+  tooltip: string;
+}
+
+export interface DocumentNoteNode {
+  kind: "documentNote";
   id: string;
   label: string;
   description: string;
-  /** Category color; null for page groups. */
+  tooltip: string;
+}
+
+export type LeafNode = HighlightNode | PageNoteNode | DocumentNoteNode;
+
+export interface GroupNode {
+  kind: "category" | "page" | "documentNotes";
+  /** Category id, the page number as a string, or `documentNotes`. */
+  id: string;
+  label: string;
+  description: string;
+  /** Category color; null for page and document-notes groups. */
   color: string | null;
-  children: HighlightNode[];
+  children: LeafNode[];
 }
 
 export function highlightLabel(highlight: SidecarHighlight, quote = normalizeQuote(highlight.text)): string {
@@ -44,6 +73,10 @@ export function highlightLabel(highlight: SidecarHighlight, quote = normalizeQuo
 
 function countLabel(count: number): string {
   return `${count} highlight${count === 1 ? "" : "s"}`;
+}
+
+function noteCountLabel(count: number): string {
+  return `${count} note${count === 1 ? "" : "s"}`;
 }
 
 function toNode(highlight: SidecarHighlight, color: string): HighlightNode {
@@ -62,15 +95,56 @@ function toNode(highlight: SidecarHighlight, color: string): HighlightNode {
   };
 }
 
+function toPageNoteNode(pageNote: PageNote): PageNoteNode {
+  return {
+    kind: "pageNote",
+    id: String(pageNote.page),
+    page: pageNote.page,
+    label: truncateQuote(normalizeQuote(pageNote.note), LABEL_MAX_CHARS),
+    description: PAGE_NOTE_DESCRIPTION,
+    tooltip: pageNote.note,
+  };
+}
+
+function toDocumentNoteNode(documentNote: DocumentNote): DocumentNoteNode {
+  const note = documentNote.note.trim();
+  return {
+    kind: "documentNote",
+    id: documentNote.id,
+    label: documentNote.title,
+    description: truncateQuote(normalizeQuote(documentNote.note), LABEL_MAX_CHARS),
+    tooltip: note === "" ? documentNote.title : `${documentNote.title}\n\n${note}`,
+  };
+}
+
+function documentNotesGroup(model: Sidecar): GroupNode | undefined {
+  const notes = model.documentNotes ?? [];
+  if (notes.length === 0) {
+    return undefined;
+  }
+  return {
+    kind: "documentNotes",
+    id: "documentNotes",
+    label: DOCUMENT_NOTES_LABEL,
+    description: noteCountLabel(notes.length),
+    color: null,
+    children: sortDocumentNotes(notes).map(toDocumentNoteNode),
+  };
+}
+
 export function buildTree(model: Sidecar, groupBy: GroupBy): GroupNode[] {
   const categories = sortedCategories(model.categories);
   const colorOf = new Map(categories.map((category) => [category.id, category.color]));
   const highlights = sortHighlights(model.highlights);
   const color = (highlight: SidecarHighlight) =>
     colorOf.get(highlight.categoryId) ?? UNCATEGORIZED_CATEGORY.color;
+  const groups: GroupNode[] = [];
+  const documentNotes = documentNotesGroup(model);
+  if (documentNotes) {
+    groups.push(documentNotes);
+  }
 
   if (groupBy === "category") {
-    const groups: GroupNode[] = [];
     for (const category of categories) {
       const own = highlights.filter((highlight) => highlight.categoryId === category.id);
       if (own.length === 0) {
@@ -99,19 +173,24 @@ export function buildTree(model: Sidecar, groupBy: GroupBy): GroupNode[] {
     return groups;
   }
 
-  const pages = [...new Set(highlights.map((highlight) => highlight.page))].sort(
+  const noteOf = new Map((model.pageNotes ?? []).map((pageNote) => [pageNote.page, pageNote]));
+  const pages = [...new Set([...highlights.map((highlight) => highlight.page), ...noteOf.keys()])].sort(
     (left, right) => left - right,
   );
-  return pages.map((page) => {
+  for (const page of pages) {
     const own = highlights.filter((highlight) => highlight.page === page);
     const label = formatCitation(page, own[0]?.pageLabel, true).replace(/^p\. /, "Page ");
-    return {
+    const pageNote = noteOf.get(page);
+    const children: LeafNode[] = pageNote ? [toPageNoteNode(pageNote)] : [];
+    children.push(...own.map((highlight) => toNode(highlight, color(highlight))));
+    groups.push({
       kind: "page",
       id: String(page),
       label,
-      description: countLabel(own.length),
+      description: own.length > 0 ? countLabel(own.length) : noteCountLabel(1),
       color: null,
-      children: own.map((highlight) => toNode(highlight, color(highlight))),
-    };
-  });
+      children,
+    });
+  }
+  return groups;
 }

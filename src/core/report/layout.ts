@@ -14,12 +14,21 @@ export interface TextRun {
 
 export type ReportBlock =
   | { kind: "heading"; level: 1 | 2 | 3; text: string; color?: string }
-  | { kind: "paragraph"; runs: TextRun[]; muted?: boolean }
+  | { kind: "paragraph"; runs: TextRun[]; muted?: boolean; generated?: boolean }
   | { kind: "keyValues"; entries: [string, string][] }
   | { kind: "table"; header: string[]; rows: string[][]; swatches: (string | null)[] }
   | { kind: "quote"; text: string; citation: string; color: string }
-  | { kind: "bullets"; items: TextRun[][] }
+  | { kind: "bullets"; items: TextRun[][]; generated?: boolean }
   | { kind: "pageBreak" };
+
+export const AI_LEGEND = "Italic grey text marks AI-generated content; it is not the reader's own writing.";
+
+/** Flags AI-generated blocks so every renderer sets them apart (grey italics) from the reader's text. */
+function markGenerated(blocks: ReportBlock[]): ReportBlock[] {
+  return blocks.map((block) =>
+    block.kind === "paragraph" || block.kind === "bullets" ? { ...block, generated: true } : block,
+  );
+}
 
 function inlineRuns(tokens: Token[] | undefined, style: Partial<TextRun> = {}): TextRun[] {
   const runs: TextRun[] = [];
@@ -126,15 +135,15 @@ export function layoutReport(model: ReportModel): ReportBlock[] {
 
   if (model.aiSummary) {
     const { provider, model: modelName, account, generatedAt, attestedAt, text } = model.aiSummary;
+    blocks.push({ kind: "paragraph", muted: true, runs: [{ text: AI_LEGEND }] });
     blocks.push({ kind: "heading", level: 2, text: "AI summary" });
-    blocks.push(...noteToBlocks(text));
+    blocks.push(...markGenerated(noteToBlocks(text)));
     blocks.push({
       kind: "paragraph",
       muted: true,
       runs: [
         {
           text: `Generated with ${provider}${modelName ? ` (${modelName})` : ""}${account ? ` as ${account}` : ""} on ${generatedAt}${attestedAt ? `; eligibility attested on ${attestedAt}` : ""}.`,
-          italic: true,
         },
       ],
     });
@@ -160,7 +169,7 @@ export function layoutReport(model: ReportModel): ReportBlock[] {
     for (const section of model.byCategory) {
       blocks.push({ kind: "heading", level: 2, text: section.category.name, color: section.category.color });
       if (section.items.length === 0) {
-        blocks.push({ kind: "paragraph", muted: true, runs: [{ text: "No highlights.", italic: true }] });
+        blocks.push({ kind: "paragraph", muted: true, runs: [{ text: "No highlights." }] });
       }
       for (const item of section.items) {
         blocks.push(...itemBlocks(item, false));

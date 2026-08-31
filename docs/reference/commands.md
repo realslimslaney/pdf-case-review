@@ -4,16 +4,46 @@ All commands are under the **PDF Case Review** category in the Command Palette. 
 
 ## Highlights view
 
-The **PDF Case Review** activity-bar icon opens the **Highlights** view for the active PDF. Rows show the highlighted passage (up to 60 characters) with its page; hover for the full quote and note. Grouping follows `pdfCaseReview.highlights.groupBy`.
+The **PDF Case Review** activity-bar icon opens the **Highlights** view for the active PDF. Rows show the highlighted passage (up to 60 characters) with its page; hover for the full quote and note. Grouping follows `pdfCaseReview.highlights.groupBy`. A **Document notes** group lists document-level notes first; in page grouping, a page's note appears above its highlights.
 
 | Command | Where | What it does |
 |---|---|---|
 | `PDF Case Review: Go to Highlight` | click a row | Scrolls the PDF to the highlight and flashes it. |
+| `PDF Case Review: Edit Note` | `Ctrl+Alt+N`, click a note row, row context menu, palette | Opens the target in the **Note** view (below). With no selection it targets the current page's note. |
 | `PDF Case Review: Set Category` | row context menu, palette | Picks another category for the highlight; the viewer recolors it and the PDF is updated on the next save. |
 | `PDF Case Review: Delete Highlight` | row context menu (inline trash icon), palette | Deletes the highlight. When the viewer shows it, the deletion goes through PDF.js and `Ctrl+Z` inside the viewer brings it back with its note. |
+| `PDF Case Review: Delete Note` | note row context menu (inline trash icon), palette | Deletes a page or document note. |
 | `PDF Case Review: Copy Quote` | row context menu, palette | Copies the highlighted text. |
 | `PDF Case Review: Group by Page` / `Group by Category` | view title | Switches the grouping (remembered in `pdfCaseReview.highlights.groupBy`). |
 | `PDF Case Review: Reveal Sidecar` | view title, palette | Opens the document's `.pdf.review.json` in a text editor (after the first save). |
+
+## Notes
+
+The **Note** view (under Highlights in the activity bar) edits one target at a time: a highlight (with its quote, citation and a category dropdown), a page note, or a document note. The Markdown textarea autosaves as you type and on blur; **Reveal** jumps to the highlight or page in the viewer; **Delete** removes the target.
+
+| Command | Where | What it does |
+|---|---|---|
+| `PDF Case Review: Add Page Note` | palette | One note per page (the current page when the viewer is open). Submitting an empty note removes it. |
+| `PDF Case Review: Add Document Note` | `Ctrl+Alt+D`, palette | A titled note on the whole document, for example `Thesis`. |
+
+## Reports
+
+| Command | Where | What it does |
+|---|---|---|
+| `PDF Case Review: Generate Report` | `Ctrl+Alt+R`, palette | Renders the active document's highlights and notes to `pdfCaseReview.report.defaultFormat` (`ask` shows a picker). Output is `<name>.review.<md\|docx\|pdf>` beside the PDF or in `pdfCaseReview.report.outputFolder`; existing reports get a numbered copy unless `report.overwrite` is on. |
+| `PDF Case Review: Generate Report As...` | palette | The same with a format picker every time. |
+
+## AI (optional, off by default)
+
+Every path below goes through the eligibility question first: the dialog names the signed-in account and the document, and asks whether it may be fed into AI context. Only highlights and notes are ever sent, never the PDF. AI text in reports renders in grey italics with a legend.
+
+| Command | What it does |
+|---|---|
+| `PDF Case Review: Choose AI Provider...` | Probes the `claude` and `codex` CLIs and sets `pdfCaseReview.ai.provider`; unavailable options show a one-line fix. |
+| `PDF Case Review: Summarize with AI` | Runs the configured CLI on your highlights and notes and caches the executive summary in the sidecar. Cancellable; 120 second timeout. |
+| `PDF Case Review: Copy Summary Prompt` | Puts the summary prompt and your notes on the clipboard for any chat. Works with the provider off. |
+| `PDF Case Review: Paste AI Summary` | Saves the clipboard as the document's AI summary, labeled `manual`. |
+| `PDF Case Review: Review AI Consent` | Shows the recorded attestation (account, provider, dates) and offers to revoke it. |
 
 ## Categories and keyboard highlighting
 
@@ -29,4 +59,4 @@ While a PDF is active the status bar shows `$(notebook) N highlights · PDF sync
 
 ## Keyboard
 
-Inside the viewer, `Ctrl+S` (`Cmd+S`) saves through VS Code; PDF.js's own "save" (a download) is disabled. `Ctrl+Z` / `Ctrl+Y` inside the viewer undo and redo highlight edits through PDF.js; undoing back to the saved state does not clear the dirty flag (ADR-0005).
+While the PDF editor has focus: `Ctrl+Alt+1..9` highlight with the Nth category, `Ctrl+Alt+N` edits the note, `Ctrl+Alt+D` adds a document note (`Cmd+Alt` on macOS). `Ctrl+Alt+R` generates the report whenever a PDF Case Review document is active. Inside the viewer, `Ctrl+S` (`Cmd+S`) saves through VS Code; PDF.js's own "save" (a download) is disabled. `Ctrl+Z` / `Ctrl+Y` inside the viewer undo and redo highlight edits through PDF.js; undoing back to the saved state does not clear the dirty flag (ADR-0005).

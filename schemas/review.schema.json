@@ -137,6 +137,7 @@
         "authorizationLine": { "type": "string" },
         "attestedAt": { "type": "string", "format": "date-time" },
         "responsibilityAcknowledged": { "type": "boolean" },
+        "eligibilityConfirmed": { "type": "boolean" },
         "wordingVersion": { "type": "integer" }
       }
     },

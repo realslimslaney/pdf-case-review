@@ -4,7 +4,7 @@ function escapeCell(value: string): string {
   return value.replace(/\|/g, "\\|").replace(/\n/g, " ");
 }
 
-function runsToMarkdown(runs: TextRun[]): string {
+function runsToMarkdown(runs: TextRun[], generated = false): string {
   return runs
     .map((run) => {
       let text = run.text;
@@ -14,7 +14,7 @@ function runsToMarkdown(runs: TextRun[]): string {
       if (run.bold) {
         text = `**${text}**`;
       }
-      if (run.italic) {
+      if (run.italic || generated) {
         text = `*${text}*`;
       }
       return text;
@@ -30,7 +30,7 @@ export function renderMarkdown(blocks: ReportBlock[]): string {
         lines.push(`${"#".repeat(block.level)} ${block.text}`, "");
         break;
       case "paragraph":
-        lines.push(runsToMarkdown(block.runs), "");
+        lines.push(runsToMarkdown(block.runs, block.generated === true), "");
         break;
       case "keyValues":
         for (const [key, value] of block.entries) {
@@ -57,7 +57,7 @@ export function renderMarkdown(blocks: ReportBlock[]): string {
         break;
       case "bullets":
         for (const item of block.items) {
-          lines.push(`- ${runsToMarkdown(item)}`);
+          lines.push(`- ${runsToMarkdown(item, block.generated === true)}`);
         }
         lines.push("");
         break;

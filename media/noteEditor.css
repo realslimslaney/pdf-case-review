@@ -1,0 +1,72 @@
+body {
+  padding: 8px 12px;
+  color: var(--vscode-foreground);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+}
+
+#editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#title {
+  font-weight: 600;
+}
+
+#citation {
+  color: var(--vscode-descriptionForeground);
+}
+
+#quote {
+  margin: 0;
+  padding: 4px 8px;
+  border-left: 3px solid var(--vscode-textBlockQuote-border);
+  background: var(--vscode-textBlockQuote-background);
+  max-height: 6em;
+  overflow-y: auto;
+}
+
+#category,
+#note,
+button {
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 2px;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+#note {
+  min-height: 10em;
+  padding: 6px;
+  resize: vertical;
+}
+
+#note:focus,
+#category:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  padding: 4px 10px;
+  cursor: pointer;
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+  border: none;
+}
+
+button:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.empty {
+  color: var(--vscode-descriptionForeground);
+}

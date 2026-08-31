@@ -95,6 +95,7 @@ const KEYS = {
     "authorizationLine",
     "attestedAt",
     "responsibilityAcknowledged",
+    "eligibilityConfirmed",
     "wordingVersion",
   ],
   aiSummary: ["provider", "model", "account", "generatedAt", "text"],
@@ -395,6 +396,7 @@ function readAiConsent(value: unknown, path: string): AiConsent {
   setIfDefined(consent, "accountId", reader.optionalString("accountId"));
   setIfDefined(consent, "organization", reader.optionalString("organization"));
   setIfDefined(consent, "authorizationLine", reader.optionalString("authorizationLine"));
+  setIfDefined(consent, "eligibilityConfirmed", reader.optionalBoolean("eligibilityConfirmed"));
   setIfDefined(consent, "wordingVersion", reader.optionalInteger("wordingVersion"));
   return consent;
 }

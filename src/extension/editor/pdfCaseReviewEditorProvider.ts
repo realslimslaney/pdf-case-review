@@ -49,6 +49,9 @@ import { missingFromFile, toInjectable } from "../../core/sidecar/inject";
 import { reconcileSnapshot } from "../../core/sidecar/reconcile";
 import { serializeSidecar } from "../../core/sidecar/serialize";
 import {
+  type AiConsent,
+  type AiSummary,
+  type DocumentNote,
   emptySidecar,
   type Sidecar,
   type SidecarHighlight,
@@ -152,6 +155,8 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
   private readonly _onDidChangeViewState = new EventEmitter<{ uri: Uri; active: boolean }>();
   readonly onDidChangeViewState = this._onDidChangeViewState.event;
   private viewerHtmlTemplate: Promise<string> | undefined;
+  private readonly pageTextRequests = new Map<number, (text: string | null) => void>();
+  private pageTextRequestId = 0;
   private readonly generator: string;
   /** Recent host-side events (open, resolve, load, save, reload, dispose), newest last; for tests. */
   readonly trace: string[] = [];
@@ -179,6 +184,25 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
 
   getDocument(uri: Uri): PdfDocument | undefined {
     return this.documents.get(uri.toString());
+  }
+
+  /** One page's text from the viewer; null when no viewer is open, it times out, or has no text. */
+  async getPageText(document: PdfDocument, page: number, timeoutMs = 5000): Promise<string | null> {
+    this.pageTextRequestId += 1;
+    const requestId = this.pageTextRequestId;
+    const promise = new Promise<string | null>((resolve) => {
+      this.pageTextRequests.set(requestId, resolve);
+      setTimeout(() => {
+        if (this.pageTextRequests.delete(requestId)) {
+          resolve(null);
+        }
+      }, timeoutMs);
+    });
+    if (this.postMessage(document.uri, { type: "getPageText", requestId, page }) === 0) {
+      this.pageTextRequests.delete(requestId);
+      return null;
+    }
+    return promise;
   }
 
   /** Posts a message to every webview showing `uri`; returns how many received it. */
@@ -457,6 +481,10 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
       case "openLink":
         void this.openLocalLink(webview, resourceRoot, message.url);
         return;
+      case "pageText":
+        this.pageTextRequests.get(message.requestId)?.(message.text);
+        this.pageTextRequests.delete(message.requestId);
+        return;
       case "log": {
         this.output[message.level](`[webview] ${message.message}`);
         const logs = [...(state?.logs ?? []), `${message.level}: ${message.message}`].slice(-30);
@@ -519,6 +547,91 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
     document.session.unbind(id);
     this.markEdited(document);
     return true;
+  }
+
+  /** Creates or replaces the note on one page; an existing note keeps its creation time. */
+  setPageNote(document: PdfDocument, page: number, note: string): void {
+    const now = new Date().toISOString();
+    const pageNotes = [...(document.model.pageNotes ?? [])];
+    const index = pageNotes.findIndex((entry) => entry.page === page);
+    const current = pageNotes[index];
+    if (current) {
+      pageNotes[index] = { ...current, note, updatedAt: now };
+    } else {
+      pageNotes.push({ page, note, createdAt: now, updatedAt: now });
+    }
+    document.model = { ...document.model, pageNotes };
+    this.markEdited(document);
+  }
+
+  removePageNote(document: PdfDocument, page: number): boolean {
+    const remaining = (document.model.pageNotes ?? []).filter((entry) => entry.page !== page);
+    if (remaining.length === (document.model.pageNotes?.length ?? 0)) {
+      return false;
+    }
+    const { pageNotes: _removed, ...rest } = document.model;
+    document.model = remaining.length > 0 ? { ...rest, pageNotes: remaining } : rest;
+    this.markEdited(document);
+    return true;
+  }
+
+  addDocumentNote(document: PdfDocument, title: string, note = ""): DocumentNote {
+    const now = new Date().toISOString();
+    const documentNote: DocumentNote = { id: newHighlightId(), title, note, createdAt: now, updatedAt: now };
+    document.model = {
+      ...document.model,
+      documentNotes: [...(document.model.documentNotes ?? []), documentNote],
+    };
+    this.markEdited(document);
+    return documentNote;
+  }
+
+  updateDocumentNote(
+    document: PdfDocument,
+    id: string,
+    changes: Partial<Pick<DocumentNote, "title" | "note">>,
+  ): boolean {
+    const documentNotes = [...(document.model.documentNotes ?? [])];
+    const index = documentNotes.findIndex((entry) => entry.id === id);
+    const current = documentNotes[index];
+    if (!current) {
+      return false;
+    }
+    documentNotes[index] = { ...current, ...changes, updatedAt: new Date().toISOString() };
+    document.model = { ...document.model, documentNotes };
+    this.markEdited(document);
+    return true;
+  }
+
+  removeDocumentNote(document: PdfDocument, id: string): boolean {
+    const remaining = (document.model.documentNotes ?? []).filter((entry) => entry.id !== id);
+    if (remaining.length === (document.model.documentNotes?.length ?? 0)) {
+      return false;
+    }
+    const { documentNotes: _removed, ...rest } = document.model;
+    document.model = remaining.length > 0 ? { ...rest, documentNotes: remaining } : rest;
+    this.markEdited(document);
+    return true;
+  }
+
+  setAiConsent(document: PdfDocument, consent: AiConsent): void {
+    document.model = { ...document.model, aiConsent: consent };
+    this.markEdited(document);
+  }
+
+  clearAiConsent(document: PdfDocument): boolean {
+    if (!document.model.aiConsent) {
+      return false;
+    }
+    const { aiConsent: _removed, ...rest } = document.model;
+    document.model = rest;
+    this.markEdited(document);
+    return true;
+  }
+
+  setAiSummary(document: PdfDocument, summary: AiSummary): void {
+    document.model = { ...document.model, aiSummary: summary };
+    this.markEdited(document);
   }
 
   /** Draws the highlights the file holds no annotation for (protected PDF, embedding off, unsaved). */

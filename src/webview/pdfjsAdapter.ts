@@ -420,6 +420,17 @@ export class PdfjsAdapter {
     this.scheduleSnapshot();
   }
 
+  /** Answers a host `getPageText` request; null when the page has no text layer or the read fails. */
+  async getPageText(requestId: number, page: number): Promise<void> {
+    try {
+      const items = await this.textItems(page - 1);
+      const text = items.map((item) => item.str + (item.hasEOL ? "\n" : "")).join(" ");
+      this.post({ type: "pageText", requestId, page, text: items.length > 0 ? text : null });
+    } catch {
+      this.post({ type: "pageText", requestId, page, text: null });
+    }
+  }
+
   private textItems(pageIndex: number): Promise<TextItemGeometry[]> {
     let items = this.textItemsByPage.get(pageIndex);
     if (!items) {

@@ -9,11 +9,15 @@ import {
   Uri,
 } from "vscode";
 
-import { buildTree, type GroupBy, type GroupNode, type HighlightNode } from "../../core/tree";
+import { buildTree, type GroupBy, type GroupNode, type LeafNode } from "../../core/tree";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import { Disposable } from "../util/disposable";
 
-export type TreeNode = GroupNode | HighlightNode;
+export type TreeNode = GroupNode | LeafNode;
+
+function isGroup(node: TreeNode): node is GroupNode {
+  return "children" in node;
+}
 
 export interface TreeSnapshot {
   groupBy: GroupBy;
@@ -58,7 +62,7 @@ export class HighlightsTreeProvider extends Disposable implements TreeDataProvid
     this.parents.clear();
     for (const group of this.groups) {
       for (const child of group.children) {
-        this.parents.set(child.id, group);
+        this.parents.set(`${child.kind}:${child.id}`, group);
       }
     }
     this._onDidChangeTreeData.fire(undefined);
@@ -68,29 +72,34 @@ export class HighlightsTreeProvider extends Disposable implements TreeDataProvid
     if (!element) {
       return this.groups;
     }
-    return element.kind === "highlight" ? [] : element.children;
+    return isGroup(element) ? element.children : [];
   }
 
   getParent(element: TreeNode): TreeNode | undefined {
-    return element.kind === "highlight" ? this.parents.get(element.id) : undefined;
+    return isGroup(element) ? undefined : this.parents.get(`${element.kind}:${element.id}`);
   }
 
   getTreeItem(node: TreeNode): TreeItem {
-    if (node.kind === "highlight") {
-      const item = new TreeItem(node.label, TreeItemCollapsibleState.None);
-      item.id = `highlight:${node.id}`;
+    if (isGroup(node)) {
+      const item = new TreeItem(node.label, TreeItemCollapsibleState.Expanded);
+      item.id = `${node.kind}:${node.id}`;
       item.description = node.description;
-      item.tooltip = node.tooltip;
-      item.iconPath = circleIcon(node.color);
-      item.contextValue = "highlight";
-      item.command = { command: "pdfCaseReview.goToHighlight", title: "Go to highlight", arguments: [node] };
+      item.iconPath = node.color
+        ? circleIcon(node.color)
+        : new ThemeIcon(node.kind === "documentNotes" ? "notebook" : "book");
+      item.contextValue = node.kind;
       return item;
     }
-    const item = new TreeItem(node.label, TreeItemCollapsibleState.Expanded);
+    const item = new TreeItem(node.label, TreeItemCollapsibleState.None);
     item.id = `${node.kind}:${node.id}`;
     item.description = node.description;
-    item.iconPath = node.color ? circleIcon(node.color) : new ThemeIcon("book");
+    item.tooltip = node.tooltip;
+    item.iconPath = node.kind === "highlight" ? circleIcon(node.color) : new ThemeIcon("note");
     item.contextValue = node.kind;
+    item.command =
+      node.kind === "highlight"
+        ? { command: "pdfCaseReview.goToHighlight", title: "Go to highlight", arguments: [node] }
+        : { command: "pdfCaseReview.editNote", title: "Edit note", arguments: [node] };
     return item;
   }
 

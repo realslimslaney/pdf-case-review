@@ -2,22 +2,25 @@
 
 > Highlight PDFs by category inside VS Code, add notes, and turn them into a printable Word / PDF / Markdown report.
 
-**Status: 0.1.0 pre-release (highlight and persist).** Not on the Marketplace yet. See `docs/explanation/decisions.md` for the architecture decisions and the spike results.
+**Status: 0.3.0 pre-release (notes and report).** Not on the Marketplace yet. See `docs/explanation/decisions.md` for the architecture decisions and the spike results.
 
 Built for reading business-school cases (Fact, Financial, Strategic implication, Concern, Question), but the categories are yours to define, so it works just as well for papers, contracts and textbooks.
 
-## What works today (0.1.0)
+<!-- TODO(listing): 20-second GIF over a CC-licensed case goes here before the Marketplace listing.
+<img src="media/demo.gif" alt="Highlighting a case and generating a report" width="720"> -->
 
-- Open any `.pdf` in VS Code with a full PDF.js viewer.
-- Select text and use the highlight button, or press `Ctrl+Alt+1` to `Ctrl+Alt+9` (`Cmd+Alt` on macOS) to highlight with a category. Categories are yours to define; presets for business cases, academic papers and contracts are built in.
-- The **Highlights** view lists everything by category or by page; click to jump, right-click to change the category, copy the quote or delete.
-- Highlights are stored beside the PDF in `case.pdf.review.json` (the canonical copy) and written into the PDF as real annotations on save when the file allows it. Publisher-protected PDFs are never modified.
-- Undo and redo inside the viewer work through PDF.js; hot exit keeps unsaved highlights.
+## Features
 
-## Coming next
+| | |
+|---|---|
+| **Highlight by category** | Select text and use the highlight button, or `Ctrl+Alt+1` to `Ctrl+Alt+9` (`Cmd+Alt` on macOS). Categories are yours to define; presets for business cases, academic papers and contracts are built in. |
+| **Notes everywhere** | A note on every highlight (`Ctrl+Alt+N`), on a page, and on the whole document (`Ctrl+Alt+D`), edited in the Note view with Markdown and autosave. |
+| **Highlights view** | Everything by category or by page: click to jump, right-click to recategorize, copy the quote, edit or delete. |
+| **One-button report** | `Ctrl+Alt+R` renders your quotes and notes to Markdown, Word or PDF: summary table, per-category sections, page appendix, page labels in citations. |
+| **Plain-text storage** | Highlights and notes live beside the PDF in `case.pdf.review.json` (the canonical copy) and are written into unencrypted PDFs as real annotations on save. Publisher-protected PDFs are never modified. |
+| **Optional AI summary** | Off by default. Claude Code or Codex CLI drafts an executive summary from your highlights and notes, behind an eligibility check that always names the signed-in account; or copy the prompt into any chat yourself. |
 
-- Notes on highlights, pages and the document, and the one-button report in Markdown, Word or PDF (0.3.0).
-- Optional, off by default: an AI executive summary via Claude Code, Codex, Copilot or an API key, always behind an eligibility confirmation that shows which account is used.
+Undo and redo inside the viewer work through PDF.js; hot exit keeps unsaved highlights.
 
 ## Purchased and protected PDFs
 
@@ -25,7 +28,9 @@ Commercially published case PDFs are usually encrypted with an owner password an
 
 ## Privacy & responsibility
 
-The extension makes no network requests and collects no telemetry. If you enable an AI provider, only your highlighted excerpts and notes are sent (never the PDF), and only after you confirm the account being used. **You are responsible for using this tool on appropriate content; the developers of this extension are not liable for misuse.**
+The extension makes no network requests and collects no telemetry. Nothing leaves your machine unless you enable an AI provider or copy the summary prompt yourself, and even then only your highlighted excerpts and notes are sent, never the PDF.
+
+Before any excerpt reaches a model, the extension asks directly: may this document be fed into AI context on this account? The dialog names the signed-in account (read from the CLI's own saved login), shows the document's authorization line when it has one, and records your answer with your notes. You can require a specific account for protected documents (`pdfCaseReview.ai.requiredAccount`); the wrong login is refused with no override. **You are responsible for using this tool on appropriate content; the developers of this extension are not liable for misuse.**
 
 ## Development
 

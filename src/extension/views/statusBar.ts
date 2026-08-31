@@ -2,7 +2,7 @@
 
 import { StatusBarAlignment, window } from "vscode";
 
-import type { PdfWriteStatus } from "../../core/sidecar/types";
+import { countNotes, type PdfWriteStatus } from "../../core/sidecar/types";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import { baseName, type PdfDocument } from "../editor/pdfDocument";
 import { Disposable } from "../util/disposable";
@@ -27,8 +27,10 @@ function pdfStatus(document: PdfDocument): string {
 
 export function statusText(document: PdfDocument): string {
   const count = document.model.highlights.length;
+  const notes = countNotes(document.model);
+  const noteText = notes > 0 ? `, ${notes} note${notes === 1 ? "" : "s"}` : "";
   const detail = pdfStatus(document);
-  return `$(notebook) ${count} highlight${count === 1 ? "" : "s"}${detail ? ` · ${detail}` : ""}`;
+  return `$(notebook) ${count} highlight${count === 1 ? "" : "s"}${noteText}${detail ? ` · ${detail}` : ""}`;
 }
 
 export class HighlightsStatusBar extends Disposable {
