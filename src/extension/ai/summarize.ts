@@ -88,6 +88,20 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
     );
     return false;
   }
+  // Fail before the consent dialog when the binary is gone (a new machine, synced settings):
+  // without this the gate falls back to "account not reported" and the run dies on ENOENT.
+  const provider = settings.provider as "claude-cli" | "codex-cli";
+  const desktop = await import("../desktop/identity");
+  if (!(await desktop.providerOnPath(provider))) {
+    context.output.info(`summarizeWithAi refused: ${provider} binary not found on PATH`);
+    void window
+      .showErrorMessage(
+        `PDF Case Review: ${desktop.PROVIDER_LABEL[provider]} is the configured AI provider, but its CLI is not on PATH. ${desktop.INSTALL_FIX[provider]}`,
+        "Choose AI Provider...",
+      )
+      .then((pick) => (pick ? commands.executeCommand("pdfCaseReview.ai.chooseProvider") : undefined));
+    return false;
+  }
   const cached = document.model.aiSummary;
   if (cached && cached.provider === settings.provider) {
     const choice = await window.showInformationMessage(
