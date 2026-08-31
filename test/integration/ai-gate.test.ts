@@ -100,13 +100,19 @@ suite("M2 phase 4: AI eligibility gate and manual hand-off", () => {
     const state = await documentState(pdf);
     assert.ok(state?.model.aiSummary?.inputDigest, "the pasted summary carries an input digest");
 
-    const fresh = await vscode.commands.executeCommand<vscode.Uri>("pdfCaseReview.generateReport", "markdown");
+    const fresh = await vscode.commands.executeCommand<vscode.Uri>(
+      "pdfCaseReview.generateReport",
+      "markdown",
+    );
     assert.ok(fresh);
     const freshText = new TextDecoder().decode(await vscode.workspace.fs.readFile(fresh));
     assert.ok(!freshText.includes(STALE_LINE), "an unchanged review renders without the caution");
 
     await highlight(pdf, 1, "#53FFBC", 2);
-    const stale = await vscode.commands.executeCommand<vscode.Uri>("pdfCaseReview.generateReport", "markdown");
+    const stale = await vscode.commands.executeCommand<vscode.Uri>(
+      "pdfCaseReview.generateReport",
+      "markdown",
+    );
     assert.ok(stale);
     const staleText = new TextDecoder().decode(await vscode.workspace.fs.readFile(stale));
     assert.ok(staleText.includes(STALE_LINE), "the report flags the summary after the change");
