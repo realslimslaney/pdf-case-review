@@ -102,4 +102,49 @@ suite("M3 phase 3: Export Annotated PDF", () => {
     const after = await vscode.workspace.fs.readFile(pdf);
     assert.ok(sameBytes(before, after), "exporting onto the source must not touch it");
   });
+
+  test("an export does not mark the source as embedded; a later save still writes it", async () => {
+    const pdf = fixtureUri("generated", "export-test", "case.pdf");
+    const destination = fixtureUri("generated", "export-test", "case-unsaved.annotated.pdf");
+    await openWith(pdf);
+    await waitForLoaded(pdf);
+    await highlight(pdf, 2, "#FFCBE6", 2);
+
+    await vscode.commands.executeCommand("pdfCaseReview.exportAnnotatedPdf", destination);
+    const exported = await readEmbeddedHighlights(await vscode.workspace.fs.readFile(destination));
+    assert.equal(exported.length, 2, "the export carries the unsaved highlight");
+
+    await vscode.commands.executeCommand("workbench.action.files.save");
+    await waitFor("the document to be clean after save", async () => {
+      const state = await documentState(pdf);
+      return state && !state.dirty ? state : undefined;
+    });
+    const source = await readEmbeddedHighlights(await vscode.workspace.fs.readFile(pdf));
+    assert.equal(source.length, 2, "the save after an export must still embed into the source");
+    await closeAll();
+  });
+
+  test("the export embeds even when pdf.embedOnSave is off", async () => {
+    const configuration = () => vscode.workspace.getConfiguration("pdfCaseReview.pdf");
+    const pdf = fixtureUri("generated", "export-test", "no-embed.pdf");
+    const destination = fixtureUri("generated", "export-test", "no-embed.annotated.pdf");
+    await configuration().update("embedOnSave", false, vscode.ConfigurationTarget.Global);
+    try {
+      await copyFixture(fixtureUri("generated", "sample-case.pdf"), pdf);
+      await openWith(pdf);
+      await waitForLoaded(pdf);
+      await highlight(pdf, 1, "#53FFBC", 1);
+      const sourceBefore = await vscode.workspace.fs.readFile(pdf);
+
+      await vscode.commands.executeCommand("pdfCaseReview.exportAnnotatedPdf", destination);
+
+      const exported = await readEmbeddedHighlights(await vscode.workspace.fs.readFile(destination));
+      assert.equal(exported.length, 1, "the setting governs the source, never an exported copy");
+      const sourceAfter = await vscode.workspace.fs.readFile(pdf);
+      assert.ok(sameBytes(sourceBefore, sourceAfter), "the source stays byte-identical");
+      await closeAll();
+    } finally {
+      await configuration().update("embedOnSave", undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
 });

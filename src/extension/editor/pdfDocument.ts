@@ -74,13 +74,16 @@ export function sourceFor(uri: Uri, info: PdfInfo): SidecarSource {
 
 /** The custom document behind a PDF Case Review editor: the PDF on disk plus its sidecar model. */
 const SELF_WRITE_MEMORY = 4;
+/** Watcher events for our own write arrive within moments; an older match (a checkout restoring
+ * a recent version of the file) is a real external change and must reload. */
+const SELF_WRITE_TTL_MS = 5_000;
 
 export class PdfDocument extends Disposable implements CustomDocument {
   private readonly _uri: Uri;
   /** Hash of the bytes the viewer last loaded; watcher events that don't change it are ignored. */
   contentHash: string | undefined;
   /** Hashes of our own recent PDF writes; rapid saves can interleave with watcher events. */
-  private readonly recentSelfWrites: string[] = [];
+  private readonly recentSelfWrites: { hash: string; at: number }[] = [];
   /** Canonical text of the model as last loaded or saved; dirty means the model no longer matches. */
   savedSnapshot: string;
   /** Viewer-id bookkeeping for the current viewer load (reset on every `viewerLoaded`). */
@@ -137,14 +140,18 @@ export class PdfDocument extends Disposable implements CustomDocument {
 
   /** Records one of our own PDF writes so the watcher can tell it from an external change. */
   noteSelfWrite(hash: string): void {
-    this.recentSelfWrites.push(hash);
+    this.recentSelfWrites.push({ hash, at: Date.now() });
     while (this.recentSelfWrites.length > SELF_WRITE_MEMORY) {
       this.recentSelfWrites.shift();
     }
   }
 
   isRecentSelfWrite(hash: string): boolean {
-    return this.recentSelfWrites.includes(hash);
+    const cutoff = Date.now() - SELF_WRITE_TTL_MS;
+    while (this.recentSelfWrites[0] && this.recentSelfWrites[0].at < cutoff) {
+      this.recentSelfWrites.shift();
+    }
+    return this.recentSelfWrites.some((entry) => entry.hash === hash);
   }
 
   private serialized: { model: Sidecar; text: string } | undefined;

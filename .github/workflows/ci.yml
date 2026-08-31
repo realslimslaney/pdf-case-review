@@ -61,6 +61,12 @@ jobs:
           size=$(stat -c%s pdf-case-review.vsix)
           echo "VSIX size: $size bytes"
           test "$size" -lt 15728640
+      - name: VSIX contents are clean
+        if: runner.os == 'Linux'
+        # Logs, local notes and nested VSIXes must never ship; assert the file list, not just the size.
+        run: |
+          pnpm exec vsce ls --no-dependencies > vsix-files.txt
+          ! grep -E '\.(log|vsix)$|\.local\.md$' vsix-files.txt
       - name: Upload VSIX
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v7

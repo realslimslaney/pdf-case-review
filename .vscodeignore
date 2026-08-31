@@ -8,6 +8,7 @@
 .devcontainer/**
 *.local.md
 *.vsix
+*.log
 test-results/**
 playwright-report/**
 .gitattributes

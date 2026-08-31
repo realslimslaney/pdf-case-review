@@ -182,7 +182,12 @@ export async function exportCopy(
   context: SyncContext,
 ): Promise<Uri> {
   const bytes = await workspace.fs.readFile(document.uri);
+  // embeddedFingerprint tracks what the SOURCE file holds; an export writes its bytes to the
+  // destination only, so whatever the embed step records must not stick to the source, or the
+  // next save would skip embedding a highlight the source never received.
+  const sourceFingerprint = document.embeddedFingerprint;
   const outcome = await embedStep(document, bytes, context);
+  document.embeddedFingerprint = sourceFingerprint;
   const output = outcome.bytes ?? bytes;
   await writeBytes(destination, output);
   const embedded = outcome.bytes

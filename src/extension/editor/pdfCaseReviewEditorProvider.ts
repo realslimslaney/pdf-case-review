@@ -856,7 +856,13 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
     if (destination.toString() === document.uri.toString()) {
       throw new Error("choose a destination different from the original PDF");
     }
-    const context: SyncContext = { ...this.syncContext(destination), onProtected: () => {} };
+    // An exported copy exists to carry the annotations; the embedOnSave setting governs the
+    // source file only (keeping PDFs in git byte-identical), so exports always embed.
+    const context: SyncContext = {
+      ...this.syncContext(destination),
+      embedOnSave: true,
+      onProtected: () => {},
+    };
     const sidecarUri = await exportCopy(document, destination, context);
     this.note(`export #${document.instance} ${baseName(document.uri)} -> ${baseName(destination)}`);
     if (document.protected) {
