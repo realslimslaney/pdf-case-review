@@ -23,6 +23,7 @@
   "command.editNote": "Edit Note",
   "command.generateReport": "Generate Report",
   "command.generateReportAs": "Generate Report As...",
+  "command.exportAnnotatedPdf": "Export Annotated PDF...",
   "command.ai.copySummaryPrompt": "Copy Summary Prompt",
   "command.ai.pasteSummary": "Paste AI Summary",
   "command.ai.reviewConsent": "Review AI Consent",
