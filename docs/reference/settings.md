@@ -55,3 +55,6 @@ Nothing leaves your machine unless a provider is enabled or you copy the prompt 
 |---|---|---|
 | `pdfCaseReview.viewer.defaultZoom` | `auto` | Zoom when a PDF opens: `auto`, `page-actual`, `page-fit`, `page-width` or a percentage. |
 | `pdfCaseReview.viewer.sidebarOnLoad` | `0` | PDF.js sidebar panel to show on open: `-1` restore previous, `0` none, `1` thumbnails, `2` outline, `3` attachments, `4` layers. |
+| `pdfCaseReview.viewer.maxCanvasPixels` | `0` | Largest canvas area (in pixels) a page may render at; larger pages render at reduced resolution. `0` keeps the PDF.js default. Lower it on memory-constrained machines for very large documents; applies when the PDF is reopened. See [very large PDFs](../how-to/large-pdfs.md). |
+| `pdfCaseReview.viewer.maxImageSize` | `0` | Largest decoded image (width times height, in pixels); larger images are skipped. `0` keeps the PDF.js default (no limit). Applies when the PDF is reopened. |
+| `pdfCaseReview.viewer.retainContextWhenHidden` | `true` | Keep the viewer alive while its tab is hidden, so switching back is instant. Turn off to free renderer memory for hidden tabs; the viewer then reloads (highlights intact) when shown again. `window` scope; takes effect after reloading the window. |
