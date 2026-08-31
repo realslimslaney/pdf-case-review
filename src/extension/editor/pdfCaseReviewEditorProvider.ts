@@ -25,6 +25,7 @@
 
 import {
   type CancellationToken,
+  ColorThemeKind,
   type CustomDocumentBackup,
   type CustomDocumentBackupContext,
   type CustomDocumentContentChangeEvent,
@@ -43,9 +44,9 @@ import {
 } from "vscode";
 
 import { type Category, toHighlightEditorColors } from "../../core/categories";
-import { adoptEmbedded, repairPdfjsIds, toEmbeddable } from "../../core/pdfExport/syncPlan";
+import { adoptEmbedded, missingFromFile, toEmbeddable, toInjectable } from "../../core/highlight/convert";
+import { repairPdfjsIds, syncModeOnOpen } from "../../core/pdfExport/syncPlan";
 import { newHighlightId } from "../../core/sidecar/ids";
-import { missingFromFile, toInjectable } from "../../core/sidecar/inject";
 import { reconcileSnapshot } from "../../core/sidecar/reconcile";
 import { serializeSidecar } from "../../core/sidecar/serialize";
 import {
@@ -63,14 +64,15 @@ import {
   type InjectableHighlight,
   isWebviewToHostMessage,
   type SerializedHighlight,
+  type ThemeKind,
   type ViewerConfig,
 } from "../../shared/protocol";
+import { buildViewerHtml } from "../../shared/viewerHtml";
 import { exportCopy, inspectPdf, type PdfInspection, type SyncContext, syncOnSave } from "../pdfSync/pdfSync";
 import { configuredCategories, embedOnSave, sidecarLocation } from "../settings";
 import { sidecarUriFor } from "../sidecar/sidecarLocation";
 import { readSidecar, type SidecarLoad, writeSidecar } from "../sidecar/sidecarStore";
 import { disposeAll } from "../util/disposable";
-import { escapeAttribute } from "../util/escapeAttribute";
 import { WebviewCollection } from "../util/webviewCollection";
 import { baseName, hashBytes, PdfDocument, type PdfInfo, parentUri, sourceFor } from "./pdfDocument";
 
@@ -113,20 +115,29 @@ const EMPTY_VIEWER_STATE: ViewerState = {
 
 const PROTECTED_NOTICE_KEY = "pdfCaseReview.notices.protectedPdf.dismissed";
 
-const CSP_META_REGEX = /<meta\s+http-equiv="Content-Security-Policy"[\s\S]*?\/>\s*/u;
+/** Lets the integration tests answer the hash-mismatch warning without a dialog. */
+export type HashMismatchTestResponder = (fileName: string) => "keep" | "dismiss";
+let hashMismatchTestResponder: HashMismatchTestResponder | undefined;
+export function setHashMismatchTestResponder(responder?: HashMismatchTestResponder): void {
+  hashMismatchTestResponder = responder;
+}
 
 function withTrailingSlash(uri: Uri): string {
   const value = uri.toString();
   return value.endsWith("/") ? value : `${value}/`;
 }
 
-function stripViewerTags(html: string): string {
-  return html
-    .replace(CSP_META_REGEX, "")
-    .replace(/* html */ `<link rel="resource" type="application/l10n" href="locale/locale.json" />`, "")
-    .replace(/* html */ `<script src="../build/pdf.mjs" type="module"></script>`, "")
-    .replace(/* html */ `<script src="viewer.mjs" type="module"></script>`, "")
-    .replace(/* html */ `<link rel="stylesheet" href="viewer.css" />`, "");
+function themeKindOf(kind: ColorThemeKind): ThemeKind {
+  switch (kind) {
+    case ColorThemeKind.HighContrast:
+      return "high-contrast";
+    case ColorThemeKind.HighContrastLight:
+      return "high-contrast-light";
+    case ColorThemeKind.Light:
+      return "light";
+    default:
+      return "dark";
+  }
 }
 
 export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocument> {
@@ -134,9 +145,14 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
 
   static register(context: ExtensionContext, output: LogOutputChannel) {
     const provider = new PdfCaseReviewEditorProvider(context, output);
+    // Read once: webviewOptions cannot change after registration, so the setting is window-scoped
+    // and takes effect after a window reload (ADR-0007).
+    const retainContextWhenHidden = workspace
+      .getConfiguration("pdfCaseReview.viewer")
+      .get<boolean>("retainContextWhenHidden", true);
     const registration = window.registerCustomEditorProvider(PdfCaseReviewEditorProvider.viewType, provider, {
       supportsMultipleEditorsPerDocument: false,
-      webviewOptions: { retainContextWhenHidden: true },
+      webviewOptions: { retainContextWhenHidden },
     });
     return { provider, registration };
   }
@@ -157,6 +173,8 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
   private viewerHtmlTemplate: Promise<string> | undefined;
   private readonly pageTextRequests = new Map<number, (text: string | null) => void>();
   private pageTextRequestId = 0;
+  private readonly pendingRequests = new Map<number, (result: { ok: boolean; error?: string }) => void>();
+  private commandRequestId = 0;
   private readonly generator: string;
   /** Recent host-side events (open, resolve, load, save, reload, dispose), newest last; for tests. */
   readonly trace: string[] = [];
@@ -215,6 +233,33 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
     return count;
   }
 
+  /**
+   * Posts a command with a `requestId` and resolves once the viewer acknowledged it with `done`,
+   * so callers can surface failures and tests can await completion instead of sleeping.
+   */
+  async request(
+    uri: Uri,
+    message: HostToWebviewMessage,
+    timeoutMs = 15_000,
+  ): Promise<{ delivered: number; ok: boolean; error?: string }> {
+    this.commandRequestId += 1;
+    const requestId = this.commandRequestId;
+    const ack = new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      this.pendingRequests.set(requestId, resolve);
+      setTimeout(() => {
+        if (this.pendingRequests.delete(requestId)) {
+          resolve({ ok: false, error: `${message.type} was not acknowledged within ${timeoutMs} ms` });
+        }
+      }, timeoutMs);
+    });
+    const delivered = this.postMessage(uri, { ...message, requestId });
+    if (delivered === 0) {
+      this.pendingRequests.delete(requestId);
+      return { delivered, ok: false, error: "no viewer is showing this document" };
+    }
+    return { delivered, ...(await ack) };
+  }
+
   private updateState(uri: Uri, patch: Partial<ViewerState>): ViewerState {
     const key = uri.toString();
     const next = { ...(this.states.get(key) ?? EMPTY_VIEWER_STATE), ...patch };
@@ -223,26 +268,34 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
   }
 
   async openCustomDocument(uri: Uri, openContext: CustomDocumentOpenContext): Promise<PdfDocument> {
-    const bytes = await workspace.fs.readFile(uri);
-    const info: PdfInfo = {
-      sha256: await hashBytes(bytes),
-      byteLength: bytes.byteLength,
-      pageCount: 0,
-      title: null,
-    };
     const sidecarUri = sidecarUriFor(uri, sidecarLocation(uri));
-    const onDisk = await this.loadSidecar(sidecarUri);
+    const [{ bytes, info }, onDisk, backup] = await Promise.all([
+      (async () => {
+        const pdfBytes = await workspace.fs.readFile(uri);
+        const pdfInfo: PdfInfo = {
+          sha256: await hashBytes(pdfBytes),
+          byteLength: pdfBytes.byteLength,
+          pageCount: 0,
+          title: null,
+        };
+        return { bytes: pdfBytes, info: pdfInfo };
+      })(),
+      this.loadSidecar(sidecarUri),
+      openContext.backupId ? this.loadSidecar(Uri.parse(openContext.backupId)) : undefined,
+    ]);
     const fresh = () =>
       emptySidecar(sourceFor(uri, info), configuredCategories(uri, this.output), this.generator);
 
     let model: Sidecar;
     let snapshot: string;
+    let mismatch = false;
     switch (onDisk.kind) {
       case "loaded":
         model = onDisk.model;
         snapshot = onDisk.snapshot;
         if (model.source.sha256 !== info.sha256) {
           this.output.warn(`pdf changed since the sidecar was saved: ${uri.fsPath}`);
+          mismatch = model.highlights.length > 0;
         }
         break;
       case "missing":
@@ -251,12 +304,9 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
         snapshot = serializeSidecar(model);
         break;
     }
-    if (openContext.backupId) {
-      const backup = await this.loadSidecar(Uri.parse(openContext.backupId));
-      if (backup.kind === "loaded") {
-        model = backup.model;
-        this.output.info(`restored unsaved highlights from backup: ${uri.fsPath}`);
-      }
+    if (backup?.kind === "loaded") {
+      model = backup.model;
+      this.output.info(`restored unsaved highlights from backup: ${uri.fsPath}`);
     }
 
     // Look inside the PDF when the sidecar cannot vouch for it (missing, or written against other
@@ -306,7 +356,7 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
       `open #${document.instance} ${baseName(uri)} (sidecar ${onDisk.kind}, backup ${openContext.backupId ? "yes" : "no"})`,
     );
     document.readOnly = onDisk.kind === "invalid";
-    document.protected = inspection.protected;
+    document.syncMode = syncModeOnOpen(inspection, unchanged);
     const key = uri.toString();
     this.documents.set(key, document);
     const listeners: Disposable[] = [];
@@ -317,7 +367,52 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
       this.states.delete(key);
       this.documents.delete(key);
     });
+    if (mismatch) {
+      this.warnHashMismatch(document);
+    }
+    if (workspace.fs.isWritableFileSystem(uri.scheme) === false) {
+      this.note(`readOnlyFs #${document.instance} ${uri.scheme}`);
+      void window.showInformationMessage(
+        `PDF Case Review: ${baseName(uri)} is on a read-only file system ("${uri.scheme}"); you can read and highlight, but nothing can be saved here.`,
+      );
+    }
     return document;
+  }
+
+  /**
+   * The PDF changed outside the extension since the sidecar was saved: highlight positions may no
+   * longer line up. "Keep positions" accepts the current bytes (persisted with the next save);
+   * dismissing changes nothing, so the warning returns on the next open. Re-anchoring is planned
+   * for a later release.
+   */
+  private warnHashMismatch(document: PdfDocument): void {
+    this.note(`hashMismatch #${document.instance} ${baseName(document.uri)}`);
+    const keep = "Keep positions";
+    const respond = (choice: string | undefined) => {
+      if (choice !== keep) {
+        return;
+      }
+      document.model = {
+        ...document.model,
+        source: {
+          ...document.model.source,
+          sha256: document.info.sha256,
+          byteLength: document.info.byteLength,
+        },
+      };
+      this.note(`keepPositions #${document.instance} ${baseName(document.uri)}`);
+      this.markEdited(document);
+    };
+    if (hashMismatchTestResponder) {
+      respond(hashMismatchTestResponder(baseName(document.uri)) === "keep" ? keep : undefined);
+      return;
+    }
+    void window
+      .showWarningMessage(
+        `PDF Case Review: ${baseName(document.uri)} changed since your highlights were saved. Highlight positions may no longer line up.`,
+        keep,
+      )
+      .then(respond);
   }
 
   /**
@@ -336,7 +431,7 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
       return;
     }
     const hash = await hashBytes(bytes);
-    if (hash === document.contentHash) {
+    if (hash === document.contentHash || document.isRecentSelfWrite(hash)) {
       return;
     }
     document.contentHash = hash;
@@ -485,6 +580,14 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
         this.pageTextRequests.get(message.requestId)?.(message.text);
         this.pageTextRequests.delete(message.requestId);
         return;
+      case "done": {
+        const pending = this.pendingRequests.get(message.requestId);
+        this.pendingRequests.delete(message.requestId);
+        pending?.(
+          message.error === undefined ? { ok: message.ok } : { ok: message.ok, error: message.error },
+        );
+        return;
+      }
       case "log": {
         this.output[message.level](`[webview] ${message.message}`);
         const logs = [...(state?.logs ?? []), `${message.level}: ${message.message}`].slice(-30);
@@ -523,6 +626,23 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
   replaceCategories(document: PdfDocument, categories: readonly Category[]): void {
     document.model = { ...document.model, categories: toSidecarCategories(categories) };
     this.markEdited(document);
+  }
+
+  private lastThemeKind: ThemeKind = themeKindOf(window.activeColorTheme.kind);
+
+  /**
+   * High-contrast page colors are baked into the viewer when its HTML is built (PDF.js captures
+   * them at construction), so a change of theme kind rebuilds every open viewer.
+   */
+  async handleThemeChange(): Promise<void> {
+    const kind = themeKindOf(window.activeColorTheme.kind);
+    if (kind === this.lastThemeKind) {
+      return;
+    }
+    this.lastThemeKind = kind;
+    for (const document of this.documents.values()) {
+      await this.rebuildWebview(document);
+    }
   }
 
   /** Re-renders the webview HTML (new palette); the viewer reloads and reports `viewerLoaded` again. */
@@ -636,9 +756,23 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
 
   /** Draws the highlights the file holds no annotation for (protected PDF, embedding off, unsaved). */
   private injectMissing(document: PdfDocument, annotationIdsInFile: readonly string[]): void {
-    const injectable = missingFromFile(document.model.highlights, new Set(annotationIdsInFile))
-      .map((highlight) => toInjectable(highlight, document.model.categories))
-      .filter((entry): entry is InjectableHighlight => entry !== undefined);
+    const injectable: InjectableHighlight[] = [];
+    const undrawable: string[] = [];
+    for (const highlight of missingFromFile(document.model.highlights, new Set(annotationIdsInFile))) {
+      const entry = toInjectable(highlight, document.model.categories);
+      if (entry) {
+        injectable.push(entry);
+      } else {
+        undrawable.push(highlight.id);
+      }
+    }
+    if (undrawable.length > 0) {
+      // The highlight stays in the model and the report; it just cannot be drawn in the viewer.
+      this.note(`undrawable #${document.instance}: ${undrawable.length} highlight(s)`);
+      this.output.warn(
+        `${undrawable.length} highlight(s) in ${baseName(document.sidecarUri)} have no quads or outlines and cannot be drawn: ${undrawable.join(", ")}`,
+      );
+    }
     if (injectable.length === 0) {
       return;
     }
@@ -668,6 +802,10 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
     );
     const wasDirty = document.isDirty;
     document.model = { ...document.model, highlights: result.highlights };
+    const lastCreated = result.created.at(-1);
+    if (lastCreated !== undefined) {
+      document.lastCreatedHighlightId = lastCreated;
+    }
     this.output.debug(
       `reconciled: +${result.created.length} ~${result.updated.length} -${result.deleted.length} restored ${result.restored.length}${result.derivedOnly ? " (bookkeeping only)" : ""}`,
     );
@@ -705,7 +843,34 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
     destination: Uri,
     _token: CancellationToken,
   ): Promise<void> {
-    await exportCopy(document, destination, this.syncContext(destination));
+    await this.exportAnnotatedCopy(document, destination);
+  }
+
+  /**
+   * Exports a copy of the PDF to `destination` (highlights embedded when allowed) plus a sidecar
+   * beside it. A protected source is copied byte-identical, never decrypted, and the user is told
+   * so on every export: the one-shot protected notice does not cover this path, which used to
+   * write the unmodified copy silently.
+   */
+  async exportAnnotatedCopy(document: PdfDocument, destination: Uri): Promise<Uri> {
+    if (destination.toString() === document.uri.toString()) {
+      throw new Error("choose a destination different from the original PDF");
+    }
+    // An exported copy exists to carry the annotations; the embedOnSave setting governs the
+    // source file only (keeping PDFs in git byte-identical), so exports always embed.
+    const context: SyncContext = {
+      ...this.syncContext(destination),
+      embedOnSave: true,
+      onProtected: () => {},
+    };
+    const sidecarUri = await exportCopy(document, destination, context);
+    this.note(`export #${document.instance} ${baseName(document.uri)} -> ${baseName(destination)}`);
+    if (document.protected) {
+      void window.showInformationMessage(
+        `PDF Case Review: ${baseName(document.uri)} is protected by its publisher, so ${baseName(destination)} is an identical copy (never decrypted). Your highlights and notes travel beside it in ${baseName(sidecarUri)}.`,
+      );
+    }
+    return sidecarUri;
   }
 
   private syncContext(uri: Uri): SyncContext {
@@ -811,7 +976,7 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
       const bytes = await workspace.fs.readFile(
         Uri.joinPath(this.context.extensionUri, "vendor", "pdfjs", "web", "viewer.html"),
       );
-      return stripViewerTags(new TextDecoder().decode(bytes));
+      return new TextDecoder().decode(bytes);
     })();
     return this.viewerHtmlTemplate;
   }
@@ -825,7 +990,6 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
     const resolve = (...segments: string[]) =>
       webview.asWebviewUri(Uri.joinPath(this.context.extensionUri, ...segments));
     const pdfjs = (...segments: string[]) => resolve("vendor", "pdfjs", ...segments);
-    const cspSource = webview.cspSource;
     const settings = workspace.getConfiguration("pdfCaseReview.viewer", document.uri);
 
     const config: ViewerConfig = {
@@ -833,6 +997,9 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
       resourceRoot: withTrailingSlash(webview.asWebviewUri(resourceRoot)),
       defaultZoomValue: settings.get<string>("defaultZoom", "auto"),
       sidebarViewOnLoad: settings.get<number>("sidebarOnLoad", 0),
+      themeKind: themeKindOf(window.activeColorTheme.kind),
+      maxCanvasPixels: settings.get<number>("maxCanvasPixels", 0) || null,
+      maxImageSize: settings.get<number>("maxImageSize", 0) || null,
       // The palette comes from the document's own categories: the sidecar is self-describing.
       highlightEditorColors: toHighlightEditorColors(document.model.categories),
       sandboxBundleSrc: `${pdfjs("build", "pdf.sandbox.mjs")}`,
@@ -843,23 +1010,16 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
       imageResourcesPath: withTrailingSlash(pdfjs("web", "images")),
     };
 
-    return template
-      .replace(
-        /* html */ "<title>PDF.js viewer</title>",
-        /* html */ `
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src ${cspSource} blob: data:; script-src ${cspSource} 'wasm-unsafe-eval'; worker-src ${cspSource} blob:; style-src ${cspSource} 'unsafe-inline'; img-src ${cspSource} blob: data:; font-src ${cspSource} data:; media-src blob:; base-uri 'none'; form-action 'none';">
-<meta id="pdf-case-review-config" data-config="${escapeAttribute(config)}">
-
-<title>PDF Case Review</title>
-
-<link rel="stylesheet" href="${pdfjs("web", "viewer.css")}">
-<link rel="stylesheet" href="${resolve("media", "webview.css")}">
-
-<script src="${pdfjs("build", "pdf.mjs")}" type="module"></script>
-<script src="${resolve("dist", "webview", "main.js")}" type="module"></script>
-
-<link rel="resource" type="application/l10n" href="${pdfjs("web", "locale", "locale.json")}">`,
-      )
-      .trim();
+    return buildViewerHtml(template, {
+      config,
+      cspSource: webview.cspSource,
+      urls: {
+        viewerCss: `${pdfjs("web", "viewer.css")}`,
+        webviewCss: `${resolve("media", "webview.css")}`,
+        pdfMjs: `${pdfjs("build", "pdf.mjs")}`,
+        mainJs: `${resolve("dist", "webview", "main.js")}`,
+        localeJson: `${pdfjs("web", "locale", "locale.json")}`,
+      },
+    });
   }
 }

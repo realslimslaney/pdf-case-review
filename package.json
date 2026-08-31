@@ -202,6 +202,12 @@
         "category": "%commandCategory%"
       },
       {
+        "command": "pdfCaseReview.exportAnnotatedPdf",
+        "title": "%command.exportAnnotatedPdf%",
+        "category": "%commandCategory%",
+        "icon": "$(export)"
+      },
+      {
         "command": "pdfCaseReview.ai.copySummaryPrompt",
         "title": "%command.ai.copySummaryPrompt%",
         "category": "%commandCategory%"
@@ -232,7 +238,7 @@
       "commandPalette": [
         {
           "command": "pdfCaseReview.goToHighlight",
-          "when": "false"
+          "when": "pdfCaseReview.hasActiveDocument"
         },
         {
           "command": "pdfCaseReview.setCategory",
@@ -291,6 +297,10 @@
           "when": "pdfCaseReview.hasActiveDocument"
         },
         {
+          "command": "pdfCaseReview.exportAnnotatedPdf",
+          "when": "pdfCaseReview.hasActiveDocument"
+        },
+        {
           "command": "pdfCaseReview.ai.copySummaryPrompt",
           "when": "pdfCaseReview.hasActiveDocument && isWorkspaceTrusted"
         },
@@ -300,7 +310,7 @@
         },
         {
           "command": "pdfCaseReview.ai.reviewConsent",
-          "when": "pdfCaseReview.hasActiveDocument"
+          "when": "pdfCaseReview.hasActiveDocument && isWorkspaceTrusted"
         },
         {
           "command": "pdfCaseReview.summarizeWithAi",
@@ -460,6 +470,18 @@
         "command": "pdfCaseReview.generateReport",
         "key": "ctrl+alt+r",
         "mac": "cmd+alt+r",
+        "when": "pdfCaseReview.hasActiveDocument"
+      },
+      {
+        "command": "pdfCaseReview.goToHighlight",
+        "key": "ctrl+alt+g",
+        "mac": "cmd+alt+g",
+        "when": "pdfCaseReview.hasActiveDocument"
+      },
+      {
+        "command": "pdfCaseReview.highlights.focus",
+        "key": "ctrl+alt+h",
+        "mac": "cmd+alt+h",
         "when": "pdfCaseReview.hasActiveDocument"
       }
     ],
@@ -779,6 +801,26 @@
           ],
           "description": "Zoom level when a PDF opens."
         },
+        "pdfCaseReview.viewer.maxCanvasPixels": {
+          "type": "number",
+          "scope": "resource",
+          "default": 0,
+          "minimum": 0,
+          "markdownDescription": "Maximum canvas area, in pixels, a page may render at; larger pages render at reduced resolution. `0` keeps the PDF.js default. Lower it (for example to `4194304`) to cut memory use on very large documents. Takes effect when the PDF is reopened."
+        },
+        "pdfCaseReview.viewer.maxImageSize": {
+          "type": "number",
+          "scope": "resource",
+          "default": 0,
+          "minimum": 0,
+          "markdownDescription": "Maximum decoded image size, in pixels (width times height); larger images are not rendered. `0` keeps the PDF.js default (no limit). Lower it to cut memory use on image-heavy scans. Takes effect when the PDF is reopened."
+        },
+        "pdfCaseReview.viewer.retainContextWhenHidden": {
+          "type": "boolean",
+          "scope": "window",
+          "default": true,
+          "markdownDescription": "Keep the viewer alive while its tab is hidden, so switching back is instant and viewer state survives. Turn off to free the renderer's memory for hidden tabs; the viewer then reloads (keeping your highlights) when the tab is shown again. Takes effect after reloading the window."
+        },
         "pdfCaseReview.viewer.sidebarOnLoad": {
           "type": "number",
           "scope": "resource",
@@ -818,11 +860,16 @@
     "test:integration": "vscode-test",
     "check": "pnpm run typecheck && pnpm run lint && pnpm run test:unit",
     "package": "pnpm run prepare-pdfjs && pnpm run build -- --minify && vsce package --no-dependencies",
-    "vscode:prepublish": "pnpm run build -- --minify"
+    "vscode:prepublish": "pnpm run build -- --minify",
+    "test:e2e": "playwright test -c test/e2e",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "packageManager": "pnpm@11.24.0",
   "devDependencies": {
     "@biomejs/biome": "^2.5.11",
+    "@playwright/test": "^1.62.1",
     "@types/mocha": "^10.0.10",
     "@types/node": "^26.4.0",
     "@types/pdfmake": "^0.3.3",
@@ -835,6 +882,7 @@
     "mocha": "^11.8.0",
     "tsup": "^8.5.1",
     "typescript": "^7.0.2",
+    "vitepress": "^1.6.4",
     "vitest": "^4.1.11"
   },
   "dependencies": {

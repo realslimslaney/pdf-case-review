@@ -3,8 +3,9 @@
 
 import { commands, type Disposable, env, type TreeView, window } from "vscode";
 
+import { formatCitation } from "../../core/report/model";
 import { sortedCategories } from "../../core/sidecar/types";
-import type { GroupBy, HighlightNode } from "../../core/tree";
+import { type GroupBy, type HighlightNode, highlightLabel } from "../../core/tree";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
 import type { PdfDocument } from "../editor/pdfDocument";
@@ -48,34 +49,55 @@ function resolve(
 }
 
 /** The id the viewer knows this highlight by, if it has an editor or an annotation in the file. */
-function viewerIdFor(document: PdfDocument, id: string): string | undefined {
+export function viewerIdFor(document: PdfDocument, id: string): string | undefined {
   const highlight = document.model.highlights.find((entry) => entry.id === id);
   return document.session.viewerIdFor(id) ?? highlight?.pdfjsId;
 }
 
-export function goToHighlight(context: CommandContext, target: unknown): void {
-  const resolved = resolve(context, target);
-  if (!resolved) {
+function warnUnlessDone(action: string, result: { delivered: number; ok: boolean; error?: string }): void {
+  if (result.delivered > 0 && !result.ok) {
+    void window.showWarningMessage(`PDF Case Review: ${action} (${result.error ?? "unknown error"}).`);
+  }
+}
+
+/** The keyboard path into the document: pick a highlight when none is selected anywhere. */
+async function pickHighlight(document: PdfDocument): Promise<string | undefined> {
+  const picked = await window.showQuickPick(
+    document.model.highlights.map((highlight) => ({
+      label: highlightLabel(highlight),
+      description: formatCitation(highlight.page, highlight.pageLabel, true),
+      id: highlight.id,
+    })),
+    { placeHolder: "Go to highlight" },
+  );
+  return picked?.id;
+}
+
+export async function goToHighlight(context: CommandContext, target: unknown): Promise<void> {
+  const document = context.tracker.active;
+  if (!document) {
+    void window.showInformationMessage("PDF Case Review: open a PDF first.");
     return;
   }
-  const { document, id } = resolved;
+  let id = targetId(target, context.treeView);
+  if (id === undefined && document.model.highlights.length > 0) {
+    id = await pickHighlight(document);
+  }
   const highlight = document.model.highlights.find((entry) => entry.id === id);
-  if (!highlight) {
+  if (id === undefined || !highlight) {
     return;
   }
-  const message: Parameters<PdfCaseReviewEditorProvider["postMessage"]>[1] = {
+  const viewerId = viewerIdFor(document, id);
+  const result = await context.provider.request(document.uri, {
     type: "goTo",
     page: highlight.page,
     rect: highlight.rect,
-  };
-  const viewerId = viewerIdFor(document, id);
-  if (viewerId !== undefined) {
-    message.viewerId = viewerId;
-  }
-  context.provider.postMessage(document.uri, message);
+    ...(viewerId !== undefined ? { viewerId } : {}),
+  });
+  warnUnlessDone("could not scroll to the highlight", result);
 }
 
-export function deleteHighlight(context: CommandContext, target: unknown): void {
+export async function deleteHighlight(context: CommandContext, target: unknown): Promise<void> {
   const resolved = resolve(context, target);
   if (!resolved) {
     return;
@@ -85,10 +107,12 @@ export function deleteHighlight(context: CommandContext, target: unknown): void 
   // The viewer deletes what it holds (undoably) and the next snapshot removes it from the model;
   // it reports back what it could not reach, and the host removes those itself.
   const item = viewerId === undefined ? { sidecarId: id } : { sidecarId: id, viewerId };
-  const delivered = context.provider.postMessage(document.uri, { type: "deleteHighlights", items: [item] });
-  if (delivered === 0) {
+  const result = await context.provider.request(document.uri, { type: "deleteHighlights", items: [item] });
+  if (result.delivered === 0) {
     context.provider.removeHighlight(document, id);
+    return;
   }
+  warnUnlessDone("could not delete the highlight", result);
 }
 
 export async function setCategory(
@@ -127,10 +151,11 @@ export async function setCategory(
   }
   const viewerId = viewerIdFor(document, id);
   if (viewerId !== undefined) {
-    context.provider.postMessage(document.uri, {
+    const result = await context.provider.request(document.uri, {
       type: "recolorHighlights",
       items: [{ viewerId, color: category.color }],
     });
+    warnUnlessDone("the viewer could not recolor the highlight", result);
   }
 }
 

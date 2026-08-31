@@ -99,7 +99,7 @@ describe("layout + markdown", () => {
     expect(markdown).toContain("| Financial `#53FFBC` | 1 | 1 | 2 |");
     expect(markdown).toContain("## Thesis");
     expect(markdown).toContain(
-      "> Gross margin: 2023 41.0 percent; 2024 37.2 percent; 2025 33.1 percent. *(p. 2)*",
+      "> Gross margin: 2023 41.0 percent; 2024 37.2 percent; 2025 33.1 percent. *(p. 2 · Financial)*",
     );
     expect(markdown).toContain("Eight points in two years — **pricing**, not volume.");
     expect(markdown).toContain("## Appendix: notes in reading order");
@@ -117,5 +117,23 @@ describe("layout + markdown", () => {
     );
     expect(markdown).not.toContain("Appendix");
     expect(markdown).not.toContain("### Page");
+  });
+});
+
+describe("empty quotes by highlight kind", () => {
+  const input = {
+    ...SAMPLE_INPUT,
+    highlights: [
+      { id: "free1", categoryId: "fact", page: 2, kind: "free" as const, text: "", note: "A chart." },
+      { id: "lost1", categoryId: "fact", page: 3, text: "", note: "" },
+    ],
+  };
+
+  it("labels a free highlight as an image region and a failed capture as no text", () => {
+    const markdown = renderMarkdown(layoutReport(buildReportModel(input)));
+    // Category sections name the category in the citation: the color bar alone must never be
+    // the only category marker on a quote.
+    expect(markdown).toContain("> [image region] *(p. 2 · Fact)*");
+    expect(markdown).toContain("> (no text captured) *(p. 3 · Fact)*");
   });
 });

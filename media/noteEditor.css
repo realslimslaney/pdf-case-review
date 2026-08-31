@@ -13,6 +13,8 @@ body {
 
 #title {
   font-weight: 600;
+  font-size: inherit;
+  margin: 0;
 }
 
 #citation {
@@ -48,6 +50,25 @@ button {
 #note:focus,
 #category:focus {
   outline: 1px solid var(--vscode-focusBorder);
+}
+
+button:focus-visible,
+#category:focus-visible,
+#note:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .actions {

@@ -31,7 +31,11 @@ export interface NoteEditorLoad {
   note: string;
 }
 
-export type HostToNoteEditorMessage = NoteEditorLoad | { type: "clear"; reason: "noDocument" | "noTarget" };
+export type HostToNoteEditorMessage =
+  | NoteEditorLoad
+  | { type: "clear"; reason: "noDocument" | "noTarget" }
+  /** A saveNote was applied to the model; the view announces it through its live region. */
+  | { type: "saved" };
 
 /**
  * Every mutating message is fully addressed (document plus target), so a save flushed while the

@@ -55,6 +55,18 @@ jobs:
       - name: Package
         if: runner.os == 'Linux'
         run: pnpm exec vsce package --no-dependencies --out pdf-case-review.vsix
+      - name: VSIX size under 15 MB
+        if: runner.os == 'Linux'
+        run: |
+          size=$(stat -c%s pdf-case-review.vsix)
+          echo "VSIX size: $size bytes"
+          test "$size" -lt 15728640
+      - name: VSIX contents are clean
+        if: runner.os == 'Linux'
+        # Logs, local notes and nested VSIXes must never ship; assert the file list, not just the size.
+        run: |
+          pnpm exec vsce ls --no-dependencies > vsix-files.txt
+          ! grep -E '\.(log|vsix)$|\.local\.md$' vsix-files.txt
       - name: Upload VSIX
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v7
@@ -65,3 +77,34 @@ jobs:
         if: runner.os == 'Linux'
         # Only what ends up in the VSIX; advisories in dev tooling are handled by Dependabot.
         run: pnpm audit --prod --audit-level high
+
+  e2e:
+    name: webview smoke (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Cache PDF.js
+        uses: actions/cache@v6
+        with:
+          path: vendor/pdfjs
+          key: pdfjs-${{ hashFiles('pdfjs.lock.json', 'patches/pdfjs/**') }}
+      - name: Vendor PDF.js
+        run: pnpm prepare-pdfjs
+      - name: Fixtures
+        run: pnpm fixtures
+      - name: Build
+        run: pnpm build
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Webview smoke
+        run: pnpm test:e2e

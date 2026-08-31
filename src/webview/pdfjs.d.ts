@@ -6,6 +6,7 @@
 declare module "pdfjs-viewer" {
   export interface PdfJsEventBus {
     on(name: string, listener: (event: Record<string, unknown>) => void): void;
+    off(name: string, listener: (event: Record<string, unknown>) => void): void;
     dispatch(name: string, data: Record<string, unknown>): void;
   }
 

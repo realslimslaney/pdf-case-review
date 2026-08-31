@@ -27,6 +27,7 @@ export function reportInputFromSidecar(sidecar: Sidecar, context: ReportInputCon
       page: highlight.page,
       top: highlight.rect[3],
       left: highlight.rect[0],
+      kind: highlight.kind,
       text: highlight.text,
       note: highlight.note,
     };

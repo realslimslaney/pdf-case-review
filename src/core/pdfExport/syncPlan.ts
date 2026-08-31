@@ -1,17 +1,37 @@
-// The save-time bookkeeping of the dual-write sync (ADR-0002), as pure functions: what to embed,
-// how the model changes once the embed step has decided, how to roll back when the PDF write
-// fails, and how to repair or rebuild the sidecar from the annotations found in a PDF on open.
+// The save-time bookkeeping of the dual-write sync (ADR-0002), as pure functions: how the PDF is
+// treated at save time (SyncMode), how the model changes once the embed step has decided, how to
+// roll back when the PDF write fails, and how to repair the sidecar's annotation ids on open.
+// The highlight shape conversions live in ../highlight/convert.
 
-import { type Category, categoryForColor, UNCATEGORIZED_CATEGORY } from "../categories";
-import { UUID_PATTERN } from "../sidecar/ids";
-import {
-  type PdfWriteStatus,
-  type Sidecar,
-  type SidecarHighlight,
-  type SidecarSource,
-  toRect,
-} from "../sidecar/types";
-import type { EmbeddableHighlight, EmbeddedHighlight } from "./embedHighlights";
+import type { PdfWriteStatus, Sidecar, SidecarHighlight, SidecarSource } from "../sidecar/types";
+import type { EmbeddedHighlight } from "./embedHighlights";
+
+/**
+ * How one document's PDF is treated at save time: written with our annotations (`embed`), never
+ * written (`sidecar-only:protected`), left alone by the `pdf.embedOnSave` setting
+ * (`sidecar-only:setting`), or not yet inspected (too large, or pdf-lib could not parse it), in
+ * which case a save attempts the embed and protection is discovered then (`uninspected`).
+ */
+export type SyncMode = "embed" | "sidecar-only:protected" | "sidecar-only:setting" | "uninspected";
+
+/** The document's inherent mode, decided on open from what the inspection could see. */
+export function syncModeOnOpen(
+  inspection: { protected: boolean; embedded: unknown },
+  trustedUnchanged: boolean,
+): SyncMode {
+  if (inspection.protected) {
+    return "sidecar-only:protected";
+  }
+  if (!trustedUnchanged && inspection.embedded === null) {
+    return "uninspected";
+  }
+  return "embed";
+}
+
+/** The mode one save runs under: the `embedOnSave` setting is resolved per save, not per document. */
+export function resolveSyncMode(mode: SyncMode, embedOnSave: boolean): SyncMode {
+  return embedOnSave ? mode : "sidecar-only:setting";
+}
 
 /** What the embed step decided. `bytes` is null when the PDF is left alone. */
 export interface EmbedOutcome {
@@ -25,26 +45,6 @@ export interface EmbeddedBytesInfo {
   sha256: string;
   byteLength: number;
   at: string;
-}
-
-/** Highlights as the PDF writer wants them. Free highlights have no quads and are not embedded. */
-export function toEmbeddable(model: Sidecar): EmbeddableHighlight[] {
-  const categories = new Map(model.categories.map((category) => [category.id, category]));
-  return model.highlights
-    .filter((highlight) => highlight.quadPoints.length > 0)
-    .map((highlight) => {
-      const category = categories.get(highlight.categoryId);
-      return {
-        id: highlight.id,
-        page: highlight.page,
-        rect: highlight.rect,
-        quadPoints: highlight.quadPoints,
-        color: category?.color ?? UNCATEGORIZED_CATEGORY.color,
-        note: highlight.note,
-        categoryName: category?.name ?? UNCATEGORIZED_CATEGORY.name,
-        updatedAt: highlight.updatedAt,
-      };
-    });
 }
 
 function withoutPdfjsId(highlight: SidecarHighlight): SidecarHighlight {
@@ -152,41 +152,4 @@ export function repairPdfjsIds(
     return next;
   });
   return changed ? { model: { ...model, highlights }, changed } : { model, changed };
-}
-
-/**
- * Rebuilds highlights from the annotations we wrote into a PDF whose sidecar has gone missing.
- * Category comes from the color, then the recorded category name; text is unknown until the
- * viewer captures it again.
- */
-export function adoptEmbedded(
-  embedded: readonly EmbeddedHighlight[],
-  categories: readonly Category[],
-  now: string,
-  newId: () => string,
-): SidecarHighlight[] {
-  const highlights: SidecarHighlight[] = [];
-  for (const entry of embedded) {
-    const rect = toRect(entry.rect);
-    if (!rect || entry.quadPoints.length === 0 || entry.quadPoints.length % 8 !== 0) {
-      continue;
-    }
-    const category =
-      categoryForColor(categories, entry.color) ??
-      categories.find((candidate) => candidate.name === entry.categoryName);
-    highlights.push({
-      id: UUID_PATTERN.test(entry.id) ? entry.id : newId(),
-      categoryId: category?.id ?? UNCATEGORIZED_CATEGORY.id,
-      page: entry.page,
-      pdfjsId: entry.pdfjsId,
-      rect,
-      quadPoints: [...entry.quadPoints],
-      kind: "text",
-      text: "",
-      note: entry.note,
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
-  return highlights;
 }

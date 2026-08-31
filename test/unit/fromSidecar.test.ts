@@ -141,3 +141,20 @@ describe("reportInputFromSidecar", () => {
     expect(doc.getPageCount()).toBeGreaterThanOrEqual(1);
   }, 30_000);
 });
+
+describe("highlight kind", () => {
+  it("carries the kind so the layout can tell an image region from a failed capture", () => {
+    const model = sampleSidecar();
+    model.highlights = [
+      {
+        ...(model.highlights[0] as (typeof model.highlights)[number]),
+        quadPoints: [],
+        kind: "free",
+        text: "",
+      },
+    ];
+    const input = reportInputFromSidecar(model, CONTEXT);
+    expect(input.highlights[0]?.kind).toBe("free");
+    expect(buildReportModel(input, DEFAULT_REPORT_OPTIONS).byPage[0]?.items[0]?.kind).toBe("free");
+  });
+});

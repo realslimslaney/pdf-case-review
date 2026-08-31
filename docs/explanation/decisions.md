@@ -46,6 +46,28 @@ Short records of the decisions that shape the project, newest last. Each spike f
 
 **Why.** Licensed course material is the primary content; the risk is excerpts leaving under the wrong account or without the user realizing. A single tested chokepoint plus a type-level requirement is cheap insurance, and recording the account, the document hash and the question wording makes the decision auditable in the sidecar the user already owns.
 
+## ADR-0007: Large-PDF memory limits are settings; `retainContextWhenHidden` stays on by default
+
+**Decision.** Three viewer settings govern memory on large documents: `pdfCaseReview.viewer.maxCanvasPixels` and `viewer.maxImageSize` (both `0` = keep the vendored PDF.js default, resource-scoped, applied when the document is reopened) and `viewer.retainContextWhenHidden` (default `true`, window-scoped). The retain flag is read once at provider registration because VS Code fixes `webviewOptions` there, so changing it needs a window reload and the setting description says so. The webview reads all annotations of a document with bounded concurrency (8 pages in flight) instead of strictly sequentially.
+
+**Why.** Keeping the viewer alive across tab switches is the right default for the primary workflow (a case plus notes, switched constantly); its cost only matters for very large files, and the people who hit that are the ones who can flip a setting. Rendering limits belong to the user because the trade (memory versus sharpness at high zoom) depends on the machine. The defaults change nothing for existing documents.
+
+**Consequences.** The 300-page fixture (`pnpm fixtures`) is CI-tested (`test/integration/large.test.ts`); the ~80 MB heavy fixture is opt-in (`pnpm fixtures --heavy`) and only feeds the manual pass in `test/manual/memory-pass.md`. pdf-lib inspection on open already skips files above 50 MB (`INSPECT_LIMIT_BYTES`).
+
+## ADR-0008: High-contrast rendering is baked at viewer build time; the host rebuilds on theme change
+
+**Decision.** In high-contrast themes the viewer forces PDF.js page colors (`forcePageColors` plus `pageColorsBackground` / `pageColorsForeground` taken from the theme's editor colors). The host is the source of truth: it puts the active theme kind into the `ViewerConfig`, and a change of theme kind rebuilds every open viewer's HTML (the same path a palette change uses). There is no runtime theme message: the vendored PDF.js captures `pageColors` once at viewer construction, so flipping the option later would silently do nothing. Category identity is never color alone: tree icons get a thick contrasting ring in HC themes, report quotes name their category in the citation when the section heading is not enough, and the go-to flash has reduced-motion and forced-colors variants.
+
+**Why.** Honesty over cleverness: a `setTheme` message that only works before the first render is a trap for the next maintainer. Rebuilding on a theme change is rare, visible and correct.
+
+## ADR-0009: A browser-level webview smoke (Playwright) beside the in-VS-Code suite
+
+**Decision.** `test/e2e` drives the built webview bundle plus the vendored viewer in plain Chromium: a dependency-free static server over the repository root, pages assembled by the same pure `buildViewerHtml` (`src/shared/viewerHtml.ts`) the editor provider uses, `acquireVsCodeApi` stubbed to collect posted messages, and host-to-webview commands sent through `window.postMessage` exactly as VS Code delivers them. Chromium only, one Linux CI job. The in-VS-Code integration suite remains the primary harness; the smoke exists because the adapter over PDF.js internals is the project's riskiest seam (ADR-0003) and deserves a check without Electron in the loop.
+
+**Why this shape.** Extracting the HTML assembly into a shared pure function means the harness cannot drift from what the provider ships, and gives the string-replacement contract (which `prepare-pdfjs` guards from the vendoring side) a consumer-side test. The stub is honest: the webview bootstrap only ever calls `postMessage`.
+
+**Consequences.** `pnpm test:e2e` needs `prepare-pdfjs`, `fixtures` and `build` first. The harness omits the CSP meta; CSP behaviour stays covered by the integration suite inside real webviews. Playwright is a devDependency only and ships nowhere.
+
 ## Spike log
 
 Results are recorded here as they land. Pass/fail criteria are in the maintainer plan (§14).

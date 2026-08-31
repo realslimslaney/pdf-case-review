@@ -3,8 +3,10 @@
 // stdin/exit-code contract the harnesses use. Skipped when no python is on PATH.
 
 import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
 
 const gate = resolve(__dirname, "../../.claude/hooks/gate_commit.py");
 
@@ -25,12 +27,15 @@ interface GateRun {
   stderr: string;
 }
 
-function runGate(command: string, extra: { agentType?: string; args?: string[] } = {}): GateRun {
+function runGate(
+  command: string,
+  extra: { agentType?: string; args?: string[]; cwd?: string } = {},
+): GateRun {
   if (!python) {
     throw new Error("python missing");
   }
   const payload = {
-    cwd: resolve(__dirname, "../.."),
+    cwd: extra.cwd ?? resolve(__dirname, "../.."),
     tool_input: { command },
     ...(extra.agentType ? { agent_type: extra.agentType } : {}),
   };
@@ -79,5 +84,46 @@ describe.skipIf(!python)("gate_commit.py", () => {
     expect(run.status).toBe(2);
     expect(run.stderr).toMatch(/--no-verify/);
     expect(run.stderr).not.toMatch(/subagent/);
+  });
+
+  describe("lockfile pairing (this repo diverges from the source: release-please owns versions)", () => {
+    const repos: string[] = [];
+
+    function temporaryRepo(): string {
+      const cwd = mkdtempSync(join(tmpdir(), "gate-commit-"));
+      repos.push(cwd);
+      const git = (...args: string[]) => {
+        const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+        expect(result.status, `git ${args.join(" ")}: ${result.stderr}`).toBe(0);
+      };
+      git("init", "--initial-branch=work");
+      git("config", "user.email", "gate@test.invalid");
+      git("config", "user.name", "Gate Test");
+      writeFileSync(join(cwd, "package.json"), '{ "name": "x", "version": "1.0.0" }\n');
+      writeFileSync(join(cwd, "pnpm-lock.yaml"), "lockfileVersion: 9\n");
+      git("add", "-A");
+      git("commit", "-m", "init");
+      return cwd;
+    }
+
+    afterAll(() => {
+      for (const cwd of repos) {
+        try {
+          rmSync(cwd, { recursive: true, force: true });
+        } catch {
+          // Windows can hold a handle briefly; the temp dir is reaped by the OS eventually.
+        }
+      }
+    });
+
+    it("blocks a lockfile staged without package.json, with no version bump demanded", () => {
+      const cwd = temporaryRepo();
+      writeFileSync(join(cwd, "pnpm-lock.yaml"), "lockfileVersion: 9\nchanged: true\n");
+      spawnSync("git", ["add", "pnpm-lock.yaml"], { cwd });
+      const run = runGate("git commit -m 'chore: deps'", { agentType: "committer", cwd });
+      expect(run.status).toBe(2);
+      expect(run.stderr).toMatch(/pnpm-lock\.yaml is staged without package\.json/);
+      expect(run.stderr).not.toMatch(/version bump/);
+    });
   });
 });

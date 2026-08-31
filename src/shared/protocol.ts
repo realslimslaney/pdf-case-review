@@ -42,11 +42,20 @@ export interface InjectableHighlight {
   data: Record<string, unknown>;
 }
 
+/** VS Code's active color theme, as the viewer needs to know it. */
+export type ThemeKind = "light" | "dark" | "high-contrast" | "high-contrast-light";
+
 export interface ViewerConfig {
   url: string;
   resourceRoot: string;
   defaultZoomValue: string;
   sidebarViewOnLoad: number;
+  /** High-contrast kinds force PDF.js page colors; baked at load, a change rebuilds the webview. */
+  themeKind: ThemeKind;
+  /** PDF.js `maxCanvasPixels`; null keeps the vendored default. */
+  maxCanvasPixels: number | null;
+  /** PDF.js `maxImageSize`; null keeps the vendored default. */
+  maxImageSize: number | null;
   highlightEditorColors: string;
   sandboxBundleSrc: string;
   cMapUrl: string;
@@ -92,9 +101,11 @@ export type WebviewToHostMessage =
   | { type: "openLink"; url: string }
   /** Answer to `getPageText`; text is null when the page has no text layer or the read failed. */
   | { type: "pageText"; requestId: number; page: number; text: string | null }
+  /** Acknowledges a host command that carried a `requestId`, after its handler finished. */
+  | { type: "done"; requestId: number; ok: boolean; error?: string }
   | { type: "log"; level: "info" | "warn" | "error"; message: string };
 
-export type HostToWebviewMessage =
+type HostCommand =
   | { type: "reload" }
   | { type: "dumpEditors" }
   /** PDF.js AnnotationEditorType: 0 = none (floating button only), 9 = highlight tool active. */
@@ -107,16 +118,20 @@ export type HostToWebviewMessage =
   | { type: "deleteHighlights"; items: { sidecarId: string; viewerId?: string }[] }
   /** Recolor editors (category change from the host). */
   | { type: "recolorHighlights"; items: { viewerId: string; color: string }[] }
-  /** Highlight the text selection with this uuid and color, or recolor the selected editors. */
-  | { type: "createFromSelection"; id: string; color: string }
+  /**
+   * Highlight the text selection with this uuid and color; failing that, recolor the editors
+   * PDF.js has selected, or the host's target (`fallbackViewerId`: tree selection or the
+   * last created highlight), so the fallback survives a window without focus.
+   */
+  | { type: "createFromSelection"; id: string; color: string; fallbackViewerId?: string }
   /** Scroll to a highlight (1-based page; rect in PDF user space) and flash its editor when it has one. */
   | { type: "goTo"; page: number; rect?: [number, number, number, number]; viewerId?: string }
   /** Read one page's text content (1-based page); answered with `pageText`. */
   | { type: "getPageText"; requestId: number; page: number }
   /** Spike instrumentation: select `spanCount` text-layer spans on `page` without creating anything. */
   | { type: "spike.selectText"; page: number; spanCount: number }
-  /** Spike instrumentation: select an editor (as a focused viewer does after creating one). */
-  | { type: "spike.selectEditor"; viewerId: string }
+  /** Spike instrumentation: acknowledged ok only once `page`'s text layer is laid out (no selection). */
+  | { type: "spike.probeTextLayer"; page: number }
   /** Spike instrumentation: PDF.js undo / redo. */
   | { type: "spike.undo" }
   | { type: "spike.redo" }
@@ -125,8 +140,119 @@ export type HostToWebviewMessage =
   /** Spike instrumentation: recolor an existing editor (id = PDF.js editor / annotation id). */
   | { type: "spike.recolorEditor"; id: string; color: string };
 
-export function isWebviewToHostMessage(value: unknown): value is WebviewToHostMessage {
+/** Every host command may carry a `requestId`; the webview answers it with a `done` message. */
+export type HostToWebviewMessage = HostCommand & { requestId?: number };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function isNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === "boolean";
+}
+
+function isStringOrNull(value: unknown): value is string | null {
+  return value === null || isString(value);
+}
+
+function isArrayOf<T>(value: unknown, check: (entry: unknown) => entry is T): value is T[] {
+  return Array.isArray(value) && value.every(check);
+}
+
+function isSerializedHighlight(value: unknown): value is SerializedHighlight {
   return (
-    typeof value === "object" && value !== null && typeof (value as { type?: unknown }).type === "string"
+    isRecord(value) &&
+    isString(value["id"]) &&
+    isNumber(value["pageIndex"]) &&
+    isString(value["color"]) &&
+    isArrayOf(value["quadPoints"], isNumber) &&
+    isArrayOf(value["rect"], isNumber) &&
+    isNumber(value["rotation"]) &&
+    isStringOrNull(value["text"]) &&
+    isStringOrNull(value["annotationElementId"]) &&
+    (value["sidecarId"] === undefined || isString(value["sidecarId"])) &&
+    (value["quadText"] === undefined || isString(value["quadText"])) &&
+    isRecord(value["raw"])
   );
+}
+
+function isEmbeddedAnnotation(value: unknown): value is EmbeddedAnnotation {
+  return (
+    isRecord(value) &&
+    isString(value["id"]) &&
+    isNumber(value["pageIndex"]) &&
+    isArrayOf(value["rect"], isNumber) &&
+    isArrayOf(value["quadPoints"], isNumber) &&
+    isStringOrNull(value["color"]) &&
+    isString(value["contents"]) &&
+    isStringOrNull(value["modificationDate"])
+  );
+}
+
+/**
+ * Full boundary validation: every field the host folds into the sidecar model or the viewer
+ * state is checked, not just the discriminant.
+ */
+export function isWebviewToHostMessage(value: unknown): value is WebviewToHostMessage {
+  if (!isRecord(value)) {
+    return false;
+  }
+  switch (value["type"]) {
+    case "ready":
+    case "saveRequested":
+      return true;
+    case "viewerLoaded":
+      return (
+        isNumber(value["pagesCount"]) &&
+        (value["pageLabels"] === null || isArrayOf(value["pageLabels"], isString)) &&
+        isStringOrNull(value["title"]) &&
+        isNumber(value["annotationEditorMode"]) &&
+        isStringOrNull(value["highlightEditorColors"]) &&
+        isArrayOf(value["annotations"], isEmbeddedAnnotation)
+      );
+    case "editorsChanged":
+      return (
+        isArrayOf(value["editors"], isSerializedHighlight) &&
+        isArrayOf(value["existingUnchanged"], isString) &&
+        isArrayOf(value["deletedAnnotationIds"], isString) &&
+        isNumber(value["rendered"])
+      );
+    case "savedDocument":
+      // The bytes cross the webview boundary as a typed array or a structured-clone stand-in;
+      // the host re-wraps them, so "object or null" is the honest boundary check.
+      return (
+        (value["bytes"] === null || typeof value["bytes"] === "object") && isStringOrNull(value["error"])
+      );
+    case "pageChanged":
+      return isNumber(value["page"]) && isStringOrNull(value["pageLabel"]);
+    case "highlightsDeleted":
+      return isArrayOf(value["deleted"], isString) && isArrayOf(value["failed"], isString);
+    case "createFromSelectionResult":
+      return isString(value["id"]) && isBoolean(value["created"]) && isBoolean(value["recolored"]);
+    case "openLink":
+      return isString(value["url"]);
+    case "pageText":
+      return isNumber(value["requestId"]) && isNumber(value["page"]) && isStringOrNull(value["text"]);
+    case "done":
+      return (
+        isNumber(value["requestId"]) &&
+        isBoolean(value["ok"]) &&
+        (value["error"] === undefined || isString(value["error"]))
+      );
+    case "log":
+      return (
+        (value["level"] === "info" || value["level"] === "warn" || value["level"] === "error") &&
+        isString(value["message"])
+      );
+    default:
+      return false;
+  }
 }

@@ -8,7 +8,7 @@ The **PDF Case Review** activity-bar icon opens the **Highlights** view for the 
 
 | Command | Where | What it does |
 |---|---|---|
-| `PDF Case Review: Go to Highlight` | click a row | Scrolls the PDF to the highlight and flashes it. |
+| `PDF Case Review: Go to Highlight` | click a row, `Ctrl+Alt+G`, palette | Scrolls the PDF to the highlight and flashes it. Invoked with nothing selected, it shows a picker of every highlight, so the viewer is reachable without a mouse. |
 | `PDF Case Review: Edit Note` | `Ctrl+Alt+N`, click a note row, row context menu, palette | Opens the target in the **Note** view (below). With no selection it targets the current page's note. |
 | `PDF Case Review: Set Category` | row context menu, palette | Picks another category for the highlight; the viewer recolors it and the PDF is updated on the next save. |
 | `PDF Case Review: Delete Highlight` | row context menu (inline trash icon), palette | Deletes the highlight. When the viewer shows it, the deletion goes through PDF.js and `Ctrl+Z` inside the viewer brings it back with its note. |
@@ -32,6 +32,7 @@ The **Note** view (under Highlights in the activity bar) edits one target at a t
 |---|---|---|
 | `PDF Case Review: Generate Report` | `Ctrl+Alt+R`, palette | Renders the active document's highlights and notes to `pdfCaseReview.report.defaultFormat` (`ask` shows a picker). Output is `<name>.review.<md\|docx\|pdf>` beside the PDF or in `pdfCaseReview.report.outputFolder`; existing reports get a numbered copy unless `report.overwrite` is on. |
 | `PDF Case Review: Generate Report As...` | palette | The same with a format picker every time. |
+| `PDF Case Review: Export Annotated PDF...` | palette | Writes a copy of the PDF with your highlights embedded as real annotations, plus a sidecar beside it, to a path you choose (`<name>.annotated.pdf` by default). The original is never the destination. A publisher-protected PDF is copied byte-identical (never decrypted) and the highlights travel in the sidecar alone; the command says so every time. |
 
 ## AI (optional, off by default)
 
@@ -57,6 +58,13 @@ Every path below goes through the eligibility question first: the dialog names t
 
 While a PDF is active the status bar shows `$(notebook) N highlights · PDF synced`, `sidecar only` (protected PDF or embedding turned off), `unsaved`, or `PDF write failed`. Clicking it focuses the Highlights view.
 
+## When the PDF changed outside the extension
+
+Opening a document whose PDF bytes no longer match what the sidecar recorded shows a warning:
+highlight positions may no longer line up. **Keep positions** accepts the current file (recorded
+with the next save); dismissing changes nothing, and the warning returns on the next open.
+Re-anchoring highlights to moved text is planned for a later release.
+
 ## Keyboard
 
-While the PDF editor has focus: `Ctrl+Alt+1..9` highlight with the Nth category, `Ctrl+Alt+N` edits the note, `Ctrl+Alt+D` adds a document note (`Cmd+Alt` on macOS). `Ctrl+Alt+R` generates the report whenever a PDF Case Review document is active. Inside the viewer, `Ctrl+S` (`Cmd+S`) saves through VS Code; PDF.js's own "save" (a download) is disabled. `Ctrl+Z` / `Ctrl+Y` inside the viewer undo and redo highlight edits through PDF.js; undoing back to the saved state does not clear the dirty flag (ADR-0005).
+The full table is in [Keybindings](keybindings.md). In short: `Ctrl+Alt+1..9` highlight with the Nth category, `Ctrl+Alt+N` edits the note, `Ctrl+Alt+D` adds a document note, `Ctrl+Alt+G` goes to a highlight, `Ctrl+Alt+H` focuses the Highlights view, `Ctrl+Alt+R` generates the report (`Cmd+Alt` on macOS). Inside the viewer, `Ctrl+S` (`Cmd+S`) saves through VS Code; PDF.js's own "save" (a download) is disabled. `Ctrl+Z` / `Ctrl+Y` inside the viewer undo and redo highlight edits through PDF.js; undoing back to the saved state does not clear the dirty flag (ADR-0005).

@@ -1,8 +1,16 @@
 .vscode/**
 .vscode-test/**
+.vscode-test.mjs
 .github/**
 .claude/**
+.codex/**
+.agents/**
 .devcontainer/**
+*.local.md
+*.vsix
+*.log
+test-results/**
+playwright-report/**
 .gitattributes
 .gitignore
 .editorconfig

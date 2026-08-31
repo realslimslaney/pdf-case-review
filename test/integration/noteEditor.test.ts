@@ -14,6 +14,7 @@ import {
   fixtureUri,
   highlight,
   openWith,
+  sleep,
   waitFor,
   waitForLoaded,
 } from "./helpers";
@@ -59,12 +60,14 @@ suite("M2 phase 2: note editor view", () => {
     assert.equal(editor.lastLoad?.categoryId, "financial");
     assert.equal(editor.lastLoad?.documentUri, documentUri());
     assert.ok(editor.lastLoad?.quote, "the quote preview is filled");
+    const acksBefore = (await editorState()).saveAcks;
     await postToEditor({ type: "saveNote", documentUri: documentUri(), target, note: "Key tension." });
     const updated = await waitFor("the note in the model", async () => {
       const current = await documentState(pdf);
       return current?.model.highlights[0]?.note === "Key tension." ? current : undefined;
     });
     assert.equal(updated.dirty, true);
+    assert.equal((await editorState()).saveAcks, acksBefore + 1, "the save was acknowledged to the view");
   });
 
   test("setCategory through the view updates the model", async () => {
@@ -161,7 +164,7 @@ suite("M2 phase 2: note editor view", () => {
     assert.equal(editor.lastLoad?.title, "Page 1", "the load for the new target was posted");
   });
 
-  test("deleteTarget removes a document note and clears the view", async () => {
+  test("deleteTarget asks first; a refusal keeps the note and a confirmation removes it", async () => {
     await vscode.commands.executeCommand("pdfCaseReview.addDocumentNote", "Thesis", "Hold price.");
     const state = await waitFor("the document note", async () => {
       const current = await documentState(pdf);
@@ -174,6 +177,17 @@ suite("M2 phase 2: note editor view", () => {
       const current = await editorState();
       return current.target?.kind === "document" ? current : undefined;
     });
+
+    await vscode.commands.executeCommand("pdfCaseReview.debug.autoConfirmDelete", false);
+    await postToEditor({
+      type: "deleteTarget",
+      documentUri: documentUri(),
+      target: { kind: "document", id },
+    });
+    await sleep(300);
+    assert.ok((await documentState(pdf))?.model.documentNotes?.[0], "a refused delete changes nothing");
+
+    await vscode.commands.executeCommand("pdfCaseReview.debug.autoConfirmDelete", true);
     await postToEditor({
       type: "deleteTarget",
       documentUri: documentUri(),
@@ -184,5 +198,6 @@ suite("M2 phase 2: note editor view", () => {
       return current && current.model.documentNotes === undefined ? current : undefined;
     });
     assert.equal((await editorState()).target, null);
+    await vscode.commands.executeCommand("pdfCaseReview.debug.autoConfirmDelete", null);
   });
 });

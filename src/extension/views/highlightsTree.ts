@@ -1,12 +1,14 @@
 // The Highlights view: a TreeView over the active document's sidecar, grouped by category or page.
 
 import {
+  ColorThemeKind,
   EventEmitter,
   ThemeIcon,
   type TreeDataProvider,
   TreeItem,
   TreeItemCollapsibleState,
   Uri,
+  window,
 } from "vscode";
 
 import { buildTree, type GroupBy, type GroupNode, type LeafNode } from "../../core/tree";
@@ -30,13 +32,30 @@ export interface TreeSnapshot {
 
 const icons = new Map<string, Uri>();
 
-/** A filled circle in the category color, as an inline SVG icon (works in every theme). */
+function highContrastStroke(): string | null {
+  switch (window.activeColorTheme.kind) {
+    case ColorThemeKind.HighContrast:
+      return "#FFFFFF";
+    case ColorThemeKind.HighContrastLight:
+      return "#000000";
+    default:
+      return null;
+  }
+}
+
+/**
+ * A filled circle in the category color, as an inline SVG icon. High-contrast themes get a thick
+ * contrasting ring so pale category fills stay visible; the cache is cleared on theme change.
+ */
 export function circleIcon(color: string): Uri {
-  let icon = icons.get(color);
+  const stroke = highContrastStroke();
+  const key = `${color}:${stroke ?? "default"}`;
+  let icon = icons.get(key);
   if (!icon) {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="${color}" stroke="rgba(128,128,128,0.6)"/></svg>`;
+    const ring = stroke === null ? 'stroke="rgba(128,128,128,0.6)"' : `stroke="${stroke}" stroke-width="1.5"`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="${color}" ${ring}/></svg>`;
     icon = Uri.parse(`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
-    icons.set(color, icon);
+    icons.set(key, icon);
   }
   return icon;
 }
@@ -54,6 +73,11 @@ export class HighlightsTreeProvider extends Disposable implements TreeDataProvid
     super();
     this._register(tracker.onDidChange(() => this.refresh()));
     this.refresh();
+  }
+
+  /** Re-renders every row so `circleIcon` picks up the theme's stroke. */
+  onThemeChanged(): void {
+    this._onDidChangeTreeData.fire(undefined);
   }
 
   refresh(): void {

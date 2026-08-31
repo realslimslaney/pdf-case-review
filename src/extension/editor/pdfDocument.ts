@@ -22,6 +22,7 @@
 
 import { type CustomDocument, EventEmitter, RelativePattern, Uri, workspace } from "vscode";
 
+import type { SyncMode } from "../../core/pdfExport/syncPlan";
 import { ReconcileSession } from "../../core/sidecar/reconcile";
 import { serializeSidecar } from "../../core/sidecar/serialize";
 import type { Sidecar, SidecarSource } from "../../core/sidecar/types";
@@ -72,10 +73,17 @@ export function sourceFor(uri: Uri, info: PdfInfo): SidecarSource {
 }
 
 /** The custom document behind a PDF Case Review editor: the PDF on disk plus its sidecar model. */
+const SELF_WRITE_MEMORY = 4;
+/** Watcher events for our own write arrive within moments; an older match (a checkout restoring
+ * a recent version of the file) is a real external change and must reload. */
+const SELF_WRITE_TTL_MS = 5_000;
+
 export class PdfDocument extends Disposable implements CustomDocument {
   private readonly _uri: Uri;
   /** Hash of the bytes the viewer last loaded; watcher events that don't change it are ignored. */
   contentHash: string | undefined;
+  /** Hashes of our own recent PDF writes; rapid saves can interleave with watcher events. */
+  private readonly recentSelfWrites: { hash: string; at: number }[] = [];
   /** Canonical text of the model as last loaded or saved; dirty means the model no longer matches. */
   savedSnapshot: string;
   /** Viewer-id bookkeeping for the current viewer load (reset on every `viewerLoaded`). */
@@ -86,12 +94,19 @@ export class PdfDocument extends Disposable implements CustomDocument {
   instance = 0;
   /** Set when the sidecar on disk could not be read; saving is refused until it is fixed. */
   readOnly = false;
-  /** Encrypted or permission-restricted: the PDF is never written, highlights stay sidecar-only. */
-  protected = false;
+  /** How the PDF is treated at save time (see `SyncMode`); the provider sets it on open. */
+  syncMode: SyncMode = "uninspected";
   /** The one-time "this PDF is protected" notice was shown for this document. */
   protectedNoticeShown = false;
+
+  /** Encrypted or permission-restricted: the PDF is never written, highlights stay sidecar-only. */
+  get protected(): boolean {
+    return this.syncMode === "sidecar-only:protected";
+  }
   /** What the PDF currently holds of ours (`JSON.stringify(toEmbeddable(model))`); null when unknown. */
   embeddedFingerprint: string | null = null;
+  /** The most recently created highlight; the recolor fallback when nothing is selected. */
+  lastCreatedHighlightId: string | undefined;
 
   constructor(
     uri: Uri,
@@ -121,6 +136,22 @@ export class PdfDocument extends Disposable implements CustomDocument {
 
   get uri() {
     return this._uri;
+  }
+
+  /** Records one of our own PDF writes so the watcher can tell it from an external change. */
+  noteSelfWrite(hash: string): void {
+    this.recentSelfWrites.push({ hash, at: Date.now() });
+    while (this.recentSelfWrites.length > SELF_WRITE_MEMORY) {
+      this.recentSelfWrites.shift();
+    }
+  }
+
+  isRecentSelfWrite(hash: string): boolean {
+    const cutoff = Date.now() - SELF_WRITE_TTL_MS;
+    while (this.recentSelfWrites[0] && this.recentSelfWrites[0].at < cutoff) {
+      this.recentSelfWrites.shift();
+    }
+    return this.recentSelfWrites.some((entry) => entry.hash === hash);
   }
 
   private serialized: { model: Sidecar; text: string } | undefined;

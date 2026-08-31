@@ -115,7 +115,11 @@ export class PdfjsAdapter {
 
   async reportLoaded(): Promise<void> {
     const colors = this.options.get("highlightEditorColors");
-    const annotations = await this.collectHighlightAnnotations();
+    const [annotations, pageLabels, title] = await Promise.all([
+      this.collectHighlightAnnotations(),
+      this.app.pdfDocument?.getPageLabels() ?? null,
+      this.documentTitle(),
+    ]);
     this.annotationIds = annotations.map((annotation) => annotation.id);
     // Editor ids do not survive a load: forget per-load bookkeeping and force a fresh snapshot.
     this.sidecarIdByEditorId.clear();
@@ -130,8 +134,8 @@ export class PdfjsAdapter {
     this.post({
       type: "viewerLoaded",
       pagesCount: this.app.pdfViewer.pagesCount,
-      pageLabels: (await this.app.pdfDocument?.getPageLabels()) ?? null,
-      title: await this.documentTitle(),
+      pageLabels,
+      title,
       annotationEditorMode: this.app.pdfViewer.annotationEditorMode,
       highlightEditorColors: typeof colors === "string" ? colors : null,
       annotations,
@@ -149,33 +153,43 @@ export class PdfjsAdapter {
     }
   }
 
-  /** Highlight annotations already present in the file, straight from the PDF.js document proxy. */
+  /**
+   * Highlight annotations already present in the file, straight from the PDF.js document proxy.
+   * A 300-page document means 300 getPage plus getAnnotations round trips, so pages are read with
+   * bounded concurrency; the indexed array keeps the result in page order.
+   */
   private async collectHighlightAnnotations(): Promise<EmbeddedAnnotation[]> {
     const pdfDocument = this.app.pdfDocument;
     if (!pdfDocument) {
       return [];
     }
-    const result: EmbeddedAnnotation[] = [];
-    for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber += 1) {
-      const page = await pdfDocument.getPage(pageNumber);
-      for (const annotation of await page.getAnnotations()) {
-        if (annotation["subtype"] !== "Highlight" || typeof annotation["id"] !== "string") {
-          continue;
+    const perPage: EmbeddedAnnotation[][] = Array.from({ length: pdfDocument.numPages }, () => []);
+    let nextPageIndex = 0;
+    const worker = async () => {
+      while (nextPageIndex < pdfDocument.numPages) {
+        const pageIndex = nextPageIndex;
+        nextPageIndex += 1;
+        const page = await pdfDocument.getPage(pageIndex + 1);
+        for (const annotation of await page.getAnnotations()) {
+          if (annotation["subtype"] !== "Highlight" || typeof annotation["id"] !== "string") {
+            continue;
+          }
+          const contents = annotation["contentsObj"] as { str?: unknown } | undefined;
+          perPage[pageIndex]?.push({
+            id: annotation["id"],
+            pageIndex,
+            rect: numberList(toPlain(annotation["rect"])),
+            quadPoints: numberList(toPlain(annotation["quadPoints"])),
+            color: colorToHex(annotation["color"]),
+            contents: typeof contents?.str === "string" ? contents.str : "",
+            modificationDate:
+              typeof annotation["modificationDate"] === "string" ? annotation["modificationDate"] : null,
+          });
         }
-        const contents = annotation["contentsObj"] as { str?: unknown } | undefined;
-        result.push({
-          id: annotation["id"],
-          pageIndex: pageNumber - 1,
-          rect: numberList(toPlain(annotation["rect"])),
-          quadPoints: numberList(toPlain(annotation["quadPoints"])),
-          color: colorToHex(annotation["color"]),
-          contents: typeof contents?.str === "string" ? contents.str : "",
-          modificationDate:
-            typeof annotation["modificationDate"] === "string" ? annotation["modificationDate"] : null,
-        });
       }
-    }
-    return result;
+    };
+    await Promise.all(Array.from({ length: Math.min(8, pdfDocument.numPages) }, worker));
+    return perPage.flat();
   }
 
   setEditorMode(mode: number): void {
@@ -211,16 +225,52 @@ export class PdfjsAdapter {
     return undefined;
   }
 
-  /** Polls `probe` every 50 ms for up to a second (PDF.js defers creation behind mode switches). */
-  private async pollFor<T>(probe: () => T | undefined): Promise<T | undefined> {
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      const value = probe();
-      if (value !== undefined) {
-        return value;
-      }
+  /** Events after which PDF.js may have created or materialized editors. */
+  private static readonly EDITOR_EVENTS = [
+    "editingstateschanged",
+    "editorsrendered",
+    "annotationeditorlayerrendered",
+    "annotationeditormodechanged",
+  ];
+
+  /**
+   * Resolves once `probe` yields a value: immediately, after any editor-related event (deferred a
+   * tick so PDF.js finishes its own handlers first), or from a coarse safety re-probe for the few
+   * creation paths that fire no event. PDF.js defers creation behind mode switches, and a large
+   * document can take longer than any fixed poll budget, hence the event-driven wait.
+   */
+  private awaitEditor<T>(probe: () => T | undefined, timeoutMs = 5_000): Promise<T | undefined> {
+    const immediate = probe();
+    if (immediate !== undefined) {
+      return Promise.resolve(immediate);
     }
-    return undefined;
+    const { eventBus } = this.app;
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (value: T | undefined) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(deadline);
+          clearInterval(safetyNet);
+          for (const name of PdfjsAdapter.EDITOR_EVENTS) {
+            eventBus.off(name, onEvent);
+          }
+          resolve(value);
+        }
+      };
+      const reprobe = () => {
+        const value = probe();
+        if (value !== undefined) {
+          finish(value);
+        }
+      };
+      const onEvent = () => setTimeout(reprobe, 0);
+      const deadline = setTimeout(() => finish(probe()), timeoutMs);
+      const safetyNet = setInterval(reprobe, 250);
+      for (const name of PdfjsAdapter.EDITOR_EVENTS) {
+        eventBus.on(name, onEvent);
+      }
+    });
   }
 
   recolorEditor(id: string, color: string): void {
@@ -321,7 +371,7 @@ export class PdfjsAdapter {
     if (this.uiManager.getMode() !== ANNOTATION_EDITOR_TYPE_HIGHLIGHT) {
       this.setEditorMode(ANNOTATION_EDITOR_TYPE_HIGHLIGHT);
     }
-    return this.pollFor(() => this.findEditor(viewerId));
+    return this.awaitEditor(() => this.findEditor(viewerId));
   }
 
   /** Runs `work` and puts the editor mode back afterwards when materializing had to switch it. */
@@ -399,14 +449,6 @@ export class PdfjsAdapter {
     if (div) {
       div.classList.add("pdfCaseReview-flash");
       setTimeout(() => div.classList.remove("pdfCaseReview-flash"), 1_500);
-    }
-  }
-
-  /** Spike instrumentation: select an editor. On an unfocused window PDF.js drops editor selection. */
-  spikeSelectEditor(viewerId: string): void {
-    const editor = this.findEditor(viewerId);
-    if (editor && this.uiManager) {
-      this.uiManager.setSelected(editor);
     }
   }
 
@@ -581,36 +623,51 @@ export class PdfjsAdapter {
     return serialized;
   }
 
-  /**
-   * Spike instrumentation: programmatically select the first `spanCount` non-empty text-layer
-   * spans of `page`, exactly as a mouse drag would. Returns false when the page is not rendered.
-   */
-  spikeSelectText(page: number, spanCount: number): boolean {
+  /** The page's non-empty text-layer spans; throws while the layer is not laid out yet. */
+  private textLayerSpans(page: number): HTMLElement[] {
     const textLayer = document.querySelector(`.page[data-page-number="${page}"] .textLayer`);
     if (!textLayer) {
-      this.post({ type: "log", level: "error", message: `spike: page ${page} text layer missing` });
-      return false;
+      throw new Error(`spike: page ${page} text layer missing`);
     }
     const spans = [...textLayer.querySelectorAll("span")].filter(
       (span) => (span.textContent ?? "").trim() !== "",
     );
+    if (spans.length === 0) {
+      throw new Error(`spike: page ${page} has no text spans`);
+    }
+    return spans;
+  }
+
+  /**
+   * Spike instrumentation: a readiness probe with no side effect. Never selects anything: in
+   * highlight mode PDF.js turns a fresh selection into a highlight of its own.
+   */
+  spikeProbeTextLayer(page: number): void {
+    this.textLayerSpans(page);
+  }
+
+  /**
+   * Spike instrumentation: programmatically select the first `spanCount` non-empty text-layer
+   * spans of `page`, exactly as a mouse drag would. Throws when the page's text layer is not
+   * laid out yet, so a request-acknowledged caller sees a typed failure it can retry.
+   */
+  spikeSelectText(page: number, spanCount: number): void {
+    const spans = this.textLayerSpans(page);
     const first = spans[0];
     const last = spans[Math.min(spanCount, spans.length) - 1];
     if (!first || !last) {
-      this.post({ type: "log", level: "error", message: `spike: page ${page} has no text spans` });
-      return false;
+      throw new Error(`spike: page ${page} has no text spans`);
     }
     const range = document.createRange();
     range.setStartBefore(first);
     range.setEndAfter(last);
     const selection = document.getSelection();
     if (!selection) {
-      return false;
+      throw new Error("spike: the document has no selection object");
     }
     selection.removeAllRanges();
     selection.addRange(range);
     this.lastSelection = { text: selection.toString(), at: Date.now() };
-    return true;
   }
 
   private allEditorIds(): Set<string> {
@@ -643,7 +700,7 @@ export class PdfjsAdapter {
     // The mode switch also materializes file-backed annotations as editors; only viewer-created
     // editors that were not there before are the new highlight.
     const created =
-      (await this.pollFor(() => {
+      (await this.awaitEditor(() => {
         const fresh = [...this.editors()].filter(
           (editor) => !before.has(editor.id) && !editor.annotationElementId,
         );
@@ -669,17 +726,29 @@ export class PdfjsAdapter {
 
   /**
    * The Ctrl+Alt+N path: a text selection becomes a highlight of that category; failing that, the
-   * selected editors (in highlight mode PDF.js has already turned the mouse selection into one)
-   * are recolored; and the color becomes the default for the next highlight either way.
+   * editors PDF.js has selected are recolored, or the host's fallback target (PDF.js drops editor
+   * selection when the window loses focus, so the host passes what it considers selected); with
+   * no target at all the color becomes the default for the next highlight.
    */
-  async applyCategory(id: string, color: string): Promise<void> {
+  async applyCategory(id: string, color: string, fallbackViewerId?: string): Promise<void> {
     const created = await this.createHighlightFromSelection(color, id);
     if (created.length > 0) {
       this.post({ type: "createFromSelectionResult", id, created: true, recolored: false });
       return;
     }
-    const recolored = this.uiManager?.hasSelection === true;
-    this.uiManager?.updateParams(PARAMS_HIGHLIGHT_COLOR, color);
+    let recolored = false;
+    if (this.uiManager?.hasSelection) {
+      this.uiManager.updateParams(PARAMS_HIGHLIGHT_COLOR, color);
+      recolored = true;
+    } else if (fallbackViewerId !== undefined) {
+      const editor = await this.keepingMode(() => this.withEditor(fallbackViewerId));
+      if (editor) {
+        editor.updateParams(PARAMS_HIGHLIGHT_COLOR, color);
+        recolored = true;
+      }
+    } else {
+      this.uiManager?.updateParams(PARAMS_HIGHLIGHT_COLOR, color);
+    }
     this.scheduleSnapshot();
     this.post({ type: "createFromSelectionResult", id, created: false, recolored });
   }
@@ -688,14 +757,11 @@ export class PdfjsAdapter {
    * Spike instrumentation: select text and create a highlight from that selection exactly as the
    * floating button would. Used by the integration tests; harmless otherwise.
    */
-  spikeHighlightText(page: number, spanCount: number, color: string): void {
-    if (!this.spikeSelectText(page, spanCount)) {
-      return;
+  async spikeHighlightText(page: number, spanCount: number, color: string): Promise<void> {
+    this.spikeSelectText(page, spanCount);
+    const created = await this.createHighlightFromSelection(color);
+    if (created.length === 0) {
+      throw new Error("spike: no highlight editor was created");
     }
-    void this.createHighlightFromSelection(color).then((created) => {
-      if (created.length === 0) {
-        this.post({ type: "log", level: "error", message: "spike: no highlight editor was created" });
-      }
-    });
   }
 }

@@ -1,14 +1,15 @@
-"""PreToolUse gate: blocks `git commit` unless committer/verify/branch/version/test rules pass.
+"""PreToolUse gate: blocks `git commit` unless committer/verify/branch/lockfile/test rules pass.
 
 One script, two harnesses:
   - Claude Code: .claude/settings.json (matcher Bash|PowerShell). Claude hook payloads carry
     `agent_type`, so direct commits are refused unless they come from the `committer` subagent.
   - Codex: .codex/hooks.json (matcher Bash, with --allow-direct). Codex has no subagent concept
     and its payloads have no `agent_type`, so --allow-direct skips only that first rule; the
-    branch, --no-verify, version-bump and green-test rules still apply.
+    branch, --no-verify, lockfile and green-test rules still apply.
 
 Exit 0 allows the tool call, exit 2 blocks it and feeds stderr back to the model. Stdlib-only so
-a broken toolchain can never break the gate itself. Ported from realslimslaney/bslaney.
+a broken toolchain can never break the gate itself. Ported from realslimslaney/bslaney; the
+lockfile rule diverges from the source repo, see check_lockfile_pairing.
 """
 
 import json
@@ -53,9 +54,9 @@ MSG_ON_MAIN = (
     f"BLOCKED: HEAD is on '{DEFAULT_BRANCH}'; never commit to {DEFAULT_BRANCH}. Create a feature "
     "branch first: git switch -c <type>/<slug> --no-track && git push -u origin <type>/<slug>, then retry."
 )
-MSG_VERSION = (
-    f"BLOCKED: {LOCKFILE} is staged but package.json's version matches {DEFAULT_BRANCH}; dependency "
-    "changes require a version bump. Bump \"version\" in package.json, run pnpm install, stage both, then retry."
+MSG_LOCKFILE_ALONE = (
+    f"BLOCKED: {LOCKFILE} is staged without package.json; a lockfile change must ride with the "
+    "package.json change that caused it. Stage both in one commit (or unstage the lockfile), then retry."
 )
 MSG_TEST_FAILED = (
     "BLOCKED: test suite is red; commits require a green 'pnpm run test:unit'. Fix the failures below; "
@@ -77,14 +78,6 @@ def uses_no_verify(command: str) -> bool:
     return bool(NO_VERIFY_RE.search(command))
 
 
-def package_version(text: str) -> str | None:
-    try:
-        value = json.loads(text).get("version")
-    except (json.JSONDecodeError, AttributeError):
-        return None
-    return value if isinstance(value, str) else None
-
-
 def run_git(args: list[str], cwd: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, errors="replace")
 
@@ -94,18 +87,14 @@ def block(message: str) -> int:
     return 2
 
 
-def check_version_bump(cwd: str) -> str | None:
+def check_lockfile_pairing(cwd: str) -> str | None:
+    # The source repo required a manual version bump whenever the lockfile changed. Here
+    # release-please owns versions (they are derived from Conventional Commits at release time),
+    # so a dependency change needs no bump; what the rule still catches is the real footgun,
+    # lockfile churn staged without the package.json change that explains it.
     staged = run_git(["diff", "--cached", "--name-only"], cwd).stdout.splitlines()
-    if LOCKFILE not in staged:
-        return None
-    main_manifest = run_git(["show", f"{DEFAULT_BRANCH}:package.json"], cwd)
-    staged_manifest = run_git(["show", ":package.json"], cwd)
-    if main_manifest.returncode != 0 or staged_manifest.returncode != 0:
-        return None
-    main_version = package_version(main_manifest.stdout)
-    staged_version = package_version(staged_manifest.stdout)
-    if main_version and staged_version and main_version == staged_version:
-        return MSG_VERSION
+    if LOCKFILE in staged and "package.json" not in staged:
+        return MSG_LOCKFILE_ALONE
     return None
 
 
@@ -140,9 +129,9 @@ def run_checks(payload: dict, command: str) -> int:
     # reports "main" instead of an empty string that would slip past this rule.
     if run_git(["symbolic-ref", "--short", "-q", "HEAD"], cwd).stdout.strip() == DEFAULT_BRANCH:
         return block(MSG_ON_MAIN)
-    version_message = check_version_bump(cwd)
-    if version_message:
-        return block(version_message)
+    lockfile_message = check_lockfile_pairing(cwd)
+    if lockfile_message:
+        return block(lockfile_message)
     return run_tests(cwd)
 
 

@@ -58,6 +58,20 @@ export async function documentState(uri: vscode.Uri): Promise<DocumentState | un
   );
 }
 
+/** Posts a message with a `requestId` and returns the viewer's acknowledgement. */
+export async function request(
+  uri: vscode.Uri,
+  message: HostToWebviewMessage,
+): Promise<{ delivered: number; ok: boolean; error?: string }> {
+  const result = await vscode.commands.executeCommand<{ delivered: number; ok: boolean; error?: string }>(
+    "pdfCaseReview.debug.request",
+    uri,
+    message,
+  );
+  assert.ok(result, "debug.request returned nothing");
+  return result;
+}
+
 /** Creates a highlight from the first two text spans of `page` and waits for the model to hold it. */
 export async function highlight(
   uri: vscode.Uri,
@@ -65,11 +79,36 @@ export async function highlight(
   color: string,
   expectedCount: number,
 ): Promise<void> {
-  await send(uri, { type: "spike.highlightText", page, spanCount: 2, color });
-  await waitFor(`highlight ${expectedCount} in the model`, async () => {
+  // The page's text layer lays out some time after the viewer reports loaded; wait for it instead
+  // of posting into the void (the historic windows-latest flake in the save suite). The probe
+  // makes no selection: in highlight mode PDF.js would turn one into a highlight of its own.
+  await waitFor(
+    `page ${page} text layer`,
+    async () => {
+      const probe = await request(uri, { type: "spike.probeTextLayer", page });
+      return probe.ok ? probe : undefined;
+    },
+    30_000,
+  );
+  const reached = async () => {
     const state = await documentState(uri);
     return state && state.model.highlights.length >= expectedCount ? state : undefined;
-  });
+  };
+  const result = await request(uri, { type: "spike.highlightText", page, spanCount: 2, color });
+  if (!result.ok) {
+    // A failed acknowledgement can still mean the editor landed late; only retry (which would
+    // create a duplicate otherwise) when the model provably stayed short.
+    try {
+      await waitFor(`highlight ${expectedCount} after a failed acknowledgement`, reached, 3_000);
+      return;
+    } catch {
+      const retry = await request(uri, { type: "spike.highlightText", page, spanCount: 2, color });
+      if (!retry.ok) {
+        throw new Error(`spike.highlightText failed twice: ${retry.error ?? result.error ?? "unknown"}`);
+      }
+    }
+  }
+  await waitFor(`highlight ${expectedCount} in the model`, reached);
 }
 
 export async function remove(uri: vscode.Uri): Promise<void> {

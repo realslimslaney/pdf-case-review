@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CATEGORIES } from "../../src/core/categories";
-import { missingFromFile, toInjectable } from "../../src/core/sidecar/inject";
+import { missingFromFile, toInjectable } from "../../src/core/highlight/convert";
 import type { SidecarHighlight } from "../../src/core/sidecar/types";
 import { sampleSidecar } from "./helpers/sampleSidecar";
 

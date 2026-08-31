@@ -2,7 +2,7 @@
 // keybindings), apply a preset palette to the settings, and copy the settings palette into the
 // open document.
 
-import { ConfigurationTarget, commands, type Disposable, window, workspace } from "vscode";
+import { ConfigurationTarget, commands, type Disposable, type TreeView, window, workspace } from "vscode";
 
 import { type Category, categoryAt } from "../../core/categories";
 import { newHighlightId } from "../../core/sidecar/ids";
@@ -11,11 +11,14 @@ import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
 import type { PdfDocument } from "../editor/pdfDocument";
 import { categoryPresets, configuredCategories } from "../settings";
+import type { TreeNode } from "../views/highlightsTree";
+import { viewerIdFor } from "./highlights";
 
 interface CommandContext {
   provider: PdfCaseReviewEditorProvider;
   tracker: ActiveDocumentTracker;
   output: Parameters<typeof configuredCategories>[1];
+  treeView: TreeView<TreeNode>;
 }
 
 function paletteOf(document: PdfDocument): Category[] {
@@ -59,10 +62,18 @@ export async function highlightWithCategory(
       return;
     }
   }
-  context.provider.postMessage(document.uri, {
+  // PDF.js drops its editor selection when the window loses focus, so the host passes its own
+  // recolor target along: the highlight selected in the tree, else the last created one.
+  const selected = context.treeView.selection.find((node) => node.kind === "highlight");
+  const fallbackHighlightId =
+    (selected?.kind === "highlight" ? selected.id : undefined) ?? document.lastCreatedHighlightId;
+  const fallbackViewerId =
+    fallbackHighlightId === undefined ? undefined : viewerIdFor(document, fallbackHighlightId);
+  await context.provider.request(document.uri, {
     type: "createFromSelection",
     id: newHighlightId(),
     color: category.color,
+    ...(fallbackViewerId !== undefined ? { fallbackViewerId } : {}),
   });
 }
 

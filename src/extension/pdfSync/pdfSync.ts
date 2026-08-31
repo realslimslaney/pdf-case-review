@@ -3,7 +3,7 @@
 // it is unencrypted and `pdfCaseReview.pdf.embedOnSave` is on. Protected PDFs are never touched.
 
 import { type LogOutputChannel, type Uri, workspace } from "vscode";
-
+import { toEmbeddable } from "../../core/highlight/convert";
 import {
   type EmbeddedHighlight,
   embedHighlights,
@@ -14,8 +14,8 @@ import {
   applyEmbedOutcome,
   type EmbedOutcome,
   markPdfWriteFailed,
+  resolveSyncMode,
   staleIdPairs,
-  toEmbeddable,
 } from "../../core/pdfExport/syncPlan";
 import { baseName, hashBytes, type PdfDocument, sourceFor } from "../editor/pdfDocument";
 import { sidecarLocation } from "../settings";
@@ -73,12 +73,15 @@ async function embedStep(
   bytes: Uint8Array,
   context: SyncContext,
 ): Promise<EmbedOutcome> {
-  if (!context.embedOnSave) {
-    return { status: "skipped-setting", bytes: null, written: [] };
-  }
-  if (document.protected) {
-    context.onProtected(document);
-    return SKIPPED_PROTECTED;
+  switch (resolveSyncMode(document.syncMode, context.embedOnSave)) {
+    case "sidecar-only:setting":
+      return { status: "skipped-setting", bytes: null, written: [] };
+    case "sidecar-only:protected":
+      context.onProtected(document);
+      return SKIPPED_PROTECTED;
+    case "embed":
+    case "uninspected":
+      break;
   }
   const { model } = document;
   if (model.highlights.length === 0 && model.source.lastEmbeddedAt === undefined) {
@@ -99,7 +102,7 @@ async function embedStep(
   } catch (error) {
     document.embeddedFingerprint = null;
     if (error instanceof ProtectedPdfError) {
-      document.protected = true;
+      document.syncMode = "sidecar-only:protected";
       context.onProtected(document);
       return SKIPPED_PROTECTED;
     }
@@ -145,6 +148,7 @@ export async function syncOnSave(document: PdfDocument, context: SyncContext): P
   }
 
   document.contentHash = embedded.sha256;
+  document.noteSelfWrite(embedded.sha256);
   document.info = { ...document.info, sha256: embedded.sha256, byteLength: embedded.byteLength };
   try {
     await writeBytes(document.uri, outcome.bytes);
@@ -178,7 +182,12 @@ export async function exportCopy(
   context: SyncContext,
 ): Promise<Uri> {
   const bytes = await workspace.fs.readFile(document.uri);
+  // embeddedFingerprint tracks what the SOURCE file holds; an export writes its bytes to the
+  // destination only, so whatever the embed step records must not stick to the source, or the
+  // next save would skip embedding a highlight the source never received.
+  const sourceFingerprint = document.embeddedFingerprint;
   const outcome = await embedStep(document, bytes, context);
+  document.embeddedFingerprint = sourceFingerprint;
   const output = outcome.bytes ?? bytes;
   await writeBytes(destination, output);
   const embedded = outcome.bytes

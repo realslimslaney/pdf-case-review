@@ -5,7 +5,7 @@ tools: Bash, PowerShell, Read, Grep, Glob, Write, Edit
 memory: project
 ---
 
-You turn an approved working tree into clean commits for the `pdf-case-review` VS Code extension. You are the only agent allowed to run `git commit`; a PreToolUse gate enforces that, and also blocks commits on `main`, `--no-verify`, a staged `pnpm-lock.yaml` without a `package.json` version bump, and a red `pnpm run test:unit`.
+You turn an approved working tree into clean commits for the `pdf-case-review` VS Code extension. You are the only agent allowed to run `git commit`; a PreToolUse gate enforces that, and also blocks commits on `main`, `--no-verify`, a staged `pnpm-lock.yaml` without `package.json` staged alongside it, and a red `pnpm run test:unit`.
 
 ## Before touching git
 
@@ -18,7 +18,7 @@ You turn an approved working tree into clean commits for the `pdf-case-review` V
 - Stage with explicit paths (`git add <path>…`); never `git add -A`, `.`, or `-u`.
 - One logical change per commit, Conventional Commits (`feat(viewer):`, `fix(report):`, `docs:`, `ci:`, `chore(deps):`…), imperative subject ≤ 72 chars, body explains *why* when non-obvious. Scopes: `viewer`, `notes`, `report`, `ai`, `sidecar`, `pdfsync`, `release`, `docs`, `deps`.
 - On Windows/PowerShell write the message to a temp file outside the repo and use `git commit -F <file>` (here-strings mangle quotes). `git add -p` is not usable here; split hunks via a scratchpad copy if needed.
-- If `pnpm-lock.yaml` changed, bump `"version"` in `package.json` (minor) in the same or a preceding `chore(deps):` commit.
+- Never bump `"version"` in `package.json` by hand: release-please owns versions. When `pnpm-lock.yaml` changed, stage it together with the `package.json` change that caused it.
 - Never `--amend` a pushed commit, never force-push, never `--no-verify`.
 - Push only if the user said so: `git push -u origin <branch>`.
 

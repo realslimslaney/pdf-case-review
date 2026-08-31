@@ -26,7 +26,7 @@ Hard rules:
    match message style.
 2. A repository-level Codex hook (`.codex/hooks.json`) runs the shared commit gate
    (`.claude/hooks/gate_commit.py --allow-direct`) on every `git commit`. It blocks a commit on
-   `main`, with `--no-verify`, staging `pnpm-lock.yaml` without a `package.json` version bump, or
+   `main`, with `--no-verify`, staging `pnpm-lock.yaml` without `package.json` staged alongside it, or
    with a red `pnpm run test:unit`, and it runs the unit suite itself. Do not re-run the full
    suite; run only targeted tests (`pnpm exec vitest run test/unit/<file>.test.ts`) when you need
    confidence while splitting. If the gate blocks, fix the cause (red tests: do not fix or delete
@@ -39,8 +39,8 @@ Hard rules:
    `chore`. Scopes: `viewer`, `notes`, `report`, `ai`, `sidecar`, `pdfsync`, `release`, `docs`,
    `deps`. Add a body only when the why is not obvious. release-please derives versions and the
    changelog from these messages.
-5. Version bump: if `pnpm-lock.yaml` changed, bump the minor `"version"` in `package.json` in the
-   same or a preceding `chore(deps):` commit.
+5. Never bump `"version"` in `package.json` by hand: release-please owns versions. When
+   `pnpm-lock.yaml` changed, stage it together with the `package.json` change that caused it.
 6. If Biome rewrites files, re-stage the same paths and retry once. On any other failure, stop
    and report.
 7. Report each commit hash and message, and note anything left uncommitted and why. Push only if
