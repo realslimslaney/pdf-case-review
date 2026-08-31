@@ -33,6 +33,34 @@ export interface NoteEditorState {
   target: NoteTarget | null;
   resolved: boolean;
   lastLoad: NoteEditorLoad | null;
+  /** How many saveNote messages were applied and acknowledged (the view's live region announces them). */
+  saveAcks: number;
+}
+
+/** Lets the integration tests answer the delete confirmation without a dialog. */
+export type NoteDeleteTestResponder = (target: NoteTarget) => boolean;
+let noteDeleteTestResponder: NoteDeleteTestResponder | undefined;
+export function setNoteDeleteTestResponder(responder?: NoteDeleteTestResponder): void {
+  noteDeleteTestResponder = responder;
+}
+
+function deleteQuestion(target: NoteTarget): string {
+  switch (target.kind) {
+    case "highlight":
+      return "Delete this highlight and its note?";
+    case "page":
+      return `Delete the note on page ${target.page}?`;
+    case "document":
+      return "Delete this document note?";
+  }
+}
+
+async function confirmDelete(target: NoteTarget): Promise<boolean> {
+  if (noteDeleteTestResponder) {
+    return noteDeleteTestResponder(target);
+  }
+  const choice = await window.showWarningMessage(deleteQuestion(target), { modal: true }, "Delete");
+  return choice === "Delete";
 }
 
 export class NoteEditorViewProvider extends Disposable implements WebviewViewProvider {
@@ -43,6 +71,7 @@ export class NoteEditorViewProvider extends Disposable implements WebviewViewPro
   private documentUri: string | undefined;
   private known: { target: NoteTarget; note: string; categoryId: string | null } | undefined;
   private lastLoad: NoteEditorLoad | undefined;
+  private saveAcks = 0;
 
   constructor(
     private readonly extensionUri: Uri,
@@ -88,6 +117,7 @@ export class NoteEditorViewProvider extends Disposable implements WebviewViewPro
       target: this.target ?? null,
       resolved: this.view !== undefined,
       lastLoad: this.lastLoad ?? null,
+      saveAcks: this.saveAcks,
     };
   }
 
@@ -128,6 +158,7 @@ export class NoteEditorViewProvider extends Disposable implements WebviewViewPro
         } else {
           this.editorProvider.updateDocumentNote(document, raw.target.id, { note: raw.note });
         }
+        this.post({ type: "saved" });
         return;
       }
       case "setCategory": {
@@ -154,26 +185,7 @@ export class NoteEditorViewProvider extends Disposable implements WebviewViewPro
         return;
       }
       case "deleteTarget": {
-        if (raw.target.kind === "highlight") {
-          const viewerId = this.viewerIdFor(document, raw.target.id);
-          const item =
-            viewerId === undefined ? { sidecarId: raw.target.id } : { sidecarId: raw.target.id, viewerId };
-          const delivered = this.editorProvider.postMessage(document.uri, {
-            type: "deleteHighlights",
-            items: [item],
-          });
-          if (delivered === 0) {
-            this.editorProvider.removeHighlight(document, raw.target.id);
-          }
-        } else if (raw.target.kind === "page") {
-          this.editorProvider.removePageNote(document, raw.target.page);
-        } else {
-          this.editorProvider.removeDocumentNote(document, raw.target.id);
-        }
-        if (displayed) {
-          this.target = undefined;
-          this.refresh(true);
-        }
+        void this.deleteTarget(document, raw.target, displayed);
         return;
       }
       case "revealTarget": {
@@ -198,6 +210,32 @@ export class NoteEditorViewProvider extends Disposable implements WebviewViewPro
         }
         return;
       }
+    }
+  }
+
+  /** Deleting is the one destructive gesture in this view, so it asks first. */
+  private async deleteTarget(document: PdfDocument, target: NoteTarget, displayed: boolean): Promise<void> {
+    if (!(await confirmDelete(target))) {
+      return;
+    }
+    if (target.kind === "highlight") {
+      const viewerId = this.viewerIdFor(document, target.id);
+      const item = viewerId === undefined ? { sidecarId: target.id } : { sidecarId: target.id, viewerId };
+      const delivered = this.editorProvider.postMessage(document.uri, {
+        type: "deleteHighlights",
+        items: [item],
+      });
+      if (delivered === 0) {
+        this.editorProvider.removeHighlight(document, target.id);
+      }
+    } else if (target.kind === "page") {
+      this.editorProvider.removePageNote(document, target.page);
+    } else {
+      this.editorProvider.removeDocumentNote(document, target.id);
+    }
+    if (displayed) {
+      this.target = undefined;
+      this.refresh(true);
     }
   }
 
@@ -311,6 +349,9 @@ export class NoteEditorViewProvider extends Disposable implements WebviewViewPro
     if (message.type === "clear") {
       this.lastLoad = undefined;
     }
+    if (message.type === "saved") {
+      this.saveAcks += 1;
+    }
     void this.view?.webview.postMessage(message);
   }
 
@@ -328,17 +369,20 @@ export class NoteEditorViewProvider extends Disposable implements WebviewViewPro
 </head>
 <body>
 <div id="empty" class="empty">Select a highlight or note in the Highlights view.</div>
-<div id="editor" hidden>
-  <div id="title"></div>
-  <div><span id="citation"></span></div>
-  <blockquote id="quote" hidden></blockquote>
+<form id="editor" hidden>
+  <h1 id="title"></h1>
+  <div><span id="citation" aria-label="Page"></span></div>
+  <blockquote id="quote" aria-label="Quoted passage" hidden></blockquote>
+  <label class="visually-hidden" for="category">Category</label>
   <select id="category" hidden></select>
+  <label class="visually-hidden" for="note">Note, in Markdown</label>
   <textarea id="note" placeholder="Add a note (Markdown)"></textarea>
   <div class="actions">
-    <button id="reveal">Reveal</button>
-    <button id="delete">Delete</button>
+    <button id="reveal" type="button">Reveal</button>
+    <button id="delete" type="button">Delete</button>
   </div>
-</div>
+  <div id="saveState" class="visually-hidden" role="status" aria-live="polite"></div>
+</form>
 <script src="${resolve("dist", "webview", "noteEditor.js")}" type="module"></script>
 </body>
 </html>`;

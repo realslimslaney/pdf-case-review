@@ -81,12 +81,9 @@ suite("Phase F: highlight with category, presets and sync", () => {
     assert.equal(editor.color, "#FF4F5F");
   });
 
-  test("without a text selection the shortcut recolors the selected highlight instead", async () => {
-    // PDF.js consumed the selection when it created the highlight and, in a focused window, left
-    // that editor selected; CI windows are not focused, so select it the way the viewer would.
-    const editor = (await viewerState(pdf))?.editors[0];
-    assert.ok(editor);
-    await send(pdf, { type: "spike.selectEditor", viewerId: editor.id });
+  test("without a text selection the shortcut recolors the last created highlight instead", async () => {
+    // CI windows are not focused, so PDF.js has dropped its editor selection; the host passes its
+    // own fallback target (the last created highlight) with the message.
     await vscode.commands.executeCommand("pdfCaseReview.highlightWithCategory", { index: 1 });
     const state = await waitOrDump(pdf, "the recolor to reach the model", async () => {
       const current = await documentState(pdf);

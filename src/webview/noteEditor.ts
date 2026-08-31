@@ -24,14 +24,23 @@ function element<T extends HTMLElement>(id: string): T {
 }
 
 const empty = element<HTMLDivElement>("empty");
-const editor = element<HTMLDivElement>("editor");
-const title = element<HTMLDivElement>("title");
+const editor = element<HTMLFormElement>("editor");
+const title = element<HTMLHeadingElement>("title");
 const citation = element<HTMLSpanElement>("citation");
 const quote = element<HTMLQuoteElement>("quote");
 const category = element<HTMLSelectElement>("category");
 const note = element<HTMLTextAreaElement>("note");
 const revealButton = element<HTMLButtonElement>("reveal");
 const deleteButton = element<HTMLButtonElement>("delete");
+const saveState = element<HTMLDivElement>("saveState");
+
+/** Announces through the polite live region; cleared first so a repeat save re-announces. */
+function announce(text: string): void {
+  saveState.textContent = "";
+  requestAnimationFrame(() => {
+    saveState.textContent = text;
+  });
+}
 
 let current: NoteEditorLoad | null = null;
 let dirty = false;
@@ -81,6 +90,7 @@ function show(message: NoteEditorLoad): void {
   }
   revealButton.hidden = message.target.kind === "document";
   note.value = message.note;
+  saveState.textContent = "";
 }
 
 function clear(reason: "noDocument" | "noTarget"): void {
@@ -128,7 +138,11 @@ window.addEventListener("message", (event: MessageEvent) => {
     show(message);
   } else if (message.type === "clear") {
     clear(message.reason);
+  } else if (message.type === "saved") {
+    announce("Note saved");
   }
 });
+
+editor.addEventListener("submit", (event) => event.preventDefault());
 
 post({ type: "ready" });
