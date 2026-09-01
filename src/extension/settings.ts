@@ -180,8 +180,8 @@ export function aiSettings(uri: Uri, output: LogOutputChannel): AiSettings {
 }
 
 /** Writes where the setting is defined (a workspace override would otherwise win over a user write). */
-export async function setAiProvider(provider: AiProviderSetting): Promise<void> {
-  const configuration = workspace.getConfiguration("pdfCaseReview.ai");
+export async function setAiProvider(provider: AiProviderSetting, resource?: Uri): Promise<void> {
+  const configuration = workspace.getConfiguration("pdfCaseReview.ai", resource);
   const inspected = configuration.inspect<string>("provider");
   const target =
     inspected?.workspaceFolderValue !== undefined

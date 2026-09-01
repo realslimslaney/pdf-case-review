@@ -87,6 +87,13 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
       return false;
     }
     settings = aiSettings(document.uri, context.output);
+    if (settings.provider !== picked) {
+      void window.showErrorMessage(
+        `PDF Case Review: pdfCaseReview.ai.provider still resolves to "${settings.provider}" for this ` +
+          "document; a narrower settings scope overrides the choice. Change it where it is defined.",
+      );
+      return false;
+    }
   }
   if (!isDesktopHost()) {
     void window.showWarningMessage(
@@ -167,7 +174,7 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
         if (configDir !== undefined) {
           options.configDir = configDir;
         }
-        return runProvider(settings.provider as "claude-cli" | "codex-cli", prompt, options);
+        return runProvider(provider, prompt, options);
       },
     );
     const trimmed = text.trim();
@@ -271,7 +278,7 @@ async function pickProvider(context: CommandContext): Promise<ProviderPick | und
   if (picked.id === "manual") {
     return "manual";
   }
-  await setAiProvider(picked.id);
+  await setAiProvider(picked.id, context.tracker.active?.uri);
   void window.showInformationMessage(`PDF Case Review: AI provider set to ${picked.label.toLowerCase()}.`);
   context.output.info(`ai.provider set to ${picked.id}`);
   return picked.id;
