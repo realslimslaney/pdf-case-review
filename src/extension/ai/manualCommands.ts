@@ -12,6 +12,12 @@ import type { PdfDocument } from "../editor/pdfDocument";
 import { aiSettings } from "../settings";
 import { ensureAttestation } from "./consentGate";
 
+/**
+ * Digest captured at copy time, keyed by document. The pasted answer covers what the copied prompt
+ * contained, so edits between copy and paste must leave the stored summary marked as possibly stale.
+ */
+const copiedPromptDigests = new Map<string, string>();
+
 interface CommandContext {
   provider: PdfCaseReviewEditorProvider;
   tracker: ActiveDocumentTracker;
@@ -67,6 +73,7 @@ export async function copySummaryPrompt(context: CommandContext): Promise<boolea
     { maxWords: settings.maxWords },
     gate.attestation,
   );
+  copiedPromptDigests.set(document.uri.toString(), summaryInputDigest(document.model, settings.maxWords));
   await env.clipboard.writeText(`${prompt.system}\n\n${prompt.user}`);
   void window.showInformationMessage(
     "PDF Case Review: summary prompt copied. Paste it into your AI chat, copy the answer, then run " +
@@ -89,11 +96,12 @@ export async function pasteSummary(context: CommandContext): Promise<boolean> {
     provider: "manual",
     generatedAt: new Date().toISOString(),
     text,
-    // The digest reflects the notes as they stand at paste time, the closest observable moment
-    // to what the pasted answer was generated from.
-    inputDigest: summaryInputDigest(document.model, aiSettings(document.uri, context.output).maxWords),
     promptVersion: SUMMARY_PROMPT_VERSION,
   };
+  const inputDigest = copiedPromptDigests.get(document.uri.toString());
+  if (inputDigest !== undefined) {
+    summary.inputDigest = inputDigest;
+  }
   const account = document.model.aiConsent?.email;
   if (account !== undefined) {
     summary.account = account;

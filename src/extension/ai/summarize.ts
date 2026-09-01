@@ -150,6 +150,8 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
     context.output.info(`summarizeWithAi refused: ${gate.reason}`);
     return false;
   }
+  // Captured with the prompt: edits made while the provider runs must mark the summary stale.
+  const inputDigest = summaryInputDigest(document.model, settings.maxWords);
   const prompt = buildSummaryPrompt(
     await markdownBody(document),
     { maxWords: settings.maxWords },
@@ -187,7 +189,7 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
       generatedAt: new Date().toISOString(),
       text: trimmed,
       account: gate.attestation.record.email,
-      inputDigest: summaryInputDigest(document.model, settings.maxWords),
+      inputDigest,
       promptVersion: SUMMARY_PROMPT_VERSION,
     };
     if (settings.model !== "") {
