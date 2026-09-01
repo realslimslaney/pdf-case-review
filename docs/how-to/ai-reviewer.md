@@ -41,7 +41,7 @@ If you switch accounts often, keep a second CLI login in its own directory and r
 ]
 ```
 
-To create that login once, run the CLI with the directory set, for example in PowerShell: `$env:CLAUDE_CONFIG_DIR = "$HOME\.claude-school"; claude` and sign in. From then on the extension sets `CLAUDE_CONFIG_DIR` (or `CODEX_HOME`) on the spawned CLI itself and verifies the email it finds there; you never export environment variables for VS Code.
+The **Configure** button in the viewer's title bar ($(gear)) has an **Add an AI Account** flow that writes both settings for you and opens a sign-in terminal with the directory already on the environment. By hand instead: run the CLI with the directory set, for example in PowerShell: `$env:CLAUDE_CONFIG_DIR = "$HOME\.claude-school"; claude` and sign in. From then on the extension sets `CLAUDE_CONFIG_DIR` (or `CODEX_HOME`) on the spawned CLI itself and verifies the email it finds there; you never export environment variables for VS Code.
 
 ## B. The agent reads your notes directly
 

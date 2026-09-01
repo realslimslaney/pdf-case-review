@@ -180,6 +180,12 @@
         "icon": "$(note)"
       },
       {
+        "command": "pdfCaseReview.configure",
+        "title": "%command.configure%",
+        "category": "%commandCategory%",
+        "icon": "$(gear)"
+      },
+      {
         "command": "pdfCaseReview.deleteNote",
         "title": "%command.deleteNote%",
         "category": "%commandCategory%",
@@ -333,6 +339,11 @@
           "command": "pdfCaseReview.addDocumentNote",
           "when": "activeCustomEditorId == pdfCaseReview.pdf",
           "group": "navigation@3"
+        },
+        {
+          "command": "pdfCaseReview.configure",
+          "when": "activeCustomEditorId == pdfCaseReview.pdf",
+          "group": "navigation@4"
         }
       ],
       "view/title": [

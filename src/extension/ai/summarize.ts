@@ -19,6 +19,7 @@ import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
 import type { PdfDocument } from "../editor/pdfDocument";
 import { type AiSettings, aiSettings, setAiProvider } from "../settings";
+import { isDesktopHost } from "../util/host";
 import { ensureAttestation } from "./consentGate";
 import { markdownBody } from "./manualCommands";
 
@@ -27,11 +28,6 @@ interface CommandContext {
   tracker: ActiveDocumentTracker;
   output: LogOutputChannel;
   extensionContext: ExtensionContext;
-}
-
-/** CLI providers need a Node extension host; the web host has no processes to spawn. */
-function isDesktopHost(): boolean {
-  return typeof process !== "undefined" && typeof process.versions?.node === "string";
 }
 
 function activeDocument(context: CommandContext): PdfDocument | undefined {

@@ -16,6 +16,7 @@
   "command.groupByPage": "Group by Page",
   "command.highlightWithCategory": "Highlight Selection with Category...",
   "command.applyCategoryPreset": "Apply Category Preset...",
+  "command.configure": "Configure...",
   "command.syncCategoriesFromSettings": "Sync Categories from Settings",
   "command.addPageNote": "Add Page Note",
   "command.addDocumentNote": "Add Document Note",

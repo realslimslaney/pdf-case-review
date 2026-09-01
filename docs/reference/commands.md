@@ -2,7 +2,7 @@
 
 All commands are under the **PDF Case Review** category in the Command Palette. The ones that act on a highlight take the highlight you right-clicked in the Highlights view, or the view's current selection.
 
-While a PDF is the active editor, its tab's title bar carries icon buttons for the three headline commands: **Generate Report** ($(output)), **Summarize with AI** ($(sparkle), trusted workspaces only) and **Add Document Note** ($(note)). The viewer's own toolbar also holds a category dropdown; see [How to: categories](../how-to/categories.md).
+While a PDF is the active editor, its tab's title bar carries icon buttons for the three headline commands: **Generate Report** ($(output)), **Summarize with AI** ($(sparkle), trusted workspaces only), **Add Document Note** ($(note)) and **Configure** ($(gear)), a hub for choosing the AI provider, adding a second AI account guided (it writes `ai.accounts` and `requiredAccount`, then opens a sign-in terminal), applying a category preset and jumping into the extension's settings. The viewer's own toolbar also holds a category dropdown; see [How to: categories](../how-to/categories.md).
 
 ## Highlights view
 
