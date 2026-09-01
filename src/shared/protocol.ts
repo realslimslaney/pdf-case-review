@@ -45,6 +45,12 @@ export interface InjectableHighlight {
 /** VS Code's active color theme, as the viewer needs to know it. */
 export type ThemeKind = "light" | "dark" | "high-contrast" | "high-contrast-light";
 
+export interface ViewerCategory {
+  id: string;
+  name: string;
+  color: string;
+}
+
 export interface ViewerConfig {
   url: string;
   resourceRoot: string;
@@ -57,6 +63,8 @@ export interface ViewerConfig {
   /** PDF.js `maxImageSize`; null keeps the vendored default. */
   maxImageSize: number | null;
   highlightEditorColors: string;
+  /** Categories in display order for the injected toolbar dropdown; a change rebuilds the webview. */
+  categories: ViewerCategory[];
   sandboxBundleSrc: string;
   cMapUrl: string;
   iccUrl: string;
@@ -138,7 +146,9 @@ type HostCommand =
   /** Spike instrumentation: select `spanCount` text-layer spans on `page` and highlight them. */
   | { type: "spike.highlightText"; page: number; spanCount: number; color: string }
   /** Spike instrumentation: recolor an existing editor (id = PDF.js editor / annotation id). */
-  | { type: "spike.recolorEditor"; id: string; color: string };
+  | { type: "spike.recolorEditor"; id: string; color: string }
+  | { type: "setDefaultCategory"; color: string }
+  | { type: "spike.highlightDefault"; page: number; spanCount: number };
 
 /** Every host command may carry a `requestId`; the webview answers it with a `done` message. */
 export type HostToWebviewMessage = HostCommand & { requestId?: number };

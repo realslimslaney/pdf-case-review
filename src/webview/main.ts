@@ -124,6 +124,7 @@ post({ type: "ready" });
 void (async () => {
   await PDFViewerApplication.initializedPromise;
   adapter.attach();
+  adapter.installCategoryToolbar(config.categories ?? []);
   await openDocument();
   const [, hash] = config.url.split("#");
   if (hash) {
@@ -188,6 +189,12 @@ async function handleHostMessage(message: HostToWebviewMessage): Promise<void> {
       return;
     case "spike.recolorEditor":
       adapter.recolorEditor(message.id, message.color);
+      return;
+    case "setDefaultCategory":
+      adapter.setDefaultCategory(message.color);
+      return;
+    case "spike.highlightDefault":
+      await adapter.spikeHighlightDefault(message.page, message.spanCount);
       return;
   }
 }

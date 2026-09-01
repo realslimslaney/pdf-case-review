@@ -56,6 +56,7 @@ import {
   emptySidecar,
   type Sidecar,
   type SidecarHighlight,
+  sortedCategories,
   toSidecarCategories,
 } from "../../core/sidecar/types";
 import {
@@ -1002,6 +1003,11 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
       maxImageSize: settings.get<number>("maxImageSize", 0) || null,
       // The palette comes from the document's own categories: the sidecar is self-describing.
       highlightEditorColors: toHighlightEditorColors(document.model.categories),
+      categories: sortedCategories(document.model.categories).map(({ id, name, color }) => ({
+        id,
+        name,
+        color,
+      })),
       sandboxBundleSrc: `${pdfjs("build", "pdf.sandbox.mjs")}`,
       cMapUrl: withTrailingSlash(pdfjs("web", "cmaps")),
       iccUrl: withTrailingSlash(pdfjs("web", "iccs")),
