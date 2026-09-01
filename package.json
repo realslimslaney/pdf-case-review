@@ -176,7 +176,8 @@
       {
         "command": "pdfCaseReview.addDocumentNote",
         "title": "%command.addDocumentNote%",
-        "category": "%commandCategory%"
+        "category": "%commandCategory%",
+        "icon": "$(note)"
       },
       {
         "command": "pdfCaseReview.deleteNote",
@@ -315,6 +316,23 @@
         {
           "command": "pdfCaseReview.summarizeWithAi",
           "when": "pdfCaseReview.hasActiveDocument && isWorkspaceTrusted"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "pdfCaseReview.generateReport",
+          "when": "activeCustomEditorId == pdfCaseReview.pdf",
+          "group": "navigation@1"
+        },
+        {
+          "command": "pdfCaseReview.summarizeWithAi",
+          "when": "activeCustomEditorId == pdfCaseReview.pdf && isWorkspaceTrusted",
+          "group": "navigation@2"
+        },
+        {
+          "command": "pdfCaseReview.addDocumentNote",
+          "when": "activeCustomEditorId == pdfCaseReview.pdf",
+          "group": "navigation@3"
         }
       ],
       "view/title": [

@@ -2,6 +2,8 @@
 
 All commands are under the **PDF Case Review** category in the Command Palette. The ones that act on a highlight take the highlight you right-clicked in the Highlights view, or the view's current selection.
 
+While a PDF is the active editor, its tab's title bar carries icon buttons for the three headline commands: **Generate Report** ($(output)), **Summarize with AI** ($(sparkle), trusted workspaces only) and **Add Document Note** ($(note)). The viewer's own toolbar also holds a category dropdown; see [How to: categories](../how-to/categories.md).
+
 ## Highlights view
 
 The **PDF Case Review** activity-bar icon opens the **Highlights** view for the active PDF. Rows show the highlighted passage (up to 60 characters) with its page; hover for the full quote and note. Grouping follows `pdfCaseReview.highlights.groupBy`. A **Document notes** group lists document-level notes first; in page grouping, a page's note appears above its highlights.
