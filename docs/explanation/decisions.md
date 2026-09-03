@@ -68,6 +68,14 @@ Short records of the decisions that shape the project, newest last. Each spike f
 
 **Consequences.** `pnpm test:e2e` needs `prepare-pdfjs`, `fixtures` and `build` first. The harness omits the CSP meta; CSP behavior stays covered by the integration suite inside real webviews. Playwright is a devDependency only and ships nowhere.
 
+## ADR-0010: AI page context: pure candidate selection, per-page staleness, replace-by-page
+
+**Decision.** **Add AI Page Context** (issue #29) writes a few AI sentences above a page's highlights in the report when the page has a dense but lightly-annotated cluster. The pure logic lives in `src/core/ai/pageContext.ts`: a page qualifies at `ai.pageContext.minHighlights` or more highlights with fewer than half carrying a note (`pagesNeedingContext`), the prompt builder requires the same branded `Attestation` as every other AI path (ADR-0006), and `pageContextInputDigest` hashes exactly what the prompt was built from, per page. Results are cached in the sidecar as `aiPageContexts`, sorted by `page`, one entry per page; regenerating a page replaces its entry. One consent dialog covers a whole batch of picked pages.
+
+**Why.** The reader who highlights heavily but annotates lightly gets a report that is a wall of quotes; a couple of orienting sentences per busy page makes it skimmable without pretending to be the reader's own analysis. Reusing the ADR-0006 chokepoint means there is no second consent path to audit, and a per-page digest means editing page 4 never marks page 3's context stale.
+
+**Consequences.** Reports interleave page contexts into the chronological stream and into per-page sections (`pageContextBlocks` in `src/core/report/layout.ts`), always above the page's own entries, in the same grey italics with per-block provenance. Because AI content can now appear before the summary section, the AI legend moved to the document head, emitted once when the report contains any AI content. The staleness fields (`inputDigest`, `promptVersion`) mirror `aiSummary`: a stale context is flagged in the report, never withheld.
+
 ## Spike log
 
 Results are recorded here as they land. Pass/fail criteria are in the maintainer plan (§14).

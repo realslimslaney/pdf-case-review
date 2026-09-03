@@ -7,7 +7,7 @@ All settings live under `pdfCaseReview.*`. Unless noted, they have `resource` sc
 | Setting | Default | Meaning |
 |---|---|---|
 | `pdfCaseReview.categories` | Fact, Financial, Strategic implication, Concern, Question | The highlight palette for new documents. Each entry needs a unique `id` (lowercase letters, digits, dashes), a `name` and a unique `#RRGGBB` `color`; the color is how the viewer tells categories apart. An invalid setting falls back to the defaults with a warning. Categories are copied into each document's sidecar when it is created, so changing the setting does not alter existing documents. |
-| `pdfCaseReview.categoryPresets` | `{}` | Extra palettes for **Apply Category Preset**, keyed by name; `Business case`, `Academic paper` and `Contract` are built in. Same item shape as `categories`. |
+| `pdfCaseReview.categoryPresets` | `{}` | Extra palettes for **Apply Category Preset**, keyed by name; `Business case`, `Academic paper` and `Contract` are built in. Same item shape as `categories`. `window` scope. |
 
 ## Storage
 
@@ -20,14 +20,14 @@ All settings live under `pdfCaseReview.*`. Unless noted, they have `resource` sc
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `pdfCaseReview.highlights.groupBy` | `category` | Whether the Highlights view groups rows by category (palette order) or by page (reading order). The view's title buttons toggle it. |
+| `pdfCaseReview.highlights.groupBy` | `category` | Whether the Highlights view groups rows by category (palette order) or by page (reading order). The view's title buttons toggle it. `window` scope. |
 
 ## Report
 
 | Setting | Default | Meaning |
 |---|---|---|
 | `pdfCaseReview.report.defaultFormat` | `ask` | Format for **Generate Report** (`Ctrl+Alt+R`): `ask` shows a picker; `markdown`, `docx` or `pdf` render immediately. |
-| `pdfCaseReview.report.organization` | `none` | Grouped sections added after the chronological notes: `none` (notes appear once, in the order they were taken), `category`, `page`, or `both` (category sections plus a reading-order appendix). Reports always open with the chronological notes and close with the AI summary. |
+| `pdfCaseReview.report.organization` | `none` | Grouped sections added after the chronological notes: `none` (notes appear once, in the order they were taken), `category`, `page`, or `both` (category sections plus a reading-order appendix). Reports always open with the chronological notes and close with the AI summary; cached AI page contexts render above their pages' entries in every organization. |
 | `pdfCaseReview.report.outputFolder` | `""` | Where reports are written. Empty writes beside the PDF; a relative path is resolved against the workspace folder. Ignored in untrusted workspaces. |
 | `pdfCaseReview.report.quoteMaxChars` | `300` | Longest quoted passage, truncated at a word boundary; `0` means unlimited. |
 | `pdfCaseReview.report.author` | `""` | Author line in the title block; empty omits it. |
