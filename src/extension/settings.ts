@@ -192,7 +192,7 @@ export function aiSettings(uri: Uri, output: LogOutputChannel): AiSettings {
       Number.isInteger(minHighlights) && minHighlights >= 2
         ? minHighlights
         : DEFAULT_PAGE_CONTEXT_MIN_HIGHLIGHTS,
-    contextScope: configuration.get<string>("contextScope") === "document-text" ? "document-text" : "notes",
+    contextScope: configuration.get<string>("contextScope") === "notes" ? "notes" : "document-text",
   };
   if (warnings.length > 0) {
     const detail = warnings.join("; ");

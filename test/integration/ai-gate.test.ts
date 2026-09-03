@@ -30,11 +30,14 @@ suite("M2 phase 4: AI eligibility gate and manual hand-off", () => {
     await openWith(pdf);
     await waitForLoaded(pdf);
     await highlight(pdf, 1, "#53FFBC", 1);
+    // The suite records its first consent in the notes scope so the widening test below is real.
+    await configuration().update("contextScope", "notes", vscode.ConfigurationTarget.Global);
   });
 
   suiteTeardown(async () => {
     await vscode.commands.executeCommand("pdfCaseReview.debug.autoConsent", null);
     await configuration().update("requiredAccount", undefined, vscode.ConfigurationTarget.Global);
+    await configuration().update("contextScope", undefined, vscode.ConfigurationTarget.Global);
     await closeAll();
   });
 
@@ -142,7 +145,18 @@ suite("M2 phase 4: AI eligibility gate and manual hand-off", () => {
       assert.equal(after?.model.aiSummary?.contextScope, "document-text", "the summary carries the scope");
       assert.ok(after?.model.aiSummary?.inputDigest, "the digest was captured at copy time");
     } finally {
-      await configuration().update("contextScope", undefined, vscode.ConfigurationTarget.Global);
+      await configuration().update("contextScope", "notes", vscode.ConfigurationTarget.Global);
     }
+  });
+
+  test("the default scope sends the document text", async () => {
+    await configuration().update("contextScope", undefined, vscode.ConfigurationTarget.Global);
+    await vscode.commands.executeCommand("pdfCaseReview.debug.autoConsent", {
+      typedEmail: "you@school.edu",
+    });
+    const copied = await vscode.commands.executeCommand<boolean>("pdfCaseReview.ai.copySummaryPrompt");
+    assert.equal(copied, true);
+    const clipboard = await vscode.env.clipboard.readText();
+    assert.ok(clipboard.includes("Document text ("), "the unset scope sends the document text");
   });
 });

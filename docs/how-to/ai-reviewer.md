@@ -1,6 +1,6 @@
 # Use Claude Code or Codex as your reviewer
 
-Two independent ways to bring AI into a review, both optional and off by default. By default only your highlighted excerpts and notes are involved; a setting can add the document's extracted text (see [choosing the context scope](#choose-how-much-context-is-sent) below), and the PDF file itself is never sent. The report sets AI text apart in grey italics with a legend.
+Two independent ways to bring AI into a review, both optional and off by default. By default the summary is built from your highlighted excerpts, your notes and the document's extracted text; a setting narrows that to notes only (see [choosing the context scope](#choose-how-much-context-is-sent) below), and the PDF file itself is never sent. The report sets AI text apart in grey italics with a legend.
 
 ## A. The built-in executive summary
 
@@ -9,22 +9,24 @@ Two independent ways to bring AI into a review, both optional and off by default
 
 Before anything is sent you answer one direct question: *may this document be fed into AI context on this account?* The dialog names the signed-in email (read from the CLI's own saved login, never from asking a model), shows the document's authorization line when page 1 has one ("authorized for use only by..."), and counts what will be sent. Answering yes records the attestation in the sidecar; the report's AI section is stamped with provider, model, account and dates. Cancel and nothing is sent; the report still renders without a summary.
 
-The summary is cached in the sidecar (`aiSummary`), so re-rendering the report never re-calls the model; **Summarize with AI** offers to regenerate.
+The summary is cached in the sidecar (`aiSummary`), so re-rendering the report never re-calls the model; **Summarize with AI** offers to regenerate. The prompt template is at version 2 as of this release, so a summary cached by an earlier release is reported as possibly out of date once, until you regenerate it.
+
+When there is nothing to send, **Summarize with AI** and **Copy Summary Prompt** stop with "nothing to summarize yet" instead of sending an empty prompt. Under the default document-text scope (below) the document text alone is enough, so this mainly bites under the `notes` scope, or on a scanned or image-only PDF with no extractable text, until you highlight a passage or add a note.
 
 ### Choose how much context is sent
 
-By default the summary is built from your highlights and notes alone. If the model needs the document
-itself to be useful (your notes are sparse, or you want claims checked against the text), set:
+By default the prompt carries your highlights and notes plus the document text, so a summary works on a
+freshly opened case before any highlights exist. **Summarize with AI** and **Copy Summary Prompt** append
+the document text after your notes: extracted per page through the viewer, each page chunked under a
+citation marker, so the model can cite pages. It is document *text*, not the PDF: the file itself is never
+sent, and pages with nothing to extract (image-only exhibits, scans) are simply absent. Very long documents
+are cut off at a size budget and the prompt says where.
+
+To keep the PDF's text on this machine and send only your highlights and notes, narrow the scope:
 
 ```jsonc
-"pdfCaseReview.ai.contextScope": "document-text"
+"pdfCaseReview.ai.contextScope": "notes"
 ```
-
-Now **Summarize with AI** and **Copy Summary Prompt** append the document text to the prompt after your
-notes: extracted per page through the viewer, each page chunked under a citation marker, so the model can
-cite pages. It is document *text*, not the PDF: the file itself is never sent, and pages with nothing to
-extract (image-only exhibits, scans) are simply absent. Very long documents are cut off at a size budget
-and the prompt says where.
 
 Widening the scope always re-asks the consent question (a wider consent covers narrower runs, so switching back never nags), and the dialog states exactly
 what the run will send: under document text it adds a coverage line ("text extracted from N of M page(s),

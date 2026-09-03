@@ -103,10 +103,11 @@ brings the answer back. The gear at the end of the row, **Configure...**, holds 
 picker plus **Add an AI Account...** for a second login.
 
 Before anything is sent, the extension asks whether the document may be fed into AI context on the
-signed-in account, names that account, and by default only your highlights and notes are sent, never
-the PDF file itself. (The very first time, a one-off notice about using AI features responsibly comes
-first; agree to it to enable AI features at all.) In the report, AI text is set apart in grey italics
-with a legend. See [Using Claude Code or Codex as a reviewer](../how-to/ai-reviewer.md).
+signed-in account, names that account, and states exactly what goes out: your highlights, your notes and
+the document's extracted text (a setting narrows that to notes only), never the PDF file itself. (The
+very first time, a one-off notice about using AI features responsibly comes first; agree to it to enable
+AI features at all.) In the report, AI text is set apart in grey italics with a legend. See
+[Using Claude Code or Codex as a reviewer](../how-to/ai-reviewer.md).
 
 If the dialog names the wrong account (your personal login instead of the one licensed for the
 document), use its **Wrong account? Show how to switch** button; nothing is sent, and the short version
