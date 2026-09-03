@@ -3,7 +3,7 @@
 The writing rule in .claude/CLAUDE.md (avoid em-dashes; the repo also standardized on US
 spelling) is stated in four files and was enforced nowhere. This hook feeds a reminder back to
 the model right after an Edit/Write that violates it, scanning only the text the tool just added:
-whole content for Markdown, comment lines for TypeScript/JavaScript.
+whole content for Markdown; for code, em-dashes anywhere and spelling in comment text only.
 
 Unlike gate_commit.py this guard fails OPEN: style advice must never break editing, so any
 unexpected payload or internal error exits 0. Exit 2 returns the findings to the model as
@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 PROSE_SUFFIXES = {".md"}
-CODE_SUFFIXES = {".ts", ".mts", ".cts", ".tsx", ".mjs", ".cjs", ".js"}
+CODE_SUFFIXES = {".ts", ".mts", ".cts", ".tsx", ".mjs", ".cjs", ".js", ".py"}
 SKIP_PARTS = {"vendor", "node_modules", ".vitepress", "fixtures", "patches"}
 SKIP_NAMES = {"CODE_OF_CONDUCT.md", "THIRD_PARTY_NOTICES.md"}
 
@@ -58,11 +58,36 @@ def should_check(path: Path, cwd: str) -> bool:
     return path.suffix in PROSE_SUFFIXES or path.suffix in CODE_SUFFIXES
 
 
+def comment_text(line: str, marker: str) -> str | None:
+    """The comment part of a code line: after the first marker that is outside a string literal
+    and not part of a URL scheme. Quote counting is a heuristic, good enough for a reminder."""
+    start = 0
+    while True:
+        index = line.find(marker, start)
+        if index == -1:
+            return None
+        before = line[:index]
+        in_string = any(before.count(quote) % 2 == 1 for quote in ("\"", "'", "`"))
+        if not in_string and not before.endswith(":"):
+            return line[index + len(marker) :]
+        start = index + len(marker)
+
+
 def prose_lines(path: Path, text: str) -> list[str]:
     lines = text.splitlines()
     if path.suffix in PROSE_SUFFIXES:
         return lines
-    return [line for line in lines if "//" in line or line.lstrip().startswith("*")]
+    marker = "#" if path.suffix == ".py" else "//"
+    comments = []
+    for line in lines:
+        stripped = line.lstrip()
+        if marker == "//" and (stripped.startswith("*") or stripped.startswith("/*")):
+            comments.append(line)
+            continue
+        found = comment_text(line, marker)
+        if found is not None:
+            comments.append(found)
+    return comments
 
 
 def main() -> int:
@@ -74,8 +99,12 @@ def main() -> int:
     if not should_check(path, payload.get("cwd") or "."):
         return 0
     problems = []
+    if path.suffix in CODE_SUFFIXES:
+        for line in text.splitlines():
+            if EM_DASH in line:
+                problems.append(f"em-dash: {line.strip()[:100]}")
     for line in prose_lines(path, text):
-        if EM_DASH in line:
+        if path.suffix in PROSE_SUFFIXES and EM_DASH in line:
             problems.append(f"em-dash: {line.strip()[:100]}")
         for match in BRITISH_RE.finditer(line):
             problems.append(f'British spelling "{match.group(0)}": {line.strip()[:100]}')

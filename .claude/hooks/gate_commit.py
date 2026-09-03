@@ -41,7 +41,6 @@ GIT_COMMIT_RE = re.compile(
     re.VERBOSE | re.IGNORECASE,
 )
 NO_VERIFY_RE = re.compile(r"(?:^|\s)(?:--no-verify|-n)(?![\w-])")
-MESSAGE_ARG_RE = re.compile(r"""(?:^|\s)(?:-m|--message)(?:=|\s+)(?:"([^"]*)"|'([^']*)'|(\S+))""")
 FILE_ARG_RE = re.compile(r"""(?:^|\s)(?:-F|--file)(?:=|\s+)(?:"([^"]*)"|'([^']*)'|(\S+))""")
 EM_DASH = "—"
 
@@ -96,11 +95,10 @@ def block(message: str) -> int:
 
 
 def commit_message_has_em_dash(command: str, cwd: str) -> bool:
-    # Covers -m/--message inline and -F/--file message files (the committer agent's normal path).
-    # A message written some other way slips past; the style_guard hook is the broader net.
-    for match in MESSAGE_ARG_RE.finditer(command):
-        if EM_DASH in (match.group(1) or match.group(2) or match.group(3) or ""):
-            return True
+    # Nothing in a git commit command but its message carries an em-dash, so scanning the whole
+    # command covers -m, here-strings, heredocs and stdin alike; -F/--file needs the file read.
+    if EM_DASH in command:
+        return True
     for match in FILE_ARG_RE.finditer(command):
         path = match.group(1) or match.group(2) or match.group(3) or ""
         try:
@@ -170,7 +168,7 @@ def main() -> int:
     if not looks_like_git_commit(command):
         return 0
     # Past detection the gate must fail CLOSED: an uncaught crash exits 1, which the harness
-    # treats as non-blocking — a buggy gate would silently wave commits through.
+    # treats as non-blocking: a buggy gate would silently wave commits through.
     try:
         return run_checks(payload, command)
     except Exception as exc:
