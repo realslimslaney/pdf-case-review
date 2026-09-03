@@ -94,21 +94,37 @@ export async function highlight(
     const state = await documentState(uri);
     return state && state.model.highlights.length >= expectedCount ? state : undefined;
   };
-  const result = await request(uri, { type: "spike.highlightText", page, spanCount: 2, color });
+  await highlightWithRetry(uri, page, color, reached, `highlight ${expectedCount} in the model`);
+}
+
+/**
+ * Posts `spike.highlightText` for the first two spans of `page` as an acknowledged request and
+ * waits until `reached` yields a value (`what` names it in the timeout error). An unfocused
+ * window (the macos-latest runner) can drop the DOM selection, so a failed acknowledgement is
+ * followed by one retry; but a failed acknowledgement can also mean the editor landed late, so
+ * the retry (which would create a duplicate otherwise) only goes out when `reached` provably
+ * stays unmet.
+ */
+export async function highlightWithRetry<T>(
+  uri: vscode.Uri,
+  page: number,
+  color: string,
+  reached: () => Promise<T | undefined>,
+  what: string,
+): Promise<T> {
+  const create = () => request(uri, { type: "spike.highlightText", page, spanCount: 2, color });
+  const result = await create();
   if (!result.ok) {
-    // A failed acknowledgement can still mean the editor landed late; only retry (which would
-    // create a duplicate otherwise) when the model provably stayed short.
     try {
-      await waitFor(`highlight ${expectedCount} after a failed acknowledgement`, reached, 3_000);
-      return;
+      return await waitFor(`${what} after a failed acknowledgement`, reached, 3_000);
     } catch {
-      const retry = await request(uri, { type: "spike.highlightText", page, spanCount: 2, color });
+      const retry = await create();
       if (!retry.ok) {
         throw new Error(`spike.highlightText failed twice: ${retry.error ?? result.error ?? "unknown"}`);
       }
     }
   }
-  await waitFor(`highlight ${expectedCount} in the model`, reached);
+  return waitFor(what, reached);
 }
 
 export async function remove(uri: vscode.Uri): Promise<void> {
