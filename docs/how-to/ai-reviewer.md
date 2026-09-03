@@ -4,7 +4,7 @@ Two independent ways to bring AI into a review, both optional and off by default
 
 ## A. The built-in executive summary
 
-1. Install a CLI and sign in once: `npm i -g @anthropic-ai/claude-code` then run `claude`, or `npm i -g @openai/codex` then run `codex`.
+1. Install a CLI and sign in once ([Install a command-line AI assistant](install-an-ai-cli.md) walks through it): `npm i -g @anthropic-ai/claude-code` then run `claude`, or `npm i -g @openai/codex` then run `codex`.
 2. Open your case and run **PDF Case Review: Summarize with AI**. That one command is the front door: with no provider configured it opens the provider picker first, which probes both CLIs and shows, per option, the signed-in account or a one-line install fix, plus a Manual entry for the clipboard flow below. (**Choose AI Provider...** opens the same picker on its own whenever you want to switch.)
 
 Before anything is sent you answer one direct question: *may this document be fed into AI context on this account?* The dialog names the signed-in email (read from the CLI's own saved login, never from asking a model), shows the document's authorization line when page 1 has one ("authorized for use only by..."), and counts what will be sent. Answering yes records the attestation in the sidecar; the report's AI section is stamped with provider, model, account and dates. Cancel and nothing is sent; the report still renders without a summary.

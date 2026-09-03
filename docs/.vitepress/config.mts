@@ -29,6 +29,7 @@ export default defineConfig({
           { text: "Set up categories", link: "/how-to/categories" },
           { text: "Work with scanned PDFs", link: "/how-to/scanned-pdfs" },
           { text: "Work with very large PDFs", link: "/how-to/large-pdfs" },
+          { text: "Install a command-line AI assistant", link: "/how-to/install-an-ai-cli" },
           { text: "Claude Code or Codex as reviewer", link: "/how-to/ai-reviewer" },
           { text: "Personal and school Claude accounts", link: "/how-to/two-claude-accounts" },
         ],
@@ -48,7 +49,10 @@ export default defineConfig({
       },
       {
         text: "Explanation",
-        items: [{ text: "Architecture decisions", link: "/explanation/decisions" }],
+        items: [
+          { text: "Architecture decisions", link: "/explanation/decisions" },
+          { text: "How Claude Code and Codex know who you are", link: "/explanation/claude-accounts" },
+        ],
       },
     ],
     socialLinks: [{ icon: "github", link: "https://github.com/realslimslaney/pdf-case-review" }],

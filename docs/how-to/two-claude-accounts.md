@@ -5,17 +5,14 @@ course material. Licensed case PDFs should only be processed under the school ac
 out and back in for every switch is slow and easy to forget. This guide keeps both logins installed at
 once and gives you one command to switch. Codex is covered at the end.
 
-## How Claude Code knows who you are
-
-Claude Code keeps its login, settings and history in one directory: `~/.claude` (on Windows,
-`%USERPROFILE%\.claude`). The `CLAUDE_CONFIG_DIR` environment variable points it at a different
-directory instead. Two directories, two independent logins: whichever one the variable names is the
-account that runs. This guide uses `~/.claude` for personal (the default, nothing to change) and
-`~/.claude-school` for school.
+Why this works (one login directory per account, and the `CLAUDE_CONFIG_DIR` variable that selects
+it) is explained in [How Claude Code and Codex know who you are](../explanation/claude-accounts.md).
 
 ## 1. Create the school login once
 
-Run Claude Code with the variable set and sign in with the school account when the browser opens:
+This guide uses `~/.claude` for personal (the default, nothing to change) and `~/.claude-school` for
+school. Run Claude Code with `CLAUDE_CONFIG_DIR` pointing at the school directory and sign in with the
+school account when the browser opens:
 
 ```powershell
 # Windows, PowerShell
@@ -196,6 +193,6 @@ Register it for the extension with `"provider": "codex-cli"` and `"configDir": "
   to switch**, or add the rule from step 4 so the extension picks the account itself.
 - **VS Code still shows the old account after `claude-use`.** A window reload is not enough; quit the
   application fully and reopen it. On a Mac, launch it from a terminal with `code .`.
-- **Which account is this terminal?** `claude-which`, or `/status` inside a session.
-- **Fallback**: run `claude`, type `/logout`, then `claude` again and sign in with the account you
-  need. This changes the login inside whichever directory is active.
+- **Not sure which account a terminal is using.** Run `claude-which`, or `/status` inside a session.
+- **The switcher commands are not on this machine.** Run `claude`, type `/logout`, then `claude` again
+  and sign in with the account you need. This changes the login inside whichever directory is active.

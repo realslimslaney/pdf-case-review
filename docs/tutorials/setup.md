@@ -1,8 +1,8 @@
 # Set up your computer
 
 This tutorial is for someone who has never used VS Code. In about twenty minutes you will install it,
-learn the five parts of its window, install the PDF Case Review extension, and optionally add a
-command-line AI assistant. Nothing here needs programming experience.
+learn the five parts of its window, install the PDF Case Review extension, and see where the optional
+command-line AI assistant fits. Nothing here needs programming experience.
 
 ## 1. Install VS Code
 
@@ -66,63 +66,14 @@ Click a PDF in the Explorer and it opens in the viewer. You are ready for
 
 ## 5. Optional: a command-line AI assistant
 
-A CLI (command-line interface) is a program you talk to by typing in the terminal instead of clicking
-in windows. Claude Code (from Anthropic) and Codex (from OpenAI) are CLI assistants: you open a terminal
-in your case folder, type a question, and they can read the files there and answer. Two reasons that is
-useful with this extension: your notes are stored as a plain file next to each PDF, so an assistant can
-summarize them or draft discussion questions from them, and the extension itself can ask the assistant
-for an executive summary of your highlights. Both are optional; the extension works fully without them.
+The extension's AI features (an executive summary of your highlights, and letting an assistant read
+your notes) are optional; everything else works without them. They need Claude Code or Codex
+installed on your computer. When you want them, follow
+[Install a command-line AI assistant](../how-to/install-an-ai-cli.md) and come back here.
 
-Open a terminal inside VS Code with **View > Terminal** (or `` Ctrl+` ``, the key under Escape). It
-opens in your folder. Then install one of the assistants.
+## What to read next
 
-### Claude Code
-
-Claude Code needs a paid Claude plan (Pro, Max, Team or Enterprise). Run one of these, then run `claude`
-and sign in through the browser window that opens:
-
-```powershell
-# Windows, in PowerShell
-irm https://claude.ai/install.ps1 | iex
-```
-
-```bash
-# macOS and Linux
-curl -fsSL https://claude.ai/install.sh | bash
-```
-
-Alternatives: `winget install Anthropic.ClaudeCode` on Windows, `brew install --cask claude-code` on a
-Mac. On Windows, installing [Git for Windows](https://git-scm.com/downloads/win) as well gives Claude
-Code a Bash shell to work in, which its tools prefer.
-
-- [Quickstart](https://code.claude.com/docs/en/quickstart) and, if the terminal is new to you, the
-  [terminal guide](https://code.claude.com/docs/en/terminal-guide).
-- There is also a [Claude Code extension for VS Code](https://code.claude.com/docs/en/vs-code) with a
-  chat panel; it signs in with the same account.
-
-### Codex
-
-Codex signs in with a ChatGPT account (a paid plan, or an API key). Run one of these, then run `codex`
-and choose **Sign in with ChatGPT**:
-
-```powershell
-# Windows, in PowerShell
-irm https://chatgpt.com/codex/install.ps1 | iex
-```
-
-```bash
-# macOS and Linux
-curl -fsSL https://chatgpt.com/codex/install.sh | sh
-```
-
-Alternatives: `brew install --cask codex` on a Mac, or `npm install -g @openai/codex` anywhere (the
-`npm` command comes with [Node.js](https://nodejs.org/en/download)).
-
-- [Codex CLI documentation](https://learn.chatgpt.com/docs/codex/cli), including the sign-in options.
-- Codex also ships a [VS Code extension](https://learn.chatgpt.com/docs/codex/ide).
-
-### What to read next
-
+- [Your first case, start to finish](first-case.md): open a PDF, highlight, take notes, print a report.
 - What the extension does with an assistant, and how the consent dialog works:
   [Use Claude Code or Codex as your reviewer](../how-to/ai-reviewer.md).
 - If your school gives you a Claude account and you also have a personal one:
