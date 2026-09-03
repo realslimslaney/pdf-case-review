@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 REQUIRE_COMMITTER_AGENT = "--allow-direct" not in sys.argv[1:]
 # Must beat the 300s hook timeout in settings.json: a harness-killed hook is non-blocking,
@@ -40,6 +41,9 @@ GIT_COMMIT_RE = re.compile(
     re.VERBOSE | re.IGNORECASE,
 )
 NO_VERIFY_RE = re.compile(r"(?:^|\s)(?:--no-verify|-n)(?![\w-])")
+MESSAGE_ARG_RE = re.compile(r"""(?:^|\s)(?:-m|--message)(?:=|\s+)(?:"([^"]*)"|'([^']*)'|(\S+))""")
+FILE_ARG_RE = re.compile(r"""(?:^|\s)(?:-F|--file)(?:=|\s+)(?:"([^"]*)"|'([^']*)'|(\S+))""")
+EM_DASH = "—"
 
 MSG_DELEGATE = (
     "BLOCKED: direct commits from this session are disabled. Delegate to the 'committer' subagent "
@@ -68,6 +72,10 @@ MSG_TEST_TIMEOUT = (
     "do not commit until the suite completes green."
 )
 MSG_NO_PNPM = "BLOCKED: pnpm was not found on PATH, so the commit gate cannot run the tests. Install pnpm and retry."
+MSG_EM_DASH = (
+    "BLOCKED: the commit message contains an em-dash; the repository's writing rule (CLAUDE.md) "
+    "avoids them in commit messages. Rephrase with a comma, colon or parentheses, then retry."
+)
 
 
 def looks_like_git_commit(command: str) -> bool:
@@ -85,6 +93,25 @@ def run_git(args: list[str], cwd: str) -> subprocess.CompletedProcess[str]:
 def block(message: str) -> int:
     print(message, file=sys.stderr)
     return 2
+
+
+def commit_message_has_em_dash(command: str, cwd: str) -> bool:
+    # Covers -m/--message inline and -F/--file message files (the committer agent's normal path).
+    # A message written some other way slips past; the style_guard hook is the broader net.
+    for match in MESSAGE_ARG_RE.finditer(command):
+        if EM_DASH in (match.group(1) or match.group(2) or match.group(3) or ""):
+            return True
+    for match in FILE_ARG_RE.finditer(command):
+        path = match.group(1) or match.group(2) or match.group(3) or ""
+        try:
+            candidate = Path(path)
+            if not candidate.is_absolute():
+                candidate = Path(cwd) / candidate
+            if candidate.is_file() and EM_DASH in candidate.read_text(encoding="utf-8", errors="replace"):
+                return True
+        except OSError:
+            continue
+    return False
 
 
 def check_lockfile_pairing(cwd: str) -> str | None:
@@ -125,6 +152,8 @@ def run_checks(payload: dict, command: str) -> int:
         return block(MSG_DELEGATE)
     if uses_no_verify(command):
         return block(MSG_NO_VERIFY)
+    if commit_message_has_em_dash(command, cwd):
+        return block(MSG_EM_DASH)
     # symbolic-ref (not rev-parse) so an unborn branch (a repo before its first commit) still
     # reports "main" instead of an empty string that would slip past this rule.
     if run_git(["symbolic-ref", "--short", "-q", "HEAD"], cwd).stdout.strip() == DEFAULT_BRANCH:
