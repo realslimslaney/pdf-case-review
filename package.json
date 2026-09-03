@@ -774,7 +774,7 @@
         "pdfCaseReview.ai.maxWords": {
           "type": "number",
           "scope": "resource",
-          "default": 250,
+          "default": 350,
           "minimum": 1,
           "description": "Word budget for the AI executive summary."
         },

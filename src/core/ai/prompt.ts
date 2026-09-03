@@ -18,7 +18,7 @@ export const DOCUMENT_TEXT_SYSTEM_PROMPT =
 /** Bump when the template wording changes, so cached summaries from the old template read as stale. */
 export const SUMMARY_PROMPT_VERSION = 1;
 
-export const DEFAULT_MAX_WORDS = 250;
+export const DEFAULT_MAX_WORDS = 350;
 
 export interface SummaryPrompt {
   system: string;

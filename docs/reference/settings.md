@@ -44,7 +44,7 @@ Nothing leaves your machine unless a provider is enabled or you copy the prompt 
 | `pdfCaseReview.ai.provider` | `off` | `off`, `claude-cli` (spawns `claude`) or `codex-cli` (spawns `codex`). CLI providers need desktop VS Code and a trusted workspace. |
 | `pdfCaseReview.ai.model` | `""` | Model passed to the CLI (`--model`); empty uses the CLI's default. |
 | `pdfCaseReview.ai.includeInReport` | `true` | Include the cached AI summary as a labeled, grey-italics section of generated reports. |
-| `pdfCaseReview.ai.maxWords` | `250` | Word budget for the executive summary. |
+| `pdfCaseReview.ai.maxWords` | `350` | Word budget for the executive summary. |
 | `pdfCaseReview.ai.pageContext.minHighlights` | `4` | **Add AI Page Context** offers pages with at least this many highlights where fewer than half carry notes. |
 | `pdfCaseReview.ai.requiredAccount` | `[]` | Rules refusing the AI step under the wrong login. The first rule whose `when` matches (`protected`, `authorizationLineMatches`, `pathGlob`) applies; `email` names the account that must be signed in (no override) and `use` selects an entry of `ai.accounts`. |
 | `pdfCaseReview.ai.accounts` | `[]` | Separate CLI login directories (`{id, provider, configDir}`) for people with more than one account; the extension sets `CLAUDE_CONFIG_DIR` / `CODEX_HOME` on the spawned CLI itself. The account's `provider` must match `pdfCaseReview.ai.provider`; a matched rule selecting a mismatched account is refused with a configuration error, so a run can never execute under a different CLI or login than the one the consent dialog verified. |
