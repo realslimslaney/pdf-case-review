@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/gate_commit.py",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/gate_commit.py\"",
             "timeout": 300
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/style_guard.py",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/style_guard.py\"",
             "timeout": 30
           }
         ]
