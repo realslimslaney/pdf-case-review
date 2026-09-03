@@ -171,6 +171,10 @@ export function checkRule(rule: RequiredAccountRule, identity: RuleIdentity): Ru
   return { ok: true };
 }
 
+function scopeRank(scope: string | undefined): number {
+  return scope === "document-text" ? 1 : 0;
+}
+
 export interface ReconsentFacts {
   provider: string;
   email: string;
@@ -189,7 +193,9 @@ export function needsReconsent(stored: AiConsent | undefined, current: Reconsent
     stored.provider !== current.provider ||
     stored.email.toLowerCase() !== current.email.toLowerCase() ||
     stored.documentSha256 !== current.documentSha256 ||
-    (stored.contextScope ?? "notes") !== (current.contextScope ?? "notes") ||
+    // A wider consent covers narrower runs: document-text consent also authorizes a notes-only
+    // run (page context, say) without re-asking; only widening the scope re-asks.
+    scopeRank(current.contextScope) > scopeRank(stored.contextScope) ||
     stored.wordingVersion !== CONSENT_WORDING_VERSION ||
     stored.eligibilityConfirmed !== true
   );

@@ -98,12 +98,12 @@ describe("needsReconsent on scope changes", () => {
     protected: false,
   };
 
-  it("re-asks when the scope widens to document text and when it narrows back", () => {
+  it("re-asks when the scope widens; a wider consent covers narrower runs", () => {
     expect(needsReconsent(stored, { ...current, contextScope: "notes" })).toBe(false);
     expect(needsReconsent(stored, { ...current, contextScope: "document-text" })).toBe(true);
     expect(
       needsReconsent({ ...stored, contextScope: "document-text" }, { ...current, contextScope: "notes" }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("treats a pre-scope consent as notes-only", () => {
