@@ -112,24 +112,7 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
       .then((pick) => (pick ? commands.executeCommand("pdfCaseReview.ai.chooseProvider") : undefined));
     return false;
   }
-  const cached = document.model.aiSummary;
-  if (cached && cached.provider === settings.provider) {
-    const fresh =
-      cached.promptVersion === SUMMARY_PROMPT_VERSION &&
-      (cached.contextScope ?? "notes") === settings.contextScope &&
-      cached.inputDigest === summaryInputDigest(document.model, settings.maxWords, settings.contextScope);
-    const choice = await window.showInformationMessage(
-      fresh
-        ? `PDF Case Review: an AI summary from ${cached.generatedAt} is already cached.`
-        : `PDF Case Review: the cached AI summary from ${cached.generatedAt} predates changes to your highlights or notes.`,
-      "Use cached",
-      "Regenerate",
-    );
-    if (choice !== "Regenerate") {
-      return choice === "Use cached";
-    }
-  }
-
+  // Every click regenerates: the cached summary only serves report rendering.
   let documentText: DocumentTextResult | undefined;
   if (settings.contextScope === "document-text") {
     const pages = await context.provider.collectDocumentText(document);

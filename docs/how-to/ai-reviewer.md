@@ -9,7 +9,7 @@ Two independent ways to bring AI into a review, both optional and off by default
 
 Before anything is sent you answer one direct question: *may this document be fed into AI context on this account?* The dialog names the signed-in email (read from the CLI's own saved login, never from asking a model), shows the document's authorization line when page 1 has one ("authorized for use only by..."), and counts what will be sent. Answering yes records the attestation in the sidecar; the report's AI section is stamped with provider, model, account and dates. Cancel and nothing is sent; the report still renders without a summary.
 
-The summary is cached in the sidecar (`aiSummary`), so re-rendering the report never re-calls the model; **Summarize with AI** offers to regenerate. The prompt template is at version 2 as of this release, so a summary cached by an earlier release is reported as possibly out of date once, until you regenerate it.
+The summary is cached in the sidecar (`aiSummary`), so re-rendering the report never re-calls the model; every run of **Summarize with AI** generates a fresh one and replaces it. The prompt template is at version 2 as of this release, so a summary cached by an earlier release is reported as possibly out of date once, until you regenerate it.
 
 When there is nothing to send, **Summarize with AI** and **Copy Summary Prompt** stop with "nothing to summarize yet" instead of sending an empty prompt. Under the default document-text scope (below) the document text alone is enough, so this mainly bites under the `notes` scope, or on a scanned or image-only PDF with no extractable text, until you highlight a passage or add a note.
 
