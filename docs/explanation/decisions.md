@@ -8,7 +8,7 @@ Short records of the decisions that shape the project, newest last. Each spike f
 
 **Why.** `pdfjs-dist` ships the rendering components but not the viewer application (toolbar, sidebar, annotation-editor toolbar, highlight editor, color picker, localization). Rebuilding that is weeks of work; upstream already solved "full viewer inside a VS Code webview under a strict CSP" in ~7 small files.
 
-**Consequences.** Derived files keep their Apache-2.0 header and a "Modified by" line (`pdfjs.lock.json` lists them). Upstream's two patches are replaced by runtime behaviour: the PDF.js CSP `<meta>` is stripped when the HTML is rewritten, and intra-folder links will be routed to VS Code by hooking the link service after initialization. New patches need a header explaining why a runtime hook was impossible. The `upstream-watch` workflow tracks drift.
+**Consequences.** Derived files keep their Apache-2.0 header and a "Modified by" line (`pdfjs.lock.json` lists them). Upstream's two patches are replaced by runtime behavior: the PDF.js CSP `<meta>` is stripped when the HTML is rewritten, and intra-folder links will be routed to VS Code by hooking the link service after initialization. New patches need a header explaining why a runtime hook was impossible. The `upstream-watch` workflow tracks drift.
 
 ## ADR-0002: Sidecar JSON is canonical; PDF is synced on save; protected PDFs are never modified
 
@@ -66,7 +66,7 @@ Short records of the decisions that shape the project, newest last. Each spike f
 
 **Why this shape.** Extracting the HTML assembly into a shared pure function means the harness cannot drift from what the provider ships, and gives the string-replacement contract (which `prepare-pdfjs` guards from the vendoring side) a consumer-side test. The stub is honest: the webview bootstrap only ever calls `postMessage`.
 
-**Consequences.** `pnpm test:e2e` needs `prepare-pdfjs`, `fixtures` and `build` first. The harness omits the CSP meta; CSP behaviour stays covered by the integration suite inside real webviews. Playwright is a devDependency only and ships nowhere.
+**Consequences.** `pnpm test:e2e` needs `prepare-pdfjs`, `fixtures` and `build` first. The harness omits the CSP meta; CSP behavior stays covered by the integration suite inside real webviews. Playwright is a devDependency only and ships nowhere.
 
 ## Spike log
 
