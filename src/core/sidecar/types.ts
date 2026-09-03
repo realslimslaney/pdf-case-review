@@ -1,6 +1,7 @@
 // The sidecar file model (`<file>.pdf.review.json`), mirroring schemas/review.schema.json.
 // Pure module: no `vscode`, no DOM, no Node.
 
+import type { AiContextScope } from "../ai/contextScope";
 import { type Category, normalizeCategories } from "../categories";
 
 export const SIDECAR_VERSION = 1;
@@ -104,7 +105,7 @@ export interface AiConsent {
   eligibilityConfirmed?: boolean;
   wordingVersion?: number;
   /** The AI context scope the consent covered (`notes` when absent). */
-  contextScope?: string;
+  contextScope?: AiContextScope;
 }
 
 export interface AiSummary {
@@ -118,7 +119,7 @@ export interface AiSummary {
   /** `SUMMARY_PROMPT_VERSION` at generation time. */
   promptVersion?: number;
   /** The AI context scope the summary was generated under (`notes` when absent). */
-  contextScope?: string;
+  contextScope?: AiContextScope;
 }
 
 /** AI-written context above one page's highlight cluster (issue #29); same provenance as AiSummary. */

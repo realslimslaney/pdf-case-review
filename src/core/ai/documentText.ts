@@ -3,7 +3,10 @@
 // prompt. Always called "Document text", never "Full PDF": extraction misses scans, image-only
 // exhibits and broken reading orders, and the PDF file itself is never sent.
 
-export type AiContextScope = "notes" | "document-text";
+import { formatCitation } from "../report/model";
+import { normalizeWhitespace } from "../text/normalize";
+
+export { AI_CONTEXT_SCOPES, type AiContextScope } from "./contextScope";
 
 export interface DocumentTextPage {
   page: number;
@@ -40,15 +43,11 @@ export function buildDocumentText(
   let lastIncludedPage = 0;
   let truncatedAfterPage: number | undefined;
   for (const page of pages) {
-    const text = page.text?.replace(/\s+/g, " ").trim() ?? "";
+    const text = normalizeWhitespace(page.text ?? "");
     if (text === "") {
       continue;
     }
-    const name =
-      page.pageLabel !== undefined && page.pageLabel !== `${page.page}`
-        ? `${page.pageLabel} [${page.page}]`
-        : `${page.page}`;
-    const chunk = `--- p. ${name} ---\n${text}`;
+    const chunk = `--- ${formatCitation(page.page, page.pageLabel, true)} ---\n${text}`;
     if (used + chunk.length > maxChars) {
       truncatedAfterPage = lastIncludedPage;
       chunks.push(

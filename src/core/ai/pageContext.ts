@@ -3,6 +3,8 @@
 // live here so they are unit-tested; the extension command only orchestrates.
 
 import { UNCATEGORIZED_CATEGORY } from "../categories";
+import { formatCitation } from "../report/model";
+import { compareHighlights } from "../sidecar/serialize";
 import type { Sidecar } from "../sidecar/types";
 import { type Attestation, isAttestation } from "./consent";
 import { fnv1a64 } from "./digest";
@@ -42,7 +44,7 @@ function sliceFor(sidecar: Sidecar, page: number): PageSlice {
   const categoryNames = new Map(sidecar.categories.map((category) => [category.id, category.name]));
   const entries = sidecar.highlights
     .filter((highlight) => highlight.page === page)
-    .sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
+    .sort(compareHighlights)
     .map((highlight) => ({
       category: categoryNames.get(highlight.categoryId) ?? UNCATEGORIZED_CATEGORY.name,
       text: highlight.text,
@@ -62,7 +64,7 @@ export function buildPageContextPrompt(
     throw new Error("An eligibility attestation is required before an AI prompt can be built.");
   }
   const slice = sliceFor(sidecar, page);
-  const pageName = pageLabel !== undefined && pageLabel !== `${page}` ? `${pageLabel} [${page}]` : `${page}`;
+  const pageName = formatCitation(page, pageLabel, true).slice("p. ".length);
   const lines = slice.entries.map(
     (entry) =>
       `- [${entry.category}] "${entry.text.trim()}"${entry.note.trim() ? ` (note: ${entry.note.trim()})` : ""}`,
@@ -79,6 +81,20 @@ export function buildPageContextPrompt(
       "together, so the list is skimmable without a note on every highlight. Plain prose, no " +
       "preamble, no bullets, no invented facts.",
   };
+}
+
+/** Drops contexts for pages that no longer hold a highlight or a page note; the report would hide them anyway. */
+export function withoutOrphanPageContexts(sidecar: Sidecar): Sidecar {
+  const contexts = sidecar.aiPageContexts;
+  if (!contexts || contexts.length === 0) {
+    return sidecar;
+  }
+  const live = new Set([
+    ...sidecar.highlights.map((highlight) => highlight.page),
+    ...(sidecar.pageNotes ?? []).map((note) => note.page),
+  ]);
+  const kept = contexts.filter((context) => live.has(context.page));
+  return kept.length === contexts.length ? sidecar : { ...sidecar, aiPageContexts: kept };
 }
 
 /** Digest over exactly what the page-context prompt is built from; compared per page at report time. */

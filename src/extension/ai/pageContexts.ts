@@ -18,6 +18,7 @@ import {
   pageContextInputDigest,
   pagesNeedingContext,
 } from "../../core/ai/pageContext";
+import { formatCitation } from "../../core/report/model";
 import type { AiPageContext } from "../../core/sidecar/types";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
@@ -53,6 +54,13 @@ export async function addPageContext(context: CommandContext): Promise<boolean> 
       .then((pick) => (pick ? commands.executeCommand("pdfCaseReview.ai.chooseProvider") : undefined));
     return false;
   }
+  const candidates = pagesNeedingContext(document.model, settings.pageContextMinHighlights);
+  if (candidates.length === 0) {
+    void window.showInformationMessage(
+      `PDF Case Review: no page has ${settings.pageContextMinHighlights} or more highlights with most of them unannotated (pdfCaseReview.ai.pageContext.minHighlights).`,
+    );
+    return false;
+  }
   if (!isDesktopHost()) {
     void window.showWarningMessage("PDF Case Review: CLI providers need desktop VS Code.");
     return false;
@@ -66,21 +74,14 @@ export async function addPageContext(context: CommandContext): Promise<boolean> 
     return false;
   }
 
-  const candidates = pagesNeedingContext(document.model, settings.pageContextMinHighlights);
-  if (candidates.length === 0) {
-    void window.showInformationMessage(
-      `PDF Case Review: no page has ${settings.pageContextMinHighlights} or more highlights with most of them unannotated (pdfCaseReview.ai.pageContext.minHighlights).`,
-    );
-    return false;
-  }
   const labelFor = (page: number) => document.pageLabels?.[page - 1];
+  const citationLabel = (page: number) => formatCitation(page, labelFor(page), true).slice(3);
   const picked = await window.showQuickPick(
     candidates.map((page) => {
       const highlights = document.model.highlights.filter((highlight) => highlight.page === page);
       const noted = highlights.filter((highlight) => highlight.note.trim() !== "").length;
-      const label = labelFor(page);
       return {
-        label: `Page ${label && label !== `${page}` ? `${label} [${page}]` : page}`,
+        label: `Page ${citationLabel(page)}`,
         description: `${highlights.length} highlights, ${noted} with notes`,
         page,
         picked: true,
@@ -118,6 +119,7 @@ export async function addPageContext(context: CommandContext): Promise<boolean> 
   const { ProviderRunCancelled, runProvider } = await import("../desktop/aiProviders");
   const generated: AiPageContext[] = [];
   let cancelled = false;
+  let failed: { page: number; message: string } | undefined;
   try {
     await window.withProgress(
       {
@@ -126,18 +128,27 @@ export async function addPageContext(context: CommandContext): Promise<boolean> 
         cancellable: true,
       },
       async (progress, token) => {
+        const options: Parameters<typeof runProvider>[2] = { token };
+        if (settings.model !== "") {
+          options.model = settings.model;
+        }
+        if (configDir !== undefined) {
+          options.configDir = configDir;
+        }
         for (const item of picked) {
           progress.report({ message: item.label, increment: 100 / picked.length });
           const inputDigest = pageContextInputDigest(document.model, item.page);
           const prompt = buildPageContextPrompt(document.model, item.page, labelFor(item.page), attestation);
-          const options: Parameters<typeof runProvider>[2] = { token };
-          if (settings.model !== "") {
-            options.model = settings.model;
+          let text: string;
+          try {
+            text = (await runProvider(provider, prompt, options)).trim();
+          } catch (error) {
+            if (error instanceof ProviderRunCancelled) {
+              throw error;
+            }
+            failed = { page: item.page, message: error instanceof Error ? error.message : String(error) };
+            break;
           }
-          if (configDir !== undefined) {
-            options.configDir = configDir;
-          }
-          const text = (await runProvider(provider, prompt, options)).trim();
           if (text === "") {
             context.output.warn(`addPageContext: empty answer for page ${item.page}, skipped`);
             continue;
@@ -162,15 +173,23 @@ export async function addPageContext(context: CommandContext): Promise<boolean> 
     if (error instanceof ProviderRunCancelled) {
       cancelled = true;
     } else {
-      void window.showErrorMessage(
-        `PDF Case Review: page context failed (${error instanceof Error ? error.message : String(error)}).`,
-      );
+      failed = { page: 0, message: error instanceof Error ? error.message : String(error) };
     }
+  }
+  if (generated.length > 0) {
+    context.provider.setAiPageContexts(document, generated);
+  }
+  const done = `${generated.length} page${generated.length === 1 ? "" : "s"} saved`;
+  if (failed !== undefined) {
+    const where = failed.page > 0 ? ` on page ${citationLabel(failed.page)}` : "";
+    void window.showErrorMessage(
+      `PDF Case Review: page context failed${where} (${failed.message}); later pages were not attempted. ${done}.`,
+    );
+    return generated.length > 0;
   }
   if (generated.length === 0) {
     return false;
   }
-  context.provider.setAiPageContexts(document, generated);
   void window.showInformationMessage(
     `PDF Case Review: AI context saved for ${generated.length} page${generated.length === 1 ? "" : "s"}` +
       `${cancelled ? " (cancelled before the rest)" : ""}; it renders above those pages in the next report.`,

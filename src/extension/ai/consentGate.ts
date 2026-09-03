@@ -17,7 +17,7 @@ import {
   RESPONSIBILITY_STATEMENT,
   switchAccountInstructions,
 } from "../../core/ai/consent";
-import { type AiContextScope, coverageLine } from "../../core/ai/documentText";
+import { type AiContextScope, coverageLine, type DocumentTextResult } from "../../core/ai/documentText";
 import type { ProviderIdentity } from "../../core/ai/identity";
 import { type AiConsent, countNotes } from "../../core/sidecar/types";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
@@ -64,8 +64,10 @@ export interface GateDeps {
   /** What the run will send; a scope change always re-asks. Absent = notes only. */
   contextScope?: AiContextScope;
   /** Coverage numbers for the document-text scope, shown verbatim in the dialog. */
-  documentTextCoverage?: { pagesWithText: number; pageCount: number; words: number };
+  documentTextCoverage?: DocumentTextCoverage;
 }
+
+type DocumentTextCoverage = Pick<DocumentTextResult, "pagesWithText" | "pageCount" | "words">;
 
 export type GateResult =
   | { ok: true; attestation: Attestation; accountId?: string }
@@ -139,7 +141,7 @@ interface EligibilityFacts {
   authorizationLine: string | null;
   authorizationLineAvailable: boolean;
   contextScope: AiContextScope;
-  documentTextCoverage?: { pagesWithText: number; pageCount: number; words: number };
+  documentTextCoverage?: DocumentTextCoverage;
 }
 
 const SWITCH_BUTTON = "Wrong account? Show how to switch";

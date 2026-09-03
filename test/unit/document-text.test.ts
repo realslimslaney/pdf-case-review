@@ -4,6 +4,7 @@ import { summaryInputDigest } from "../../src/core/ai/digest";
 import { buildDocumentText, coverageLine } from "../../src/core/ai/documentText";
 import { buildSummaryPrompt } from "../../src/core/ai/prompt";
 import { serializeSidecar } from "../../src/core/sidecar/serialize";
+import type { AiConsent } from "../../src/core/sidecar/types";
 import { parseSidecar } from "../../src/core/sidecar/validate";
 import { sampleSidecar } from "./helpers/sampleSidecar";
 
@@ -80,7 +81,7 @@ describe("prompt and digest with the document-text scope", () => {
 });
 
 describe("needsReconsent on scope changes", () => {
-  const stored = {
+  const stored: AiConsent = {
     provider: "manual",
     email: "you@school.edu",
     verified: false,

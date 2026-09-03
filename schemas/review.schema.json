@@ -139,7 +139,7 @@
         "responsibilityAcknowledged": { "type": "boolean" },
         "eligibilityConfirmed": { "type": "boolean" },
         "wordingVersion": { "type": "integer" },
-        "contextScope": { "type": "string" }
+        "contextScope": { "type": "string", "enum": ["notes", "document-text"] }
       }
     },
     "aiSummary": {
@@ -154,7 +154,7 @@
         "text": { "type": "string" },
         "inputDigest": { "type": "string" },
         "promptVersion": { "type": "integer", "minimum": 1 },
-        "contextScope": { "type": "string" }
+        "contextScope": { "type": "string", "enum": ["notes", "document-text"] }
       }
     },
     "aiPageContexts": {

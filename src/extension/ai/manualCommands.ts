@@ -4,6 +4,7 @@
 
 import { commands, type Disposable, type ExtensionContext, env, type LogOutputChannel, window } from "vscode";
 
+import { AI_CONTEXT_SCOPES, type AiContextScope } from "../../core/ai/contextScope";
 import { summaryInputDigest } from "../../core/ai/digest";
 import { buildDocumentText, type DocumentTextResult } from "../../core/ai/documentText";
 import { buildSummaryPrompt, SUMMARY_PROMPT_VERSION } from "../../core/ai/prompt";
@@ -14,10 +15,30 @@ import { aiSettings } from "../settings";
 import { ensureAttestation } from "./consentGate";
 
 /**
- * Digest captured at copy time, keyed by document. The pasted answer covers what the copied prompt
- * contained, so edits between copy and paste must leave the stored summary marked as possibly stale.
+ * Digest captured at copy time, kept in workspace state so it survives a window reload between copy
+ * and paste. The pasted answer covers what the copied prompt contained, so edits in between must
+ * leave the stored summary marked as possibly stale.
  */
-const copiedPromptDigests = new Map<string, { digest: string; scope: "notes" | "document-text" }>();
+interface CopiedPrompt {
+  digest: string;
+  scope: AiContextScope;
+}
+
+function copiedPromptKey(document: PdfDocument): string {
+  return `pdfCaseReview.copiedPrompt:${document.uri.toString()}`;
+}
+
+function isCopiedPrompt(value: unknown): value is CopiedPrompt {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate["digest"] === "string" &&
+    typeof candidate["scope"] === "string" &&
+    (AI_CONTEXT_SCOPES as readonly string[]).includes(candidate["scope"])
+  );
+}
 
 interface CommandContext {
   provider: PdfCaseReviewEditorProvider;
@@ -76,15 +97,7 @@ export async function copySummaryPrompt(context: CommandContext): Promise<boolea
     globalState: context.extensionContext.globalState,
     editorProvider: context.provider,
     contextScope: settings.contextScope,
-    ...(documentText
-      ? {
-          documentTextCoverage: {
-            pagesWithText: documentText.pagesWithText,
-            pageCount: documentText.pageCount,
-            words: documentText.words,
-          },
-        }
-      : {}),
+    ...(documentText ? { documentTextCoverage: documentText } : {}),
   });
   if (!gate.ok) {
     context.output.info(`copySummaryPrompt refused: ${gate.reason}`);
@@ -96,10 +109,11 @@ export async function copySummaryPrompt(context: CommandContext): Promise<boolea
     gate.attestation,
     documentText,
   );
-  copiedPromptDigests.set(document.uri.toString(), {
+  const copied: CopiedPrompt = {
     digest: summaryInputDigest(document.model, settings.maxWords, settings.contextScope),
     scope: settings.contextScope,
-  });
+  };
+  await context.extensionContext.workspaceState.update(copiedPromptKey(document), copied);
   await env.clipboard.writeText(`${prompt.system}\n\n${prompt.user}`);
   void window.showInformationMessage(
     "PDF Case Review: summary prompt copied. Paste it into your AI chat, copy the answer, then run " +
@@ -124,13 +138,15 @@ export async function pasteSummary(context: CommandContext): Promise<boolean> {
     text,
     promptVersion: SUMMARY_PROMPT_VERSION,
   };
-  const copied = copiedPromptDigests.get(document.uri.toString());
-  if (copied !== undefined) {
+  const workspaceState = context.extensionContext.workspaceState;
+  const copied = workspaceState.get<unknown>(copiedPromptKey(document));
+  if (isCopiedPrompt(copied)) {
     summary.inputDigest = copied.digest;
     if (copied.scope === "document-text") {
       summary.contextScope = copied.scope;
     }
   }
+  await workspaceState.update(copiedPromptKey(document), undefined);
   const account = document.model.aiConsent?.email;
   if (account !== undefined) {
     summary.account = account;
@@ -157,6 +173,7 @@ export async function reviewConsent(context: CommandContext): Promise<void> {
       consent.verified ? "verified" : "unverified"
     })\n` +
     `Provider: ${consent.provider}\n` +
+    `Context: ${consent.contextScope === "document-text" ? "notes and document text" : "notes only"}\n` +
     `Attested: ${consent.attestedAt}\n` +
     (consent.authorizationLine ? `Authorization line: "${consent.authorizationLine}"\n` : "") +
     `Document SHA-256: ${consent.documentSha256.slice(0, 12)}…`;

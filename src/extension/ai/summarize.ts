@@ -100,7 +100,7 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
   }
   // Fail before the consent dialog when the binary is gone (a new machine, synced settings):
   // without this the gate falls back to "account not reported" and the run dies on ENOENT.
-  const provider = settings.provider as "claude-cli" | "codex-cli";
+  const provider = settings.provider;
   const desktop = await import("../desktop/identity");
   if (!(await desktop.providerOnPath(provider))) {
     context.output.info(`summarizeWithAi refused: ${provider} binary not found on PATH`);
@@ -150,15 +150,7 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
       globalState: context.extensionContext.globalState,
       editorProvider: context.provider,
       contextScope: settings.contextScope,
-      ...(documentText
-        ? {
-            documentTextCoverage: {
-              pagesWithText: documentText.pagesWithText,
-              pageCount: documentText.pageCount,
-              words: documentText.words,
-            },
-          }
-        : {}),
+      ...(documentText ? { documentTextCoverage: documentText } : {}),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -185,7 +177,7 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
     const text = await window.withProgress(
       {
         location: ProgressLocation.Notification,
-        title: `PDF Case Review: asking ${settings.provider === "claude-cli" ? "Claude Code" : "Codex"} for the summary`,
+        title: `PDF Case Review: asking ${desktop.PROVIDER_LABEL[provider]} for the summary`,
         cancellable: true,
       },
       (_progress, token) => {
@@ -237,8 +229,8 @@ type ProviderPick = "off" | "claude-cli" | "codex-cli" | "manual";
 
 /**
  * The provider QuickPick. Applies the setting for real providers and returns what was picked, so
- * `summarizeWithAi` can continue straight into the flow; "manual" changes no setting (the copy
- * and paste commands work with the provider off).
+ * `summarizeWithAi` can continue straight into the flow; "manual" turns the setting off so a stale
+ * CLI provider stops intercepting the flow (the copy and paste commands work with the provider off).
  */
 async function pickProvider(context: CommandContext): Promise<ProviderPick | undefined> {
   interface ProviderItem {
@@ -301,6 +293,9 @@ async function pickProvider(context: CommandContext): Promise<ProviderPick | und
     return undefined;
   }
   if (picked.id === "manual") {
+    await setAiProvider("off", context.tracker.active?.uri);
+    void window.showInformationMessage("PDF Case Review: AI provider set to manual (copy and paste).");
+    context.output.info("ai.provider set to off (manual)");
     return "manual";
   }
   await setAiProvider(picked.id, context.tracker.active?.uri);

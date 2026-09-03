@@ -11,6 +11,7 @@ import {
   type NewAccountInput,
   validAccountId,
 } from "../../core/ai/accounts";
+import { definedTarget, valueAt } from "../settings";
 import { isDesktopHost } from "../util/host";
 
 interface HubItem {
@@ -68,8 +69,9 @@ async function addAiAccount(): Promise<void> {
     return;
   }
   const configuration = workspace.getConfiguration("pdfCaseReview.ai");
-  const rawAccounts = asList(configuration.inspect("accounts")?.globalValue);
-  const usedIds = accountIdsIn(rawAccounts);
+  const target = definedTarget(configuration, "accounts");
+  const rawAccounts = valueAt<unknown[]>(configuration, "accounts", target) ?? [];
+  const usedIds = accountIdsIn(asList(configuration.get<unknown>("accounts", [])));
   const id = await window.showInputBox({
     prompt: "A short name for the account; rules select it by this id",
     value: "school",
@@ -96,11 +98,11 @@ async function addAiAccount(): Promise<void> {
     return;
   }
   const merged = mergeAccountSettings(
-    rawAccounts,
+    asList(rawAccounts),
     asList(configuration.inspect("requiredAccount")?.globalValue),
     { id, provider: provider.id, configDir, scope },
   );
-  await configuration.update("accounts", merged.accounts, ConfigurationTarget.Global);
+  await configuration.update("accounts", merged.accounts, target);
   if (scope.kind !== "none") {
     await configuration.update("requiredAccount", merged.rules, ConfigurationTarget.Global);
   }
@@ -111,7 +113,7 @@ async function addAiAccount(): Promise<void> {
     return;
   }
   const choice = await window.showInformationMessage(
-    `PDF Case Review: account "${id}" saved to your user settings. Sign in once so ${configDir} holds the login.`,
+    `PDF Case Review: account "${id}" saved to your settings. Sign in once so ${configDir} holds the login.`,
     "Sign in now",
   );
   if (choice !== "Sign in now") {

@@ -40,17 +40,21 @@ export function mergeAccountSettings(
   input: NewAccountInput,
 ): { accounts: unknown[]; rules: unknown[] } {
   const nextAccounts = [...accounts, { id: input.id, provider: input.provider, configDir: input.configDir }];
+  const placed = ruleFor(input);
+  const nextRules =
+    placed === undefined ? [...rules] : placed.prepend ? [placed.rule, ...rules] : [...rules, placed.rule];
+  return { accounts: nextAccounts, rules: nextRules };
+}
+
+function ruleFor(input: NewAccountInput): { rule: object; prepend: boolean } | undefined {
   switch (input.scope.kind) {
     case "none":
-      return { accounts: nextAccounts, rules: [...rules] };
+      return undefined;
     case "always":
-      return { accounts: nextAccounts, rules: [...rules, { use: input.id }] };
+      return { rule: { use: input.id }, prepend: false };
     case "folder":
-      return {
-        accounts: nextAccounts,
-        rules: [{ when: { pathGlob: input.scope.pathGlob }, use: input.id }, ...rules],
-      };
+      return { rule: { when: { pathGlob: input.scope.pathGlob }, use: input.id }, prepend: true };
     case "protected":
-      return { accounts: nextAccounts, rules: [{ when: { protected: true }, use: input.id }, ...rules] };
+      return { rule: { when: { protected: true }, use: input.id }, prepend: true };
   }
 }

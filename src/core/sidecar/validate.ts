@@ -4,6 +4,7 @@
 // The allow-list of keys is derived from the read code itself: every accessor claims its key and
 // `Reader.done()` rejects whatever was never claimed, so a new field is added in one place.
 
+import { AI_CONTEXT_SCOPES } from "../ai/contextScope";
 import { validateCategories } from "../categories";
 import { UUID_PATTERN } from "./ids";
 import {
@@ -312,7 +313,7 @@ function readAiConsent(value: unknown, path: string): AiConsent {
   setIfDefined(consent, "authorizationLine", reader.optional("authorizationLine", string));
   setIfDefined(consent, "eligibilityConfirmed", reader.optional("eligibilityConfirmed", boolean));
   setIfDefined(consent, "wordingVersion", reader.optional("wordingVersion", integer()));
-  setIfDefined(consent, "contextScope", reader.optional("contextScope", string));
+  setIfDefined(consent, "contextScope", reader.optional("contextScope", oneOf(AI_CONTEXT_SCOPES)));
   reader.done();
   return consent;
 }
@@ -328,7 +329,7 @@ function readAiSummary(value: unknown, path: string): AiSummary {
   setIfDefined(summary, "account", reader.optional("account", string));
   setIfDefined(summary, "inputDigest", reader.optional("inputDigest", string));
   setIfDefined(summary, "promptVersion", reader.optional("promptVersion", integer(1)));
-  setIfDefined(summary, "contextScope", reader.optional("contextScope", string));
+  setIfDefined(summary, "contextScope", reader.optional("contextScope", oneOf(AI_CONTEXT_SCOPES)));
   reader.done();
   return summary;
 }

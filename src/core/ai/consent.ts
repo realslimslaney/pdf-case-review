@@ -3,6 +3,7 @@
 // prompt builder demands. Nothing here talks to a CLI, a dialog or a file.
 
 import type { AiConsent } from "../sidecar/types";
+import { scopeRank } from "./contextScope";
 
 /** Bump when any consent wording changes; stored acknowledgments re-prompt. */
 export const CONSENT_WORDING_VERSION = 1;
@@ -169,10 +170,6 @@ export function checkRule(rule: RequiredAccountRule, identity: RuleIdentity): Ru
     return { ok: false, requiredEmail: rule.email };
   }
   return { ok: true };
-}
-
-function scopeRank(scope: string | undefined): number {
-  return scope === "document-text" ? 1 : 0;
 }
 
 export interface ReconsentFacts {
