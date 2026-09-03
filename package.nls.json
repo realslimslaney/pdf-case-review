@@ -30,5 +30,6 @@
   "command.ai.reviewConsent": "Review AI Consent",
   "command.aiAddPageContext": "Add AI Page Context...",
   "command.summarizeWithAi": "Summarize with AI",
-  "command.ai.chooseProvider": "Choose AI Provider..."
+  "command.ai.chooseProvider": "Choose AI Provider...",
+  "command.ai.showSummary": "Show AI Summary"
 }

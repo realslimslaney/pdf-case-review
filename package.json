@@ -244,6 +244,11 @@
         "command": "pdfCaseReview.ai.chooseProvider",
         "title": "%command.ai.chooseProvider%",
         "category": "%commandCategory%"
+      },
+      {
+        "command": "pdfCaseReview.ai.showSummary",
+        "title": "%command.ai.showSummary%",
+        "category": "%commandCategory%"
       }
     ],
     "menus": {
@@ -330,6 +335,10 @@
         },
         {
           "command": "pdfCaseReview.ai.addPageContext",
+          "when": "pdfCaseReview.hasActiveDocument && isWorkspaceTrusted"
+        },
+        {
+          "command": "pdfCaseReview.ai.showSummary",
           "when": "pdfCaseReview.hasActiveDocument && isWorkspaceTrusted"
         }
       ],
@@ -694,7 +703,7 @@
         "pdfCaseReview.report.quoteMaxChars": {
           "type": "number",
           "scope": "resource",
-          "default": 300,
+          "default": 0,
           "minimum": 0,
           "description": "Longest quoted passage in the report, truncated at a word boundary. 0 means unlimited."
         },
@@ -774,9 +783,15 @@
         "pdfCaseReview.ai.maxWords": {
           "type": "number",
           "scope": "resource",
-          "default": 350,
+          "default": 500,
           "minimum": 1,
           "description": "Word budget for the AI executive summary."
+        },
+        "pdfCaseReview.ai.reviewPrompt": {
+          "type": "boolean",
+          "scope": "resource",
+          "default": true,
+          "description": "Open the assembled prompt in an editor tab before it is sent, so you can read or edit it; the provider receives exactly what the tab contains."
         },
         "pdfCaseReview.ai.requiredAccount": {
           "type": "array",

@@ -13,7 +13,8 @@ import type { DocumentTextResult } from "./documentText";
  */
 export const NO_TOOLS_RULE =
   "You have no tools and cannot run commands or open files; everything you may use is in this " +
-  "message. Reply with the summary text only, with no preamble and no tool calls.";
+  "message. Reply with the summary text only, with no preamble and no tool calls. Write plain " +
+  "sentences; use commas, colons or parentheses instead of em-dashes.";
 
 export const SUMMARY_SYSTEM_PROMPT =
   "You are helping a reader synthesize their own reading notes on a document. " +
@@ -28,9 +29,9 @@ export const DOCUMENT_TEXT_SYSTEM_PROMPT =
   NO_TOOLS_RULE;
 
 /** Bump when the template wording changes, so cached summaries from the old template read as stale. */
-export const SUMMARY_PROMPT_VERSION = 2;
+export const SUMMARY_PROMPT_VERSION = 3;
 
-export const DEFAULT_MAX_WORDS = 350;
+export const DEFAULT_MAX_WORDS = 500;
 
 /** Whether a prompt would carry anything at all; an empty one leaves the model to improvise. */
 export function hasSummaryContent(

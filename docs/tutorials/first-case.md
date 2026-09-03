@@ -100,13 +100,19 @@ This is off by default and never required. If you want one, click **Summarize wi
 title bar (the sparkle icon). The first time, it opens a picker for Claude Code, Codex or Manual;
 Manual puts the prompt on your clipboard for any chat, and **Paste AI Summary** in the Command Palette
 brings the answer back. The gear at the end of the row, **Configure...**, holds the same provider
-picker plus **Add an AI Account...** for a second login.
+picker plus **Add an AI Account...** for a second login and **Summary Length...** for the word budget.
 
 Before anything is sent, the extension asks whether the document may be fed into AI context on the
 signed-in account, names that account, and states exactly what goes out: your highlights, your notes and
 the document's extracted text (a setting narrows that to notes only), never the PDF file itself. (The
 very first time, a one-off notice about using AI features responsibly comes first; agree to it to enable
-AI features at all.) In the report, AI text is set apart in grey italics with a legend. See
+AI features at all.)
+
+Say yes and the prompt itself opens in an editor tab, with a notification reporting its size in words and
+tokens and a **Send to Claude Code** (or **Send to Codex**) button. Read it, edit it if you like, then
+press Send: whatever the tab contains is what goes out. The reply opens in a tab beside it and is saved
+with your notes, so the next report includes it; **Show AI Summary** in the Command Palette reopens it
+any time. In the report, AI text is set apart in grey italics with a legend. See
 [Using Claude Code or Codex as a reviewer](../how-to/ai-reviewer.md).
 
 If the dialog names the wrong account (your personal login instead of the one licensed for the

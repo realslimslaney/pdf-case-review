@@ -11,6 +11,7 @@ import {
   type NewAccountInput,
   validAccountId,
 } from "../../core/ai/accounts";
+import { DEFAULT_MAX_WORDS } from "../../core/ai/prompt";
 import { definedTarget, valueAt } from "../settings";
 import { isDesktopHost } from "../util/host";
 
@@ -38,6 +39,11 @@ export async function configure(): Promise<void> {
       run: () => commands.executeCommand("pdfCaseReview.ai.reviewConsent"),
     },
     {
+      label: "$(text-size) Summary Length...",
+      description: `Word budget for the AI summary, currently ${currentMaxWords()} words`,
+      run: setSummaryLength,
+    },
+    {
       label: "$(symbol-color) Apply Category Preset...",
       description: "Business case, academic paper, contract, or your own",
       run: () => commands.executeCommand("pdfCaseReview.applyCategoryPreset"),
@@ -54,6 +60,25 @@ export async function configure(): Promise<void> {
   ];
   const picked = await window.showQuickPick(items, { placeHolder: "Configure PDF Case Review" });
   await picked?.run();
+}
+
+function currentMaxWords(): number {
+  const value = workspace.getConfiguration("pdfCaseReview.ai").get<number>("maxWords", DEFAULT_MAX_WORDS);
+  return Number.isInteger(value) && value > 0 ? value : DEFAULT_MAX_WORDS;
+}
+
+async function setSummaryLength(): Promise<void> {
+  const entered = await window.showInputBox({
+    prompt: "Word budget for the AI executive summary",
+    value: String(currentMaxWords()),
+    validateInput: (value) =>
+      /^\d+$/.test(value.trim()) && Number(value) > 0 ? undefined : "Enter a whole number greater than zero.",
+  });
+  if (entered === undefined) {
+    return;
+  }
+  const configuration = workspace.getConfiguration("pdfCaseReview.ai");
+  await configuration.update("maxWords", Number(entered.trim()), definedTarget(configuration, "maxWords"));
 }
 
 const PROVIDERS = [

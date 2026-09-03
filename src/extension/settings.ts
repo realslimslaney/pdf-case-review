@@ -82,6 +82,8 @@ export interface AiSettings {
   model: string;
   includeInReport: boolean;
   maxWords: number;
+  /** Open the assembled prompt in an editor tab for reading or editing before it is sent. */
+  reviewPrompt: boolean;
   requiredAccount: RequiredAccountRule[];
   accounts: AiAccount[];
   requireVerifiedAccountForProtected: boolean;
@@ -184,6 +186,7 @@ export function aiSettings(uri: Uri, output: LogOutputChannel): AiSettings {
     model: typeof configuration.get("model") === "string" ? configuration.get<string>("model", "") : "",
     includeInReport: configuration.get<boolean>("includeInReport", true) !== false,
     maxWords: Number.isInteger(maxWords) && maxWords > 0 ? maxWords : DEFAULT_MAX_WORDS,
+    reviewPrompt: configuration.get<boolean>("reviewPrompt", true) !== false,
     requiredAccount: readRules(configuration.get<unknown>("requiredAccount"), warnings),
     accounts: readAccounts(configuration.get<unknown>("accounts"), warnings),
     requireVerifiedAccountForProtected:
