@@ -7,7 +7,7 @@ import { commands, type Disposable, type ExtensionContext, env, type LogOutputCh
 import { AI_CONTEXT_SCOPES, type AiContextScope } from "../../core/ai/contextScope";
 import { summaryInputDigest } from "../../core/ai/digest";
 import { buildDocumentText, type DocumentTextResult } from "../../core/ai/documentText";
-import { buildSummaryPrompt, SUMMARY_PROMPT_VERSION } from "../../core/ai/prompt";
+import { buildSummaryPrompt, hasSummaryContent, SUMMARY_PROMPT_VERSION } from "../../core/ai/prompt";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
 import type { PdfDocument } from "../editor/pdfDocument";
@@ -89,6 +89,12 @@ export async function copySummaryPrompt(context: CommandContext): Promise<boolea
       return false;
     }
     documentText = buildDocumentText(pages);
+  }
+  if (!hasSummaryContent(document.model, settings.contextScope, documentText)) {
+    void window.showInformationMessage(
+      "PDF Case Review: nothing to summarize yet. Highlight passages or add notes first.",
+    );
+    return false;
   }
   const gate = await ensureAttestation(document, {
     whoAmI: async () => null,

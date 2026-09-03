@@ -14,7 +14,7 @@ import {
 
 import { summaryInputDigest } from "../../core/ai/digest";
 import { buildDocumentText, type DocumentTextResult } from "../../core/ai/documentText";
-import { buildSummaryPrompt, SUMMARY_PROMPT_VERSION } from "../../core/ai/prompt";
+import { buildSummaryPrompt, hasSummaryContent, SUMMARY_PROMPT_VERSION } from "../../core/ai/prompt";
 import type { AiSummary } from "../../core/sidecar/types";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
@@ -140,6 +140,12 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
       return false;
     }
     documentText = buildDocumentText(pages);
+  }
+  if (!hasSummaryContent(document.model, settings.contextScope, documentText)) {
+    void window.showInformationMessage(
+      "PDF Case Review: nothing to summarize yet. Highlight passages or add notes first.",
+    );
+    return false;
   }
   let gate: Awaited<ReturnType<typeof ensureAttestation>>;
   try {

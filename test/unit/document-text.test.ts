@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createAttestation, needsReconsent } from "../../src/core/ai/consent";
 import { summaryInputDigest } from "../../src/core/ai/digest";
 import { buildDocumentText, coverageLine } from "../../src/core/ai/documentText";
-import { buildSummaryPrompt } from "../../src/core/ai/prompt";
+import { buildSummaryPrompt, hasSummaryContent } from "../../src/core/ai/prompt";
 import { serializeSidecar } from "../../src/core/sidecar/serialize";
 import type { AiConsent } from "../../src/core/sidecar/types";
 import { parseSidecar } from "../../src/core/sidecar/validate";
@@ -66,10 +66,10 @@ describe("prompt and digest with the document-text scope", () => {
 
   it("keeps the notes-only system prompt byte-identical without document text", () => {
     const prompt = buildSummaryPrompt("# Notes body", { maxWords: 100 }, attestation);
-    expect(prompt.system).toBe(
-      "You are helping a reader synthesize their own reading notes on a document. " +
-        "Use only the highlights and notes provided; do not invent facts.",
+    expect(prompt.system).toContain(
+      "Use only the highlights and notes provided; do not invent facts. You have no tools",
     );
+    expect(prompt.system).not.toContain("document text");
   });
 
   it("scope changes the digest; the notes digest is unchanged from before scopes existed", () => {
@@ -135,5 +135,20 @@ describe("sidecar round-trip of contextScope", () => {
     const parsed = parseSidecar(serializeSidecar(sidecar));
     expect(parsed.aiSummary?.contextScope).toBe("document-text");
     expect(parsed.aiConsent?.contextScope).toBe("document-text");
+  });
+});
+
+describe("hasSummaryContent", () => {
+  const empty = { ...sampleSidecar(), highlights: [], pageNotes: [], documentNotes: [] };
+
+  it("is false for an empty review in the notes scope", () => {
+    expect(hasSummaryContent(empty, "notes")).toBe(false);
+    expect(hasSummaryContent(sampleSidecar(), "notes")).toBe(true);
+  });
+
+  it("lets document text stand in for notes only in the document-text scope", () => {
+    expect(hasSummaryContent(empty, "document-text", { words: 120 })).toBe(true);
+    expect(hasSummaryContent(empty, "document-text", { words: 0 })).toBe(false);
+    expect(hasSummaryContent(empty, "notes", { words: 120 })).toBe(false);
   });
 });
