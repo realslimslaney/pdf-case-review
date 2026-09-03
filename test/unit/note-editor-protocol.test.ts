@@ -27,7 +27,7 @@ describe("noteScopeLine", () => {
     );
     expect(noteScopeLine({ kind: "page", page: 7 })).toBe("Page note · shown with page 7 in the report");
     expect(noteScopeLine({ kind: "document", id: "a" })).toBe(
-      "Document note · shown under Document notes at the top of the report",
+      "Document note · appears with your notes in the order taken",
     );
   });
 });

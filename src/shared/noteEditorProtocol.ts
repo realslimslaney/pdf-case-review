@@ -56,7 +56,7 @@ export function noteScopeLine(target: NoteTarget): string {
     case "page":
       return `Page note · shown with page ${target.page} in the report`;
     case "document":
-      return "Document note · shown under Document notes at the top of the report";
+      return "Document note · appears with your notes in the order taken";
   }
 }
 

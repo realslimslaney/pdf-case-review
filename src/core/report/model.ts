@@ -3,6 +3,7 @@
 // organizes and formats.
 
 import { UNCATEGORIZED_CATEGORY } from "../categories";
+import { compareStrings } from "../sidecar/serialize";
 import type { HighlightKind } from "../sidecar/types";
 import { normalizeCapturedText } from "../text/normalize";
 
@@ -52,6 +53,8 @@ export interface ReportPageContextInput {
   generatedAt: string;
   /** Computed by the caller (fromSidecar): the page's content changed after generation. */
   stale?: boolean;
+  /** No digest was recorded, so freshness cannot be checked. */
+  unverified?: boolean;
 }
 
 export interface ReportAiSummary {
@@ -65,6 +68,8 @@ export interface ReportAiSummary {
   stale?: boolean;
   /** `document-text` when the summary was generated with the document text in context. */
   contextScope?: string;
+  /** No digest was recorded, so freshness cannot be checked. */
+  unverified?: boolean;
 }
 
 export interface ReportInput {
@@ -116,6 +121,7 @@ export interface ReportPageContext {
   account?: string;
   generatedAt: string;
   stale: boolean;
+  unverified: boolean;
 }
 
 export type ChronologicalEntry =
@@ -165,6 +171,15 @@ export interface ReportModel {
 }
 
 const UNCATEGORIZED: ReportCategory = UNCATEGORIZED_CATEGORY;
+
+/** ISO timestamps compared as instants: a sidecar from another tool may carry offsets or mixed precision. */
+function compareInstants(left: string, right: string): number {
+  const leftInstant = Date.parse(left);
+  const rightInstant = Date.parse(right);
+  return Number.isNaN(leftInstant) || Number.isNaN(rightInstant)
+    ? compareStrings(left, right)
+    : leftInstant - rightInstant;
+}
 
 /** Collapses whitespace and re-joins words hyphenated across line breaks. */
 export function normalizeQuote(text: string): string {
@@ -233,53 +248,35 @@ export function buildReportModel(
   }));
 
   const itemsById = new Map(items.map((item) => [item.id, item]));
-  const stamped: { createdAt?: string; entry: ChronologicalEntry }[] = [
-    ...input.highlights.map((highlight) => {
-      const stampedEntry: { createdAt?: string; entry: ChronologicalEntry } = {
-        entry: { kind: "highlight", item: itemsById.get(highlight.id) as ReportItem },
-      };
-      if (highlight.createdAt !== undefined) {
-        stampedEntry.createdAt = highlight.createdAt;
-      }
-      return stampedEntry;
-    }),
-    ...(input.pageNotes ?? []).map((note) => {
-      const stampedEntry: { createdAt?: string; entry: ChronologicalEntry } = {
+  const stamped: { createdAt: string | undefined; entry: ChronologicalEntry }[] = [
+    ...input.highlights.map((highlight) => ({
+      createdAt: highlight.createdAt,
+      entry: { kind: "highlight", item: itemsById.get(highlight.id) as ReportItem } as ChronologicalEntry,
+    })),
+    ...(input.pageNotes ?? [])
+      .filter((note) => note.note.trim() !== "")
+      .map((note) => ({
+        createdAt: note.createdAt,
         entry: {
           kind: "pageNote",
           page: note.page,
           citation: formatCitation(note.page, note.pageLabel, options.usePageLabels),
           note: note.note,
-        },
-      };
-      if (note.createdAt !== undefined) {
-        stampedEntry.createdAt = note.createdAt;
-      }
-      return stampedEntry;
-    }),
-    ...(input.documentNotes ?? []).map((note) => {
-      const stampedEntry: { createdAt?: string; entry: ChronologicalEntry } = {
-        entry: { kind: "documentNote", title: note.title, note: note.note },
-      };
-      if (note.createdAt !== undefined) {
-        stampedEntry.createdAt = note.createdAt;
-      }
-      return stampedEntry;
-    }),
+        } as ChronologicalEntry,
+      })),
+    ...(input.documentNotes ?? [])
+      .filter((note) => note.note.trim() !== "")
+      .map((note) => ({
+        createdAt: note.createdAt,
+        entry: { kind: "documentNote", title: note.title, note: note.note } as ChronologicalEntry,
+      })),
   ];
-  // Timestamped entries in the order they were taken; unstamped ones keep their input order at
-  // the end (sort is stable), so hand-built inputs without timestamps still render sensibly.
-  const chronological = stamped
-    .sort((left, right) =>
-      left.createdAt === undefined
-        ? right.createdAt === undefined
-          ? 0
-          : 1
-        : right.createdAt === undefined
-          ? -1
-          : left.createdAt.localeCompare(right.createdAt),
-    )
-    .map(({ entry }) => entry);
+  // Timestamped entries in the order they were taken, then unstamped ones in input order, so
+  // hand-built inputs without timestamps still render sensibly.
+  const timestamped = stamped.filter((entry) => entry.createdAt !== undefined);
+  const unstamped = stamped.filter((entry) => entry.createdAt === undefined);
+  timestamped.sort((left, right) => compareInstants(left.createdAt ?? "", right.createdAt ?? ""));
+  const chronological = [...timestamped, ...unstamped].map(({ entry }) => entry);
   // Each page's AI context sits above that page's earliest entry; a context whose page no longer
   // holds anything is dropped rather than rendered as an orphan.
   const pageContexts: ReportPageContext[] = (input.pageContexts ?? []).map((context) => ({
@@ -291,6 +288,7 @@ export function buildReportModel(
     provider: context.provider,
     generatedAt: context.generatedAt,
     stale: context.stale === true,
+    unverified: context.unverified === true,
   }));
   for (const context of pageContexts) {
     const index = chronological.findIndex(

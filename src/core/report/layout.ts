@@ -124,32 +124,41 @@ function itemBlocks(item: ReportItem, withCategoryPrefix: boolean): ReportBlock[
   return blocks;
 }
 
+function caution(text: string): ReportBlock {
+  return { kind: "paragraph", muted: true, runs: [{ text }] };
+}
+
+interface Provenance {
+  provider: string;
+  model?: string;
+  account?: string;
+  generatedAt: string;
+  contextScope?: string;
+  attestedAt?: string;
+}
+
+function provenanceLine(source: Provenance): string {
+  return `Generated with ${source.provider}${source.model ? ` (${source.model})` : ""}${source.account ? ` as ${source.account}` : ""}${source.contextScope === "document-text" ? " using document text" : ""} on ${source.generatedAt}${source.attestedAt ? `; eligibility attested on ${source.attestedAt}` : ""}.`;
+}
+
 function pageContextBlocks(context: ReportPageContext): ReportBlock[] {
   const blocks: ReportBlock[] = [];
   blocks.push({ kind: "heading", level: 3, text: `AI context · ${context.citation}` });
-  if (context.stale) {
-    blocks.push({
-      kind: "paragraph",
-      muted: true,
-      runs: [
-        {
-          text:
-            "This context may be out of date: the page's highlights or notes changed after it was " +
-            "generated.",
-        },
-      ],
-    });
+  if (context.unverified) {
+    blocks.push(
+      caution(
+        "This context could not be checked against the page's current highlights; it may be out of date.",
+      ),
+    );
+  } else if (context.stale) {
+    blocks.push(
+      caution(
+        "This context may be out of date: the page's highlights, notes or AI settings changed after it was generated.",
+      ),
+    );
   }
   blocks.push(...markGenerated(noteToBlocks(context.text)));
-  blocks.push({
-    kind: "paragraph",
-    muted: true,
-    runs: [
-      {
-        text: `Generated with ${context.provider}${context.model ? ` (${context.model})` : ""}${context.account ? ` as ${context.account}` : ""} on ${context.generatedAt}.`,
-      },
-    ],
-  });
+  blocks.push(caution(provenanceLine(context)));
   return blocks;
 }
 
@@ -244,40 +253,24 @@ export function layoutReport(model: ReportModel): ReportBlock[] {
   }
 
   if (model.aiSummary) {
-    const {
-      provider,
-      model: modelName,
-      account,
-      generatedAt,
-      attestedAt,
-      text,
-      stale,
-      contextScope,
-    } = model.aiSummary;
     blocks.push({ kind: "heading", level: 2, text: "AI summary" });
-    if (stale) {
-      blocks.push({
-        kind: "paragraph",
-        muted: true,
-        runs: [
-          {
-            text:
-              "This summary may be out of date: highlights or notes changed after it was generated. " +
-              "Run Summarize with AI again to refresh it.",
-          },
-        ],
-      });
+    if (model.aiSummary.unverified) {
+      blocks.push(
+        caution(
+          "This summary could not be checked against the current notes (it was saved without a content " +
+            "digest); it may be out of date.",
+        ),
+      );
+    } else if (model.aiSummary.stale) {
+      blocks.push(
+        caution(
+          "This summary may be out of date: highlights, notes or AI settings changed after it was generated. " +
+            "Regenerate it with Summarize with AI, or copy and paste a fresh one.",
+        ),
+      );
     }
-    blocks.push(...markGenerated(noteToBlocks(text)));
-    blocks.push({
-      kind: "paragraph",
-      muted: true,
-      runs: [
-        {
-          text: `Generated with ${provider}${modelName ? ` (${modelName})` : ""}${account ? ` as ${account}` : ""}${contextScope === "document-text" ? " using document text" : ""} on ${generatedAt}${attestedAt ? `; eligibility attested on ${attestedAt}` : ""}.`,
-        },
-      ],
-    });
+    blocks.push(...markGenerated(noteToBlocks(model.aiSummary.text)));
+    blocks.push(caution(provenanceLine(model.aiSummary)));
   }
 
   return blocks;

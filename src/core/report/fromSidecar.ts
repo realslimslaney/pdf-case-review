@@ -106,7 +106,9 @@ export function reportInputFromSidecar(sidecar: Sidecar, context: ReportInputCon
           context.aiMaxWords,
           sidecar.aiSummary.contextScope === "document-text" ? "document-text" : "notes",
         );
-    if (!fresh) {
+    if (sidecar.aiSummary.inputDigest === undefined) {
+      summary.unverified = true;
+    } else if (!fresh) {
       summary.stale = true;
     }
     input.aiSummary = summary;
@@ -122,7 +124,9 @@ export function reportInputFromSidecar(sidecar: Sidecar, context: ReportInputCon
       const fresh =
         pageContext.promptVersion === PAGE_CONTEXT_PROMPT_VERSION &&
         pageContext.inputDigest === pageContextInputDigest(sidecar, pageContext.page);
-      if (!fresh) {
+      if (pageContext.inputDigest === undefined) {
+        entry.unverified = true;
+      } else if (!fresh) {
         entry.stale = true;
       }
       if (pageContext.model !== undefined) {

@@ -180,13 +180,24 @@ describe("aiPageContexts mapping", () => {
         inputDigest: "0000000000000000",
         promptVersion: PAGE_CONTEXT_PROMPT_VERSION,
       },
+      {
+        page: 3,
+        provider: "claude-cli",
+        generatedAt: "2026-09-02T10:00:00.000Z",
+        text: "Context for page 3, saved without a digest.",
+      },
     ];
     const input = reportInputFromSidecar(sidecar, { ...CONTEXT, pageLabels: ["i", "ii", "iii"] });
-    expect(input.pageContexts?.map((entry) => [entry.page, entry.stale === true])).toEqual([
-      [2, false],
-      [1, true],
+    expect(
+      input.pageContexts?.map((entry) => [entry.page, entry.stale === true, entry.unverified === true]),
+    ).toEqual([
+      [2, false, false],
+      [1, true, false],
+      [3, false, true],
     ]);
     expect(input.pageContexts?.[0]?.pageLabel).toBe("ii");
+    const undigested = buildReportModel(input).byPage.find((section) => section.page === 3)?.context;
+    expect(undigested).toMatchObject({ stale: false, unverified: true });
   });
 
   it("drops AI content entirely when includeAiSummary is off", () => {

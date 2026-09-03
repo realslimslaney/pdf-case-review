@@ -214,3 +214,52 @@ describe("AI page context in the report", () => {
     expect(markdown).not.toContain("Italic grey text");
   });
 });
+
+describe("notes in the order taken", () => {
+  it("omits document and page notes that hold no text", () => {
+    const input = {
+      ...SAMPLE_INPUT,
+      pageNotes: [{ page: 3, note: "   ", createdAt: "2026-08-30T10:15:00Z" }],
+      documentNotes: [{ title: "Blank thesis", note: "", createdAt: "2026-08-30T09:55:00Z" }],
+    };
+    const markdown = renderMarkdown(layoutReport(buildReportModel(input)));
+    expect(markdown).toContain("## Notes in the order taken");
+    expect(markdown).not.toContain("## Blank thesis");
+    expect(markdown).not.toContain("### Page note");
+  });
+
+  it("orders timestamped entries by instant even when string order disagrees", () => {
+    // "2026-01-01T06:00:00Z" sorts first as a string, but 10:00 at +05:00 is 05:00Z: the earlier instant.
+    const input = {
+      ...SAMPLE_INPUT,
+      highlights: [],
+      pageNotes: [],
+      documentNotes: [
+        { title: "Six Zulu", note: "Later by instant.", createdAt: "2026-01-01T06:00:00Z" },
+        { title: "Ten plus five", note: "Earlier by instant.", createdAt: "2026-01-01T10:00:00+05:00" },
+      ],
+    };
+    const markdown = renderMarkdown(layoutReport(buildReportModel(input)));
+    const plusFive = markdown.indexOf("## Ten plus five");
+    const zulu = markdown.indexOf("## Six Zulu");
+    expect(plusFive).toBeGreaterThan(-1);
+    expect(zulu).toBeGreaterThan(plusFive);
+  });
+});
+
+describe("AI summary cautions", () => {
+  const summary = { provider: "manual", generatedAt: "2026-09-01T14:10:00.000Z", text: "Summary." };
+
+  it("words an unverified summary and a stale one differently", () => {
+    const unverified = renderMarkdown(
+      layoutReport(buildReportModel({ ...SAMPLE_INPUT, aiSummary: { ...summary, unverified: true } })),
+    );
+    expect(unverified).toContain("could not be checked");
+    expect(unverified).not.toContain("This summary may be out of date");
+    const stale = renderMarkdown(
+      layoutReport(buildReportModel({ ...SAMPLE_INPUT, aiSummary: { ...summary, stale: true } })),
+    );
+    expect(stale).toContain("This summary may be out of date");
+    expect(stale).not.toContain("could not be checked");
+  });
+});

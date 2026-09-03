@@ -2,7 +2,7 @@
 // summary prompt is built from. The rendered Markdown body cannot be digested directly because
 // it embeds the generation timestamp, so the digest canonicalizes the underlying sidecar content.
 
-import { sortDocumentNotes } from "../sidecar/serialize";
+import { compareStrings, sortDocumentNotes } from "../sidecar/serialize";
 import { type Sidecar, sortedCategories } from "../sidecar/types";
 import type { AiContextScope } from "./documentText";
 import { DEFAULT_MAX_WORDS, SUMMARY_PROMPT_VERSION } from "./prompt";
@@ -41,7 +41,7 @@ export function summaryInputDigest(
     title: sidecar.source.title ?? sidecar.source.fileName,
     categories: sortedCategories(sidecar.categories).map(({ id, name }) => ({ id, name })),
     highlights: [...sidecar.highlights]
-      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      .sort((a, b) => compareStrings(a.id, b.id))
       .map(({ id, categoryId, page, kind, text, note }) => ({ id, categoryId, page, kind, text, note })),
     pageNotes: [...(sidecar.pageNotes ?? [])]
       .sort((a, b) => a.page - b.page)

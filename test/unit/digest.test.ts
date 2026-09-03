@@ -7,6 +7,7 @@ import { sampleSidecar } from "./helpers/sampleSidecar";
 
 const CONTEXT = { generatedAt: "2026-09-02T10:00:00.000Z", includeAiSummary: true };
 const STALE_LINE = "This summary may be out of date";
+const UNVERIFIED_LINE = "could not be checked";
 
 describe("fnv1a64", () => {
   it("is a 16-char hex string and separates nearby inputs", () => {
@@ -74,12 +75,16 @@ describe("report staleness", () => {
     return sidecar;
   }
 
-  it("marks a summary stale when the digest is absent or mismatched", () => {
-    expect(reportInputFromSidecar(withSummary(), CONTEXT).aiSummary?.stale).toBe(true);
-    expect(
-      reportInputFromSidecar(withSummary("0000000000000000", SUMMARY_PROMPT_VERSION), CONTEXT).aiSummary
-        ?.stale,
-    ).toBe(true);
+  it("marks a summary without a digest unverified, and a mismatched one stale", () => {
+    const unverified = reportInputFromSidecar(withSummary(), CONTEXT).aiSummary;
+    expect(unverified?.unverified).toBe(true);
+    expect(unverified?.stale).toBeFalsy();
+    const stale = reportInputFromSidecar(
+      withSummary("0000000000000000", SUMMARY_PROMPT_VERSION),
+      CONTEXT,
+    ).aiSummary;
+    expect(stale?.stale).toBe(true);
+    expect(stale?.unverified).toBeFalsy();
   });
 
   it("leaves a matching summary unmarked, then marks it after a note edit", () => {
@@ -104,9 +109,14 @@ describe("report staleness", () => {
   });
 
   it("renders the caution line only for stale summaries", async () => {
-    const stale = reportInputFromSidecar(withSummary(), CONTEXT);
+    const stale = reportInputFromSidecar(withSummary("0000000000000000", SUMMARY_PROMPT_VERSION), CONTEXT);
     const staleMarkdown = new TextDecoder().decode((await renderReport(stale, "markdown")).bytes);
     expect(staleMarkdown).toContain(STALE_LINE);
+
+    const unverified = reportInputFromSidecar(withSummary(), CONTEXT);
+    const unverifiedMarkdown = new TextDecoder().decode((await renderReport(unverified, "markdown")).bytes);
+    expect(unverifiedMarkdown).toContain(UNVERIFIED_LINE);
+    expect(unverifiedMarkdown).not.toContain(STALE_LINE);
 
     const sidecar = withSummary();
     const summary = sidecar.aiSummary;
