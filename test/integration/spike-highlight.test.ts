@@ -5,7 +5,17 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
 
-import { closeAll, fixtureUri, openWith, send, sleep, viewerState, waitFor, waitForLoaded } from "./helpers";
+import {
+  closeAll,
+  fixtureUri,
+  openWith,
+  request,
+  send,
+  sleep,
+  viewerState,
+  waitFor,
+  waitForLoaded,
+} from "./helpers";
 
 const EXPECTED_PALETTE = "fact=#FFFF98,financial=#53FFBC,strategic=#80EBFF,concern=#FF4F5F,question=#FFCBE6";
 
@@ -28,6 +38,16 @@ suite("PDF Case Review editor", () => {
   });
 
   test("creates a highlight from a text selection and reports it back", async () => {
+    // The text layer lays out some time after the viewer reports loaded; posting the highlight
+    // before it exists selects nothing and no editor ever appears (the macos-latest flake).
+    await waitFor(
+      "page 1 text layer",
+      async () => {
+        const probe = await request(uri, { type: "spike.probeTextLayer", page: 1 });
+        return probe.ok ? probe : undefined;
+      },
+      30_000,
+    );
     await send(uri, { type: "spike.highlightText", page: 1, spanCount: 2, color: "#53FFBC" });
 
     const state = await waitFor("a highlight editor", async () => {

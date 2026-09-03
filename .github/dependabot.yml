@@ -10,6 +10,9 @@ updates:
     ignore:
       # Must match the minimum VS Code in engines.vscode; bumped by hand together with it.
       - dependency-name: "@types/vscode"
+      # vitepress 1.x pins vite 5 while the advisories are fixed in 6.x, so security updates
+      # cannot resolve; dev-only docs tooling. Remove when docs move to vitepress 2.
+      - dependency-name: "vite"
   - package-ecosystem: github-actions
     directory: /
     schedule:
