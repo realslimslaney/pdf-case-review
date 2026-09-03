@@ -17,7 +17,7 @@ You open and repair pull requests for `realslimslaney/pdf-case-review` with `gh`
 
 ## Steps
 
-1. `git rev-parse --abbrev-ref HEAD`, `git status --porcelain` (must be clean), `git log origin/<branch> -1` (must be pushed). If not pushed, stop and report; pushing is the committer's job.
+1. `git rev-parse --abbrev-ref HEAD`, `git status --porcelain` (must be clean), `git log origin/<branch> -1` (must be pushed). If not pushed, stop and report; pushing is the committer's job. If the delegation prompt does not say the `docs-maintainer` agent ran on this branch, note that in your report (CI runs `pnpm docs:check` either way).
 2. Write the body to a temp file **outside the repo**, then `gh pr create --draft --base main --head <branch> --title "<type(scope): subject>" --body-file <tmp> --assignee realslimslaney --label <area:…>` (+ `--milestone` when one fits).
 3. Re-read the PR (`gh pr view <n> --json title,labels,assignees,milestone,isDraft,body`) and report any metadata that failed to apply, then fix it with `gh pr edit`.
 4. Delete the temp file. Reply with the PR URL and the metadata applied.

@@ -42,6 +42,7 @@ Derived-from-upstream files (see `pdfjs.lock.json` → `upstreamReference.derive
 
 ## Pull requests
 
+- Before a PR goes out, run the `docs-maintainer` agent on the branch: it runs `pnpm docs:check` (also a CI step) and brings `docs/` in line with the branch's user-facing changes.
 - Delegate PR creation to the `pr-manager` agent (`.claude/agents/pr-manager.md`; Codex uses `.agents/skills/pr-manager`). It opens **draft** PRs with: assignee `realslimslaney`, one `area:*` label (`area:viewer`, `area:notes`, `area:report`, `area:ai`, `area:release`, `area:docs`), and `Closes #N`. Never create new labels.
 - Bodies end with the attribution footer for the agent that created them.
 
