@@ -61,5 +61,8 @@ export function serializeSidecar(sidecar: Sidecar): string {
   if (sidecar.documentNotes) {
     ordered.documentNotes = sortDocumentNotes(sidecar.documentNotes);
   }
+  if (sidecar.aiPageContexts) {
+    ordered.aiPageContexts = [...sidecar.aiPageContexts].sort((left, right) => left.page - right.page);
+  }
   return stableStringify(ordered);
 }

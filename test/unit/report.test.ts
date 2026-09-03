@@ -159,3 +159,58 @@ describe("empty quotes by highlight kind", () => {
     expect(markdown).toContain("> (no text captured) *(p. 3 · Fact)*");
   });
 });
+
+describe("AI page context in the report", () => {
+  const withContext = {
+    ...SAMPLE_INPUT,
+    pageContexts: [
+      {
+        page: 1,
+        pageLabel: "i",
+        text: "These passages establish the channel-mix problem.",
+        provider: "claude-cli",
+        account: "you@school.edu",
+        generatedAt: "2026-09-01T14:10:00.000Z",
+      },
+      {
+        page: 99,
+        text: "Orphaned context for a page with no highlights.",
+        provider: "claude-cli",
+        generatedAt: "2026-09-01T14:10:00.000Z",
+        stale: true,
+      },
+    ],
+  };
+
+  it("sits above the page's first chronological entry, with legend and provenance", () => {
+    const markdown = renderMarkdown(layoutReport(buildReportModel(withContext)));
+    expect(markdown).toContain("Italic grey text marks AI-generated content");
+    const context = markdown.indexOf("AI context · p. i [1]");
+    const firstPageOneEntry = markdown.indexOf("Distributors now accounted");
+    expect(context).toBeGreaterThan(-1);
+    expect(context).toBeLessThan(firstPageOneEntry);
+    expect(markdown).toContain("These passages establish the channel-mix problem.");
+    expect(markdown).toContain("Generated with claude-cli as you@school.edu on 2026-09-01T14:10:00.000Z.");
+    expect(markdown).not.toContain("Orphaned context");
+  });
+
+  it("marks a stale context and renders inside grouped page sections too", () => {
+    const stale = {
+      ...withContext,
+      pageContexts: [{ ...withContext.pageContexts[0], stale: true } as (typeof withContext.pageContexts)[0]],
+    };
+    const markdown = renderMarkdown(
+      layoutReport(buildReportModel(stale, { ...DEFAULT_REPORT_OPTIONS, organization: "page" })),
+    );
+    expect(markdown).toContain("This context may be out of date");
+    const section = markdown.indexOf("## Page i [1]");
+    const context = markdown.lastIndexOf("AI context · p. i [1]");
+    expect(section).toBeGreaterThan(-1);
+    expect(context).toBeGreaterThan(section);
+  });
+
+  it("shows no legend when the report holds no AI content", () => {
+    const markdown = renderMarkdown(layoutReport(buildReportModel(SAMPLE_INPUT)));
+    expect(markdown).not.toContain("Italic grey text");
+  });
+});

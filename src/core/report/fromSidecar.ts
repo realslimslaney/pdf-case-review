@@ -2,10 +2,17 @@
 // only what it alone knows: the moment, the author setting, the viewer's live page data.
 
 import { summaryInputDigest } from "../ai/digest";
+import { PAGE_CONTEXT_PROMPT_VERSION, pageContextInputDigest } from "../ai/pageContext";
 import { SUMMARY_PROMPT_VERSION } from "../ai/prompt";
 import { sortDocumentNotes } from "../sidecar/serialize";
 import { type Sidecar, sortedCategories } from "../sidecar/types";
-import type { ReportAiSummary, ReportHighlightInput, ReportInput, ReportPageNoteInput } from "./model";
+import type {
+  ReportAiSummary,
+  ReportHighlightInput,
+  ReportInput,
+  ReportPageContextInput,
+  ReportPageNoteInput,
+} from "./model";
 
 export interface ReportInputContext {
   /** ISO timestamp for the title block. */
@@ -95,6 +102,33 @@ export function reportInputFromSidecar(sidecar: Sidecar, context: ReportInputCon
       summary.stale = true;
     }
     input.aiSummary = summary;
+  }
+  if (context.includeAiSummary && sidecar.aiPageContexts && sidecar.aiPageContexts.length > 0) {
+    input.pageContexts = sidecar.aiPageContexts.map((pageContext) => {
+      const entry: ReportPageContextInput = {
+        page: pageContext.page,
+        text: pageContext.text,
+        provider: pageContext.provider,
+        generatedAt: pageContext.generatedAt,
+      };
+      const fresh =
+        pageContext.promptVersion === PAGE_CONTEXT_PROMPT_VERSION &&
+        pageContext.inputDigest === pageContextInputDigest(sidecar, pageContext.page);
+      if (!fresh) {
+        entry.stale = true;
+      }
+      if (pageContext.model !== undefined) {
+        entry.model = pageContext.model;
+      }
+      if (pageContext.account !== undefined) {
+        entry.account = pageContext.account;
+      }
+      const pageLabel = labelFor(pageContext.page);
+      if (pageLabel !== undefined) {
+        entry.pageLabel = pageLabel;
+      }
+      return entry;
+    });
   }
   return input;
 }

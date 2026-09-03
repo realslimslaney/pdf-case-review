@@ -51,6 +51,7 @@ import { reconcileSnapshot } from "../../core/sidecar/reconcile";
 import { serializeSidecar } from "../../core/sidecar/serialize";
 import {
   type AiConsent,
+  type AiPageContext,
   type AiSummary,
   type DocumentNote,
   emptySidecar,
@@ -752,6 +753,14 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
 
   setAiSummary(document: PdfDocument, summary: AiSummary): void {
     document.model = { ...document.model, aiSummary: summary };
+    this.markEdited(document);
+  }
+
+  /** Replaces the context for each generated page and keeps the others. */
+  setAiPageContexts(document: PdfDocument, contexts: AiPageContext[]): void {
+    const replaced = new Set(contexts.map((entry) => entry.page));
+    const kept = (document.model.aiPageContexts ?? []).filter((entry) => !replaced.has(entry.page));
+    document.model = { ...document.model, aiPageContexts: [...kept, ...contexts] };
     this.markEdited(document);
   }
 

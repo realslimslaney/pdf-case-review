@@ -117,6 +117,19 @@ export interface AiSummary {
   promptVersion?: number;
 }
 
+/** AI-written context above one page's highlight cluster (issue #29); same provenance as AiSummary. */
+export interface AiPageContext {
+  page: number;
+  provider: string;
+  model?: string;
+  account?: string;
+  generatedAt: string;
+  text: string;
+  /** `pageContextInputDigest` of that page's content when generated; absent means possibly stale. */
+  inputDigest?: string;
+  promptVersion?: number;
+}
+
 export interface Sidecar {
   $schema?: string;
   version: typeof SIDECAR_VERSION;
@@ -128,6 +141,7 @@ export interface Sidecar {
   documentNotes?: DocumentNote[];
   aiConsent?: AiConsent;
   aiSummary?: AiSummary;
+  aiPageContexts?: AiPageContext[];
 }
 
 /** Notes with content: non-empty highlight and page notes, plus every document note. */

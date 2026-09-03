@@ -4,7 +4,7 @@
 import { lexer, type Token, type Tokens } from "marked";
 
 import { IMAGE_REGION_LABEL, NO_TEXT_LABEL } from "../tree";
-import type { ReportItem, ReportModel } from "./model";
+import type { ReportItem, ReportModel, ReportPageContext } from "./model";
 
 export interface TextRun {
   text: string;
@@ -124,6 +124,35 @@ function itemBlocks(item: ReportItem, withCategoryPrefix: boolean): ReportBlock[
   return blocks;
 }
 
+function pageContextBlocks(context: ReportPageContext): ReportBlock[] {
+  const blocks: ReportBlock[] = [];
+  blocks.push({ kind: "heading", level: 3, text: `AI context · ${context.citation}` });
+  if (context.stale) {
+    blocks.push({
+      kind: "paragraph",
+      muted: true,
+      runs: [
+        {
+          text:
+            "This context may be out of date: the page's highlights or notes changed after it was " +
+            "generated.",
+        },
+      ],
+    });
+  }
+  blocks.push(...markGenerated(noteToBlocks(context.text)));
+  blocks.push({
+    kind: "paragraph",
+    muted: true,
+    runs: [
+      {
+        text: `Generated with ${context.provider}${context.model ? ` (${context.model})` : ""}${context.account ? ` as ${context.account}` : ""} on ${context.generatedAt}.`,
+      },
+    ],
+  });
+  return blocks;
+}
+
 export function layoutReport(model: ReportModel): ReportBlock[] {
   const blocks: ReportBlock[] = [];
   const { meta, options } = model;
@@ -138,6 +167,12 @@ export function layoutReport(model: ReportModel): ReportBlock[] {
       ["Highlights", `${meta.highlightCount} highlights · ${meta.noteCount} notes`],
     ],
   });
+
+  const hasAiContent =
+    model.aiSummary !== null || model.chronological.some((entry) => entry.kind === "pageContext");
+  if (hasAiContent) {
+    blocks.push({ kind: "paragraph", muted: true, runs: [{ text: AI_LEGEND }] });
+  }
 
   blocks.push({ kind: "heading", level: 2, text: "Summary" });
   blocks.push({
@@ -161,6 +196,9 @@ export function layoutReport(model: ReportModel): ReportBlock[] {
         case "documentNote":
           blocks.push({ kind: "heading", level: 3, text: entry.title });
           blocks.push(...noteToBlocks(entry.note));
+          break;
+        case "pageContext":
+          blocks.push(...pageContextBlocks(entry.context));
           break;
       }
     }
@@ -193,6 +231,9 @@ export function layoutReport(model: ReportModel): ReportBlock[] {
     }
     for (const section of model.byPage) {
       blocks.push({ kind: "heading", level: options.organization === "both" ? 3 : 2, text: section.heading });
+      if (section.context) {
+        blocks.push(...pageContextBlocks(section.context));
+      }
       if (section.pageNote) {
         blocks.push(...noteToBlocks(section.pageNote));
       }
@@ -204,7 +245,6 @@ export function layoutReport(model: ReportModel): ReportBlock[] {
 
   if (model.aiSummary) {
     const { provider, model: modelName, account, generatedAt, attestedAt, text, stale } = model.aiSummary;
-    blocks.push({ kind: "paragraph", muted: true, runs: [{ text: AI_LEGEND }] });
     blocks.push({ kind: "heading", level: 2, text: "AI summary" });
     if (stale) {
       blocks.push({

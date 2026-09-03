@@ -42,6 +42,18 @@ export interface ReportDocumentNoteInput {
   createdAt?: string;
 }
 
+export interface ReportPageContextInput {
+  page: number;
+  pageLabel?: string;
+  text: string;
+  provider: string;
+  model?: string;
+  account?: string;
+  generatedAt: string;
+  /** Computed by the caller (fromSidecar): the page's content changed after generation. */
+  stale?: boolean;
+}
+
 export interface ReportAiSummary {
   provider: string;
   model?: string;
@@ -64,6 +76,7 @@ export interface ReportInput {
   pageNotes?: ReportPageNoteInput[];
   documentNotes?: ReportDocumentNoteInput[];
   aiSummary?: ReportAiSummary;
+  pageContexts?: ReportPageContextInput[];
 }
 
 export interface ReportOptions {
@@ -92,10 +105,22 @@ export interface ReportItem {
   note: string;
 }
 
+export interface ReportPageContext {
+  page: number;
+  citation: string;
+  text: string;
+  provider: string;
+  model?: string;
+  account?: string;
+  generatedAt: string;
+  stale: boolean;
+}
+
 export type ChronologicalEntry =
   | { kind: "highlight"; item: ReportItem }
-  | { kind: "pageNote"; citation: string; note: string }
-  | { kind: "documentNote"; title: string; note: string };
+  | { kind: "pageNote"; page: number; citation: string; note: string }
+  | { kind: "documentNote"; title: string; note: string }
+  | { kind: "pageContext"; context: ReportPageContext };
 
 export interface CategorySection {
   category: ReportCategory;
@@ -106,6 +131,7 @@ export interface PageSection {
   page: number;
   heading: string;
   pageNote: string | null;
+  context: ReportPageContext | null;
   items: ReportItem[];
 }
 
@@ -219,6 +245,7 @@ export function buildReportModel(
       const stampedEntry: { createdAt?: string; entry: ChronologicalEntry } = {
         entry: {
           kind: "pageNote",
+          page: note.page,
           citation: formatCitation(note.page, note.pageLabel, options.usePageLabels),
           note: note.note,
         },
@@ -251,6 +278,28 @@ export function buildReportModel(
           : left.createdAt.localeCompare(right.createdAt),
     )
     .map(({ entry }) => entry);
+  // Each page's AI context sits above that page's earliest entry; a context whose page no longer
+  // holds anything is dropped rather than rendered as an orphan.
+  const pageContexts: ReportPageContext[] = (input.pageContexts ?? []).map((context) => ({
+    page: context.page,
+    citation: formatCitation(context.page, context.pageLabel, options.usePageLabels),
+    text: context.text,
+    ...(context.model !== undefined ? { model: context.model } : {}),
+    ...(context.account !== undefined ? { account: context.account } : {}),
+    provider: context.provider,
+    generatedAt: context.generatedAt,
+    stale: context.stale === true,
+  }));
+  for (const context of pageContexts) {
+    const index = chronological.findIndex(
+      (entry) =>
+        (entry.kind === "highlight" && entry.item.page === context.page) ||
+        (entry.kind === "pageNote" && entry.page === context.page),
+    );
+    if (index >= 0) {
+      chronological.splice(index, 0, { kind: "pageContext", context });
+    }
+  }
 
   const summary: SummaryRow[] = input.categories
     .map((category) => {
@@ -293,6 +342,7 @@ export function buildReportModel(
       page,
       heading: label.replace(/^p\. /, "Page "),
       pageNote: pageNotes.get(page)?.note.trim() || null,
+      context: pageContexts.find((candidate) => candidate.page === page) ?? null,
       items: pageItems,
     };
   });

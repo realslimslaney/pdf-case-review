@@ -91,7 +91,7 @@ Every reviewed PDF gets one sidecar file. It is the canonical store for highligh
 | `categories` | yes | The category palette copied into the file so it is self-describing (below). |
 | `highlights` | yes | One entry per highlight (below). |
 | `pageNotes`, `documentNotes` | no | Notes attached to a page or to the whole document (`page`, `note`, timestamps; document notes also have `id` and `title`). |
-| `aiConsent`, `aiSummary` | no | The recorded eligibility attestation and the cached AI summary, when those features are used (below). |
+| `aiConsent`, `aiSummary`, `aiPageContexts` | no | The recorded eligibility attestation and the cached AI summary and page contexts, when those features are used (below). |
 
 ### `source`
 
@@ -142,6 +142,10 @@ Written when the eligibility question is answered yes; shown and revoked by **Re
 The cached executive summary: `provider` (`claude-cli`, `codex-cli` or `manual`), optional `model` and `account`, `generatedAt`, and `text` (Markdown). Reports render it as a labeled section in grey italics; regenerating replaces it.
 
 Optional `inputDigest` and `promptVersion` record what the summary was generated from (a digest of the highlights, notes, categories and word budget, and the prompt template version). When they no longer match the current review, reports add a "may be out of date" line to the AI section and **Summarize with AI** says the cache predates your changes; the summary is never withheld. Summaries saved before these fields existed are treated as possibly out of date.
+
+### `aiPageContexts`
+
+Cached AI context per page, from **Add AI Page Context**: each entry carries `page` plus the same provenance and staleness fields as `aiSummary` (`provider`, optional `model` and `account`, `generatedAt`, `text`, `inputDigest`, `promptVersion`). The digest covers only that page's highlights and page note, so editing page 4 never marks page 3's context stale. Entries are ordered by `page`; regenerating a page replaces its entry.
 
 ## How the file is written
 

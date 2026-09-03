@@ -42,7 +42,7 @@ function activeDocument(context: CommandContext): PdfDocument | undefined {
  * The account a rule names must belong to the active provider: the gate records the identity it
  * verified, so the run may never execute under a different CLI or login directory than that.
  */
-async function resolveIdentity(settings: AiSettings, accountId: string | undefined) {
+export async function resolveIdentity(settings: AiSettings, accountId: string | undefined) {
   const desktop = await import("../desktop/identity");
   if (accountId !== undefined) {
     const account = settings.accounts.find((entry) => entry.id === accountId);

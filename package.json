@@ -236,6 +236,11 @@
         "icon": "$(sparkle)"
       },
       {
+        "command": "pdfCaseReview.ai.addPageContext",
+        "title": "%command.aiAddPageContext%",
+        "category": "%commandCategory%"
+      },
+      {
         "command": "pdfCaseReview.ai.chooseProvider",
         "title": "%command.ai.chooseProvider%",
         "category": "%commandCategory%"
@@ -321,6 +326,10 @@
         },
         {
           "command": "pdfCaseReview.summarizeWithAi",
+          "when": "pdfCaseReview.hasActiveDocument && isWorkspaceTrusted"
+        },
+        {
+          "command": "pdfCaseReview.ai.addPageContext",
           "when": "pdfCaseReview.hasActiveDocument && isWorkspaceTrusted"
         }
       ],
@@ -740,6 +749,13 @@
           "scope": "resource",
           "default": true,
           "description": "Include the cached AI summary as a labeled section of generated reports."
+        },
+        "pdfCaseReview.ai.pageContext.minHighlights": {
+          "type": "integer",
+          "scope": "resource",
+          "default": 4,
+          "minimum": 2,
+          "description": "Add AI Page Context offers pages with at least this many highlights where fewer than half carry notes."
         },
         "pdfCaseReview.ai.maxWords": {
           "type": "number",

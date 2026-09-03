@@ -44,6 +44,7 @@ Every path below goes through the eligibility question first: the dialog names t
 |---|---|
 | `PDF Case Review: Choose AI Provider...` | Probes the `claude` and `codex` CLIs and sets `pdfCaseReview.ai.provider`; unavailable options show a one-line fix. Picking Manual starts the clipboard flow. |
 | `PDF Case Review: Summarize with AI` | The one entry point: with no provider configured it opens the provider picker first, then runs the configured CLI on your highlights and notes and caches the executive summary in the sidecar. Cancellable; 120 second timeout. |
+| `PDF Case Review: Add AI Page Context...` | Offers pages with a dense, lightly-annotated highlight cluster (`ai.pageContext.minHighlights`), then asks the configured CLI for 2 to 4 sentences of context per picked page; one consent dialog covers the batch. Cached in the sidecar and rendered above those pages in the report. |
 | `PDF Case Review: Copy Summary Prompt` | Puts the summary prompt and your notes on the clipboard for any chat. Works with the provider off. |
 | `PDF Case Review: Paste AI Summary` | Saves the clipboard as the document's AI summary, labeled `manual`. |
 | `PDF Case Review: Review AI Consent` | Shows the recorded attestation (account, provider, dates) and offers to revoke it. |

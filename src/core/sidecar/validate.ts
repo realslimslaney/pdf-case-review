@@ -8,6 +8,7 @@ import { validateCategories } from "../categories";
 import { UUID_PATTERN } from "./ids";
 import {
   type AiConsent,
+  type AiPageContext,
   type AiSummary,
   type DocumentNote,
   type HighlightContext,
@@ -330,6 +331,22 @@ function readAiSummary(value: unknown, path: string): AiSummary {
   return summary;
 }
 
+function readAiPageContext(value: unknown, path: string): AiPageContext {
+  const reader = Reader.of(value, path);
+  const context: AiPageContext = {
+    page: reader.required("page", integer(1)),
+    provider: reader.required("provider", string),
+    generatedAt: reader.required("generatedAt", dateTime),
+    text: reader.required("text", string),
+  };
+  setIfDefined(context, "model", reader.optional("model", string));
+  setIfDefined(context, "account", reader.optional("account", string));
+  setIfDefined(context, "inputDigest", reader.optional("inputDigest", string));
+  setIfDefined(context, "promptVersion", reader.optional("promptVersion", integer(1)));
+  reader.done();
+  return context;
+}
+
 /** Validates already-migrated JSON (see `migrateSidecar`) and returns the typed sidecar. */
 export function validateSidecar(raw: unknown): Sidecar {
   const reader = Reader.of(raw, "");
@@ -361,6 +378,7 @@ export function validateSidecar(raw: unknown): Sidecar {
   setIfDefined(sidecar, "documentNotes", reader.optional("documentNotes", arrayOf(readDocumentNote)));
   setIfDefined(sidecar, "aiConsent", reader.optional("aiConsent", readAiConsent));
   setIfDefined(sidecar, "aiSummary", reader.optional("aiSummary", readAiSummary));
+  setIfDefined(sidecar, "aiPageContexts", reader.optional("aiPageContexts", arrayOf(readAiPageContext)));
   reader.done();
   return sidecar;
 }

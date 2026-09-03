@@ -11,6 +11,10 @@ Before anything is sent you answer one direct question: *may this document be fe
 
 The summary is cached in the sidecar (`aiSummary`), so re-rendering the report never re-calls the model; **Summarize with AI** offers to regenerate.
 
+### Context for a busy page
+
+**PDF Case Review: Add AI Page Context...** finds pages with a dense cluster of highlights where most carry no note (threshold: `pdfCaseReview.ai.pageContext.minHighlights`), lets you pick which of them to cover, and asks the same provider for 2 to 4 sentences per page: what the highlighted passages are about and why they hang together. One consent dialog covers the batch. The contexts are cached in the sidecar (`aiPageContexts`) and render above those pages' highlights in the report, in the same grey italics with per-block provenance; editing a page's highlights marks only that page's context as possibly out of date.
+
 ### No CLI? Use the clipboard
 
 Pick **Manual** in the provider picker (or run **PDF Case Review: Copy Summary Prompt** directly). It passes the same eligibility question, then puts the prompt and your notes on the clipboard. Paste into claude.ai, chatgpt.com or any chat, copy the answer, and run **Paste AI Summary**. It is saved and reported like any other provider's output, labeled `manual`.

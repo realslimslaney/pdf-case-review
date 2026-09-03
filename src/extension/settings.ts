@@ -2,6 +2,7 @@
 
 import { ConfigurationTarget, type LogOutputChannel, type Uri, window, workspace } from "vscode";
 import type { RequiredAccountRule } from "../core/ai/consent";
+import { DEFAULT_PAGE_CONTEXT_MIN_HIGHLIGHTS } from "../core/ai/pageContext";
 import { DEFAULT_MAX_WORDS } from "../core/ai/prompt";
 import {
   CATEGORY_PRESETS,
@@ -76,6 +77,7 @@ export interface AiSettings {
   requiredAccount: RequiredAccountRule[];
   accounts: AiAccount[];
   requireVerifiedAccountForProtected: boolean;
+  pageContextMinHighlights: number;
 }
 
 function readRules(raw: unknown, warnings: string[]): RequiredAccountRule[] {
@@ -163,6 +165,10 @@ export function aiSettings(uri: Uri, output: LogOutputChannel): AiSettings {
   const configuration = workspace.getConfiguration("pdfCaseReview.ai", uri);
   const provider = configuration.get<string>("provider", "off");
   const maxWords = configuration.get<number>("maxWords", DEFAULT_MAX_WORDS);
+  const minHighlights = configuration.get<number>(
+    "pageContext.minHighlights",
+    DEFAULT_PAGE_CONTEXT_MIN_HIGHLIGHTS,
+  );
   const warnings: string[] = [];
   const settings: AiSettings = {
     provider: provider === "claude-cli" || provider === "codex-cli" ? provider : "off",
@@ -173,6 +179,10 @@ export function aiSettings(uri: Uri, output: LogOutputChannel): AiSettings {
     accounts: readAccounts(configuration.get<unknown>("accounts"), warnings),
     requireVerifiedAccountForProtected:
       configuration.get<boolean>("requireVerifiedAccountForProtected", true) !== false,
+    pageContextMinHighlights:
+      Number.isInteger(minHighlights) && minHighlights >= 2
+        ? minHighlights
+        : DEFAULT_PAGE_CONTEXT_MIN_HIGHLIGHTS,
   };
   if (warnings.length > 0) {
     const detail = warnings.join("; ");
