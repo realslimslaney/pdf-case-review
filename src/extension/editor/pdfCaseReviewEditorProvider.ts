@@ -44,6 +44,7 @@ import {
 } from "vscode";
 
 import type { DocumentTextPage } from "../../core/ai/documentText";
+import { withoutOrphanPageContexts } from "../../core/ai/pageContext";
 import { type Category, toHighlightEditorColors } from "../../core/categories";
 import { adoptEmbedded, missingFromFile, toEmbeddable, toInjectable } from "../../core/highlight/convert";
 import { repairPdfjsIds, syncModeOnOpen } from "../../core/pdfExport/syncPlan";
@@ -209,16 +210,17 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
 
   /** Every page's text for the document-text AI scope; entries are null when unavailable. */
   async collectDocumentText(document: PdfDocument): Promise<DocumentTextPage[]> {
-    const pages: DocumentTextPage[] = [];
-    for (let page = 1; page <= document.info.pageCount; page += 1) {
-      const entry: DocumentTextPage = { page, text: await this.getPageText(document, page) };
-      const label = document.pageLabels?.[page - 1];
-      if (label !== undefined) {
-        entry.pageLabel = label;
-      }
-      pages.push(entry);
-    }
-    return pages;
+    const pageNumbers = Array.from({ length: document.info.pageCount }, (_, index) => index + 1);
+    return Promise.all(
+      pageNumbers.map(async (page) => {
+        const entry: DocumentTextPage = { page, text: await this.getPageText(document, page) };
+        const label = document.pageLabels?.[page - 1];
+        if (label !== undefined) {
+          entry.pageLabel = label;
+        }
+        return entry;
+      }),
+    );
   }
 
   /** One page's text from the viewer; null when no viewer is open, it times out, or has no text. */
@@ -616,6 +618,7 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
 
   /** Tells VS Code the document is dirty and the views that its model changed. */
   private markEdited(document: PdfDocument): void {
+    document.model = withoutOrphanPageContexts(document.model);
     this._onDidChangeCustomDocument.fire({ document });
     this._onDidChangeDocument.fire(document);
   }
@@ -1026,7 +1029,7 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
       maxCanvasPixels: settings.get<number>("maxCanvasPixels", 0) || null,
       maxImageSize: settings.get<number>("maxImageSize", 0) || null,
       // The palette comes from the document's own categories: the sidecar is self-describing.
-      highlightEditorColors: toHighlightEditorColors(document.model.categories),
+      highlightEditorColors: toHighlightEditorColors(sortedCategories(document.model.categories)),
       categories: sortedCategories(document.model.categories).map(({ id, name, color }) => ({
         id,
         name,

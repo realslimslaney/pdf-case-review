@@ -67,8 +67,12 @@ export class PdfjsAdapter {
   private readonly quadTextInFlight = new Set<string>();
   /** Editors already reported once; only a first sighting may pair with the last selection. */
   private readonly seenEditorIds = new Set<string>();
-  /** A default category chosen before PDF.js built its UI manager; applied on arrival. */
+  /** A default category chosen before PDF.js could take it; applied once an editor layer exists. */
   private pendingDefaultColor: string | null = null;
+  /** Editor types register with the UI manager only when the first editor layer renders. */
+  private editorLayerReady = false;
+  /** Updates the toolbar dropdown; set by `installCategoryToolbar`. */
+  private showDefault: ((color: string) => void) | undefined;
 
   constructor(
     private readonly app: PdfJsApplication,
@@ -81,9 +85,18 @@ export class PdfjsAdapter {
     const { eventBus } = this.app;
     eventBus.on("annotationeditoruimanager", (event) => {
       this.uiManager = (event["uiManager"] as PdfJsUiManager | undefined) ?? null;
-      if (this.pendingDefaultColor !== null && this.uiManager) {
-        this.uiManager.updateParams(PARAMS_HIGHLIGHT_COLOR, this.pendingDefaultColor);
+    });
+    // updateParams before the first editor layer renders is dropped: PDF.js registers the
+    // highlight editor type (and so its param handling) only when a layer is built.
+    eventBus.on("annotationeditorlayerrendered", () => {
+      if (this.editorLayerReady) {
+        return;
+      }
+      this.editorLayerReady = true;
+      if (this.pendingDefaultColor !== null) {
+        const color = this.pendingDefaultColor;
         this.pendingDefaultColor = null;
+        this.setDefaultCategory(color);
       }
     });
     for (const name of ["editingstateschanged", "annotationeditormodechanged"]) {
@@ -469,12 +482,27 @@ export class PdfjsAdapter {
     this.scheduleSnapshot();
   }
 
-  /** Answers a host `getPageText` request; null when the page has no text layer or the read fails. */
+  /**
+   * Answers a host `getPageText` request; null when the page has no text layer or the read fails.
+   * Reads the text content directly rather than through `textItems`, so a whole-document sweep
+   * does not fill the per-page geometry cache that highlighting keeps.
+   */
   async getPageText(requestId: number, page: number): Promise<void> {
     try {
-      const items = await this.textItems(page - 1);
-      const text = items.map((item) => item.str + (item.hasEOL ? "\n" : "")).join(" ");
-      this.post({ type: "pageText", requestId, page, text: items.length > 0 ? text : null });
+      const pdfDocument = this.app.pdfDocument;
+      if (!pdfDocument) {
+        this.post({ type: "pageText", requestId, page, text: null });
+        return;
+      }
+      const content = await (await pdfDocument.getPage(page)).getTextContent();
+      const parts: string[] = [];
+      for (const item of content.items) {
+        const str = item["str"];
+        if (typeof str === "string") {
+          parts.push(str + (item["hasEOL"] === true ? "\n" : ""));
+        }
+      }
+      this.post({ type: "pageText", requestId, page, text: parts.length > 0 ? parts.join(" ") : null });
     } catch {
       this.post({ type: "pageText", requestId, page, text: null });
     }
@@ -702,6 +730,7 @@ export class PdfjsAdapter {
     // the pending selectionchange event would otherwise create a highlight of its own.
     if (!uiManager.hasSelection) {
       uiManager.updateParams(PARAMS_HIGHLIGHT_COLOR, color);
+      this.showDefault?.(color);
     }
     uiManager.highlightSelection("keyboard");
     // The mode switch also materializes file-backed annotations as editors; only viewer-created
@@ -755,6 +784,7 @@ export class PdfjsAdapter {
       }
     } else {
       this.uiManager?.updateParams(PARAMS_HIGHLIGHT_COLOR, color);
+      this.showDefault?.(color);
     }
     this.scheduleSnapshot();
     this.post({ type: "createFromSelectionResult", id, created: false, recolored });
@@ -796,6 +826,7 @@ export class PdfjsAdapter {
       select.value = color.toUpperCase();
       swatch.style.backgroundColor = color;
     };
+    this.showDefault = show;
     show(first.color);
     select.addEventListener("change", () => {
       swatch.style.backgroundColor = select.value;
@@ -833,12 +864,17 @@ export class PdfjsAdapter {
 
   /** Make `color` the default for new highlights; anything selected is released first. */
   setDefaultCategory(color: string): void {
-    if (!this.uiManager) {
+    if (!this.uiManager || !this.editorLayerReady) {
       this.pendingDefaultColor = color;
       return;
     }
     this.uiManager.unselectAll();
     this.uiManager.updateParams(PARAMS_HIGHLIGHT_COLOR, color);
+    // PDF.js's own color picker listens for this to show the new default.
+    this.app.eventBus.dispatch("annotationeditorparamschanged", {
+      source: this,
+      details: [[PARAMS_HIGHLIGHT_COLOR, color]],
+    });
   }
 
   /** Spike: highlight the current selection with the default color, as a mouse selection would. */
