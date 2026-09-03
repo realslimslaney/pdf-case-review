@@ -244,7 +244,16 @@ export function layoutReport(model: ReportModel): ReportBlock[] {
   }
 
   if (model.aiSummary) {
-    const { provider, model: modelName, account, generatedAt, attestedAt, text, stale } = model.aiSummary;
+    const {
+      provider,
+      model: modelName,
+      account,
+      generatedAt,
+      attestedAt,
+      text,
+      stale,
+      contextScope,
+    } = model.aiSummary;
     blocks.push({ kind: "heading", level: 2, text: "AI summary" });
     if (stale) {
       blocks.push({
@@ -265,7 +274,7 @@ export function layoutReport(model: ReportModel): ReportBlock[] {
       muted: true,
       runs: [
         {
-          text: `Generated with ${provider}${modelName ? ` (${modelName})` : ""}${account ? ` as ${account}` : ""} on ${generatedAt}${attestedAt ? `; eligibility attested on ${attestedAt}` : ""}.`,
+          text: `Generated with ${provider}${modelName ? ` (${modelName})` : ""}${account ? ` as ${account}` : ""}${contextScope === "document-text" ? " using document text" : ""} on ${generatedAt}${attestedAt ? `; eligibility attested on ${attestedAt}` : ""}.`,
         },
       ],
     });

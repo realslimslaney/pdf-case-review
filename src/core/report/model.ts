@@ -63,6 +63,8 @@ export interface ReportAiSummary {
   attestedAt?: string;
   /** The sidecar content changed after generation; renderers add a caution line. */
   stale?: boolean;
+  /** `document-text` when the summary was generated with the document text in context. */
+  contextScope?: string;
 }
 
 export interface ReportInput {

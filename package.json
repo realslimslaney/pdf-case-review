@@ -750,6 +750,20 @@
           "default": true,
           "description": "Include the cached AI summary as a labeled section of generated reports."
         },
+        "pdfCaseReview.ai.contextScope": {
+          "type": "string",
+          "scope": "resource",
+          "default": "notes",
+          "enum": [
+            "notes",
+            "document-text"
+          ],
+          "enumDescriptions": [
+            "Highlights and notes only; the PDF's own text is never sent",
+            "Also send the document text, extracted per page with citations; image-only pages and scans are not included, and the PDF file itself is never sent"
+          ],
+          "description": "What AI features may send. Changing the scope always re-asks the consent question, and the dialog states exactly what will be sent."
+        },
         "pdfCaseReview.ai.pageContext.minHighlights": {
           "type": "integer",
           "scope": "resource",

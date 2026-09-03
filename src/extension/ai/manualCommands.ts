@@ -5,6 +5,7 @@
 import { commands, type Disposable, type ExtensionContext, env, type LogOutputChannel, window } from "vscode";
 
 import { summaryInputDigest } from "../../core/ai/digest";
+import { buildDocumentText, type DocumentTextResult } from "../../core/ai/documentText";
 import { buildSummaryPrompt, SUMMARY_PROMPT_VERSION } from "../../core/ai/prompt";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
@@ -16,7 +17,7 @@ import { ensureAttestation } from "./consentGate";
  * Digest captured at copy time, keyed by document. The pasted answer covers what the copied prompt
  * contained, so edits between copy and paste must leave the stored summary marked as possibly stale.
  */
-const copiedPromptDigests = new Map<string, string>();
+const copiedPromptDigests = new Map<string, { digest: string; scope: "notes" | "document-text" }>();
 
 interface CommandContext {
   provider: PdfCaseReviewEditorProvider;
@@ -57,12 +58,33 @@ export async function copySummaryPrompt(context: CommandContext): Promise<boolea
     return false;
   }
   const settings = aiSettings(document.uri, context.output);
+  let documentText: DocumentTextResult | undefined;
+  if (settings.contextScope === "document-text") {
+    const pages = await context.provider.collectDocumentText(document);
+    if (pages.every((page) => page.text === null)) {
+      void window.showErrorMessage(
+        "PDF Case Review: the document text could not be read; keep the PDF open in the viewer and try again.",
+      );
+      return false;
+    }
+    documentText = buildDocumentText(pages);
+  }
   const gate = await ensureAttestation(document, {
     whoAmI: async () => null,
     provider: "manual",
     settings,
     globalState: context.extensionContext.globalState,
     editorProvider: context.provider,
+    contextScope: settings.contextScope,
+    ...(documentText
+      ? {
+          documentTextCoverage: {
+            pagesWithText: documentText.pagesWithText,
+            pageCount: documentText.pageCount,
+            words: documentText.words,
+          },
+        }
+      : {}),
   });
   if (!gate.ok) {
     context.output.info(`copySummaryPrompt refused: ${gate.reason}`);
@@ -72,8 +94,12 @@ export async function copySummaryPrompt(context: CommandContext): Promise<boolea
     await markdownBody(document),
     { maxWords: settings.maxWords },
     gate.attestation,
+    documentText,
   );
-  copiedPromptDigests.set(document.uri.toString(), summaryInputDigest(document.model, settings.maxWords));
+  copiedPromptDigests.set(document.uri.toString(), {
+    digest: summaryInputDigest(document.model, settings.maxWords, settings.contextScope),
+    scope: settings.contextScope,
+  });
   await env.clipboard.writeText(`${prompt.system}\n\n${prompt.user}`);
   void window.showInformationMessage(
     "PDF Case Review: summary prompt copied. Paste it into your AI chat, copy the answer, then run " +
@@ -98,9 +124,12 @@ export async function pasteSummary(context: CommandContext): Promise<boolean> {
     text,
     promptVersion: SUMMARY_PROMPT_VERSION,
   };
-  const inputDigest = copiedPromptDigests.get(document.uri.toString());
-  if (inputDigest !== undefined) {
-    summary.inputDigest = inputDigest;
+  const copied = copiedPromptDigests.get(document.uri.toString());
+  if (copied !== undefined) {
+    summary.inputDigest = copied.digest;
+    if (copied.scope === "document-text") {
+      summary.contextScope = copied.scope;
+    }
   }
   const account = document.model.aiConsent?.email;
   if (account !== undefined) {

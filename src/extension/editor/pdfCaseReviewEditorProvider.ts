@@ -43,6 +43,7 @@ import {
   workspace,
 } from "vscode";
 
+import type { DocumentTextPage } from "../../core/ai/documentText";
 import { type Category, toHighlightEditorColors } from "../../core/categories";
 import { adoptEmbedded, missingFromFile, toEmbeddable, toInjectable } from "../../core/highlight/convert";
 import { repairPdfjsIds, syncModeOnOpen } from "../../core/pdfExport/syncPlan";
@@ -204,6 +205,20 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
 
   getDocument(uri: Uri): PdfDocument | undefined {
     return this.documents.get(uri.toString());
+  }
+
+  /** Every page's text for the document-text AI scope; entries are null when unavailable. */
+  async collectDocumentText(document: PdfDocument): Promise<DocumentTextPage[]> {
+    const pages: DocumentTextPage[] = [];
+    for (let page = 1; page <= document.info.pageCount; page += 1) {
+      const entry: DocumentTextPage = { page, text: await this.getPageText(document, page) };
+      const label = document.pageLabels?.[page - 1];
+      if (label !== undefined) {
+        entry.pageLabel = label;
+      }
+      pages.push(entry);
+    }
+    return pages;
   }
 
   /** One page's text from the viewer; null when no viewer is open, it times out, or has no text. */

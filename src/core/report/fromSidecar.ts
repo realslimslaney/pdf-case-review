@@ -95,9 +95,17 @@ export function reportInputFromSidecar(sidecar: Sidecar, context: ReportInputCon
       // An attestation for an earlier revision of the file must not stamp the report.
       summary.attestedAt = sidecar.aiConsent.attestedAt;
     }
+    if (sidecar.aiSummary.contextScope === "document-text") {
+      summary.contextScope = "document-text";
+    }
     const fresh =
       sidecar.aiSummary.promptVersion === SUMMARY_PROMPT_VERSION &&
-      sidecar.aiSummary.inputDigest === summaryInputDigest(sidecar, context.aiMaxWords);
+      sidecar.aiSummary.inputDigest ===
+        summaryInputDigest(
+          sidecar,
+          context.aiMaxWords,
+          sidecar.aiSummary.contextScope === "document-text" ? "document-text" : "notes",
+        );
     if (!fresh) {
       summary.stale = true;
     }

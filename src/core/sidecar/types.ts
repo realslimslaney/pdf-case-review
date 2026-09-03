@@ -103,6 +103,8 @@ export interface AiConsent {
   /** The user's explicit yes to "may this document be fed into AI context on this account?". */
   eligibilityConfirmed?: boolean;
   wordingVersion?: number;
+  /** The AI context scope the consent covered (`notes` when absent). */
+  contextScope?: string;
 }
 
 export interface AiSummary {
@@ -115,6 +117,8 @@ export interface AiSummary {
   inputDigest?: string;
   /** `SUMMARY_PROMPT_VERSION` at generation time. */
   promptVersion?: number;
+  /** The AI context scope the summary was generated under (`notes` when absent). */
+  contextScope?: string;
 }
 
 /** AI-written context above one page's highlight cluster (issue #29); same provenance as AiSummary. */

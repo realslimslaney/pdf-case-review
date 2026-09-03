@@ -2,6 +2,7 @@
 
 import { ConfigurationTarget, type LogOutputChannel, type Uri, window, workspace } from "vscode";
 import type { RequiredAccountRule } from "../core/ai/consent";
+import type { AiContextScope } from "../core/ai/documentText";
 import { DEFAULT_PAGE_CONTEXT_MIN_HIGHLIGHTS } from "../core/ai/pageContext";
 import { DEFAULT_MAX_WORDS } from "../core/ai/prompt";
 import {
@@ -78,6 +79,7 @@ export interface AiSettings {
   accounts: AiAccount[];
   requireVerifiedAccountForProtected: boolean;
   pageContextMinHighlights: number;
+  contextScope: AiContextScope;
 }
 
 function readRules(raw: unknown, warnings: string[]): RequiredAccountRule[] {
@@ -183,6 +185,7 @@ export function aiSettings(uri: Uri, output: LogOutputChannel): AiSettings {
       Number.isInteger(minHighlights) && minHighlights >= 2
         ? minHighlights
         : DEFAULT_PAGE_CONTEXT_MIN_HIGHLIGHTS,
+    contextScope: configuration.get<string>("contextScope") === "document-text" ? "document-text" : "notes",
   };
   if (warnings.length > 0) {
     const detail = warnings.join("; ");

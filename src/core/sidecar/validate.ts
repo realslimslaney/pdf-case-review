@@ -312,6 +312,7 @@ function readAiConsent(value: unknown, path: string): AiConsent {
   setIfDefined(consent, "authorizationLine", reader.optional("authorizationLine", string));
   setIfDefined(consent, "eligibilityConfirmed", reader.optional("eligibilityConfirmed", boolean));
   setIfDefined(consent, "wordingVersion", reader.optional("wordingVersion", integer()));
+  setIfDefined(consent, "contextScope", reader.optional("contextScope", string));
   reader.done();
   return consent;
 }
@@ -327,6 +328,7 @@ function readAiSummary(value: unknown, path: string): AiSummary {
   setIfDefined(summary, "account", reader.optional("account", string));
   setIfDefined(summary, "inputDigest", reader.optional("inputDigest", string));
   setIfDefined(summary, "promptVersion", reader.optional("promptVersion", integer(1)));
+  setIfDefined(summary, "contextScope", reader.optional("contextScope", string));
   reader.done();
   return summary;
 }

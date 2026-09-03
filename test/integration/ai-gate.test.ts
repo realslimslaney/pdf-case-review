@@ -121,4 +121,28 @@ suite("M2 phase 4: AI eligibility gate and manual hand-off", () => {
       "the stale summary still renders, informing rather than policing",
     );
   });
+
+  test("the document-text scope re-asks consent, sends page text and stamps the summary", async () => {
+    try {
+      await configuration().update("contextScope", "document-text", vscode.ConfigurationTarget.Global);
+      await vscode.commands.executeCommand("pdfCaseReview.debug.autoConsent", {
+        typedEmail: "you@school.edu",
+      });
+      const copied = await vscode.commands.executeCommand<boolean>("pdfCaseReview.ai.copySummaryPrompt");
+      assert.equal(copied, true, "the widened scope re-asks and the responder answers yes");
+      const clipboard = await vscode.env.clipboard.readText();
+      assert.ok(clipboard.includes("Document text ("), "the prompt carries the document-text section");
+      assert.ok(clipboard.includes("--- p. "), "pages are chunked with citations");
+      const state = await documentState(pdf);
+      assert.equal(state?.model.aiConsent?.contextScope, "document-text", "consent records the scope");
+      await vscode.env.clipboard.writeText("A summary grounded in the document text.");
+      const pasted = await vscode.commands.executeCommand<boolean>("pdfCaseReview.ai.pasteSummary");
+      assert.equal(pasted, true);
+      const after = await documentState(pdf);
+      assert.equal(after?.model.aiSummary?.contextScope, "document-text", "the summary carries the scope");
+      assert.ok(after?.model.aiSummary?.inputDigest, "the digest was captured at copy time");
+    } finally {
+      await configuration().update("contextScope", undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
 });

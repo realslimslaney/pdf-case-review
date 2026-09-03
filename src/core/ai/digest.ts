@@ -4,6 +4,7 @@
 
 import { sortDocumentNotes } from "../sidecar/serialize";
 import { type Sidecar, sortedCategories } from "../sidecar/types";
+import type { AiContextScope } from "./documentText";
 import { DEFAULT_MAX_WORDS, SUMMARY_PROMPT_VERSION } from "./prompt";
 
 /** FNV-1a 64-bit as a hex string. Change detection only, no security properties. */
@@ -23,8 +24,18 @@ export function fnv1a64(text: string): string {
  * quotes and notes, page and document notes, the word budget, and the prompt template version.
  * Arrays are sorted first so reordering without a content change never reads as stale.
  */
-export function summaryInputDigest(sidecar: Sidecar, maxWords: number = DEFAULT_MAX_WORDS): string {
+export function summaryInputDigest(
+  sidecar: Sidecar,
+  maxWords: number = DEFAULT_MAX_WORDS,
+  contextScope: AiContextScope = "notes",
+): string {
+  // The scope key is added only for the wider scope, so digests recorded before scopes existed
+  // stay valid for notes-only summaries. Document text is deterministic given the file, so the
+  // source hash stands in for the extracted text itself.
+  const scoped =
+    contextScope === "document-text" ? { contextScope, sourceSha256: sidecar.source.sha256 } : {};
   const canonical = {
+    ...scoped,
     promptVersion: SUMMARY_PROMPT_VERSION,
     maxWords,
     title: sidecar.source.title ?? sidecar.source.fileName,

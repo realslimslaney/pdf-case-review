@@ -13,6 +13,7 @@ import {
 } from "vscode";
 
 import { summaryInputDigest } from "../../core/ai/digest";
+import { buildDocumentText, type DocumentTextResult } from "../../core/ai/documentText";
 import { buildSummaryPrompt, SUMMARY_PROMPT_VERSION } from "../../core/ai/prompt";
 import type { AiSummary } from "../../core/sidecar/types";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
@@ -115,7 +116,8 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
   if (cached && cached.provider === settings.provider) {
     const fresh =
       cached.promptVersion === SUMMARY_PROMPT_VERSION &&
-      cached.inputDigest === summaryInputDigest(document.model, settings.maxWords);
+      (cached.contextScope ?? "notes") === settings.contextScope &&
+      cached.inputDigest === summaryInputDigest(document.model, settings.maxWords, settings.contextScope);
     const choice = await window.showInformationMessage(
       fresh
         ? `PDF Case Review: an AI summary from ${cached.generatedAt} is already cached.`
@@ -128,6 +130,17 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
     }
   }
 
+  let documentText: DocumentTextResult | undefined;
+  if (settings.contextScope === "document-text") {
+    const pages = await context.provider.collectDocumentText(document);
+    if (pages.every((page) => page.text === null)) {
+      void window.showErrorMessage(
+        "PDF Case Review: the document text could not be read; keep the PDF open in the viewer and try again.",
+      );
+      return false;
+    }
+    documentText = buildDocumentText(pages);
+  }
   let gate: Awaited<ReturnType<typeof ensureAttestation>>;
   try {
     gate = await ensureAttestation(document, {
@@ -136,6 +149,16 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
       settings,
       globalState: context.extensionContext.globalState,
       editorProvider: context.provider,
+      contextScope: settings.contextScope,
+      ...(documentText
+        ? {
+            documentTextCoverage: {
+              pagesWithText: documentText.pagesWithText,
+              pageCount: documentText.pageCount,
+              words: documentText.words,
+            },
+          }
+        : {}),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -147,11 +170,12 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
     return false;
   }
   // Captured with the prompt: edits made while the provider runs must mark the summary stale.
-  const inputDigest = summaryInputDigest(document.model, settings.maxWords);
+  const inputDigest = summaryInputDigest(document.model, settings.maxWords, settings.contextScope);
   const prompt = buildSummaryPrompt(
     await markdownBody(document),
     { maxWords: settings.maxWords },
     gate.attestation,
+    documentText,
   );
   const account = gate.accountId ? settings.accounts.find((entry) => entry.id === gate.accountId) : undefined;
   const configDir = account?.provider === settings.provider ? account.configDir : undefined;
@@ -190,6 +214,9 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
     };
     if (settings.model !== "") {
       summary.model = settings.model;
+    }
+    if (settings.contextScope === "document-text") {
+      summary.contextScope = settings.contextScope;
     }
     context.provider.setAiSummary(document, summary);
     void window.showInformationMessage(

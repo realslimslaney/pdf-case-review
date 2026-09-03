@@ -138,7 +138,8 @@
         "attestedAt": { "type": "string", "format": "date-time" },
         "responsibilityAcknowledged": { "type": "boolean" },
         "eligibilityConfirmed": { "type": "boolean" },
-        "wordingVersion": { "type": "integer" }
+        "wordingVersion": { "type": "integer" },
+        "contextScope": { "type": "string" }
       }
     },
     "aiSummary": {
@@ -152,7 +153,8 @@
         "generatedAt": { "type": "string", "format": "date-time" },
         "text": { "type": "string" },
         "inputDigest": { "type": "string" },
-        "promptVersion": { "type": "integer", "minimum": 1 }
+        "promptVersion": { "type": "integer", "minimum": 1 },
+        "contextScope": { "type": "string" }
       }
     },
     "aiPageContexts": {
