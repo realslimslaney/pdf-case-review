@@ -30,9 +30,10 @@ export function accountIdsIn(raw: readonly unknown[]): Set<string> {
 }
 
 /**
- * A scoped rule is prepended so it beats an existing catch-all; an always rule is appended so
- * existing scoped rules keep winning and the new account becomes the fallback. Raw values are
- * carried through untouched: the flow must never rewrite entries the user typed by hand.
+ * A scoped rule is prepended so it beats an existing catch-all. An always rule goes in front of the
+ * first existing catch-all (rules are first-match-wins, so appending it behind one would make the
+ * new account unreachable) and after every scoped rule, which keep winning. Raw values are carried
+ * through untouched: the flow must never rewrite entries the user typed by hand.
  */
 export function mergeAccountSettings(
   accounts: readonly unknown[],
@@ -42,8 +43,25 @@ export function mergeAccountSettings(
   const nextAccounts = [...accounts, { id: input.id, provider: input.provider, configDir: input.configDir }];
   const placed = ruleFor(input);
   const nextRules =
-    placed === undefined ? [...rules] : placed.prepend ? [placed.rule, ...rules] : [...rules, placed.rule];
+    placed === undefined
+      ? [...rules]
+      : placed.prepend
+        ? [placed.rule, ...rules]
+        : insertBeforeCatchAll(rules, placed.rule);
   return { accounts: nextAccounts, rules: nextRules };
+}
+
+function isCatchAll(rule: unknown): boolean {
+  if (typeof rule !== "object" || rule === null) {
+    return false;
+  }
+  const when = (rule as Record<string, unknown>)["when"];
+  return when === undefined || when === null || (typeof when === "object" && Object.keys(when).length === 0);
+}
+
+function insertBeforeCatchAll(rules: readonly unknown[], rule: object): unknown[] {
+  const index = rules.findIndex(isCatchAll);
+  return index === -1 ? [...rules, rule] : [...rules.slice(0, index), rule, ...rules.slice(index)];
 }
 
 function ruleFor(input: NewAccountInput): { rule: object; prepend: boolean } | undefined {

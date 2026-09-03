@@ -2,7 +2,7 @@
 // pieces which are otherwise JSON-only. Its guided account flow writes `pdfCaseReview.ai.accounts`
 // and `requiredAccount`, then opens a sign-in terminal with the login directory on the environment.
 
-import { ConfigurationTarget, commands, type Disposable, window, workspace } from "vscode";
+import { commands, type Disposable, window, workspace } from "vscode";
 
 import {
   accountIdsIn,
@@ -97,14 +97,15 @@ async function addAiAccount(): Promise<void> {
   if (!scope) {
     return;
   }
+  const rulesTarget = definedTarget(configuration, "requiredAccount");
   const merged = mergeAccountSettings(
     asList(rawAccounts),
-    asList(configuration.inspect("requiredAccount")?.globalValue),
+    asList(valueAt<unknown[]>(configuration, "requiredAccount", rulesTarget)),
     { id, provider: provider.id, configDir, scope },
   );
   await configuration.update("accounts", merged.accounts, target);
   if (scope.kind !== "none") {
-    await configuration.update("requiredAccount", merged.rules, ConfigurationTarget.Global);
+    await configuration.update("requiredAccount", merged.rules, rulesTarget);
   }
   if (!isDesktopHost()) {
     void window.showInformationMessage(

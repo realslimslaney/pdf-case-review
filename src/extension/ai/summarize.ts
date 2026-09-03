@@ -151,9 +151,10 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
     return false;
   }
   // Captured with the prompt: edits made while the provider runs must mark the summary stale.
-  const inputDigest = summaryInputDigest(document.model, settings.maxWords, settings.contextScope);
+  const model = document.model;
+  const inputDigest = summaryInputDigest(model, settings.maxWords, settings.contextScope);
   const prompt = buildSummaryPrompt(
-    await markdownBody(document),
+    await markdownBody(document, model),
     { maxWords: settings.maxWords },
     gate.attestation,
     documentText,

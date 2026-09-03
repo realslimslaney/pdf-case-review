@@ -736,7 +736,7 @@
             "Claude Code CLI (spawns `claude`; desktop only)",
             "Codex CLI (spawns `codex`; desktop only)"
           ],
-          "markdownDescription": "AI provider for the optional executive summary. Off by default: nothing leaves your machine unless you enable a provider, and only your highlights and notes are ever sent, never the PDF. You are responsible for using AI on appropriate content; the developers of this extension are not liable for misuse."
+          "markdownDescription": "AI provider for the optional executive summary. Off by default: nothing leaves your machine unless you enable a provider. What is sent is your highlights and notes plus, under the default document-text scope, the text extracted from the PDF's pages; the PDF file itself is never sent (see `pdfCaseReview.ai.contextScope`). You are responsible for using AI on appropriate content; the developers of this extension are not liable for misuse."
         },
         "pdfCaseReview.ai.model": {
           "type": "string",

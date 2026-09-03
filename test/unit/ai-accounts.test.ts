@@ -38,13 +38,24 @@ describe("mergeAccountSettings", () => {
   const existingRules = [{ use: "personal" }];
   const account = { id: "school", provider: "claude-cli" as const, configDir: "~/.claude-school" };
 
-  it("appends the account and appends an always rule as the fallback", () => {
+  it("appends the account and puts an always rule in front of the existing catch-all", () => {
     const merged = mergeAccountSettings(existingAccounts, existingRules, {
       ...account,
       scope: { kind: "always" },
     });
     expect(merged.accounts).toEqual([...existingAccounts, account]);
-    expect(merged.rules).toEqual([{ use: "personal" }, { use: "school" }]);
+    expect(merged.rules).toEqual([{ use: "school" }, { use: "personal" }]);
+  });
+
+  it("keeps an always rule behind scoped rules and appends it when no catch-all exists", () => {
+    const scoped = { when: { protected: true }, use: "vault" };
+    const withCatchAll = mergeAccountSettings([], [scoped, { use: "personal" }], {
+      ...account,
+      scope: { kind: "always" },
+    });
+    expect(withCatchAll.rules).toEqual([scoped, { use: "school" }, { use: "personal" }]);
+    const withoutCatchAll = mergeAccountSettings([], [scoped], { ...account, scope: { kind: "always" } });
+    expect(withoutCatchAll.rules).toEqual([scoped, { use: "school" }]);
   });
 
   it("prepends a folder rule so it beats an existing catch-all", () => {

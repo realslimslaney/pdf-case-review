@@ -8,6 +8,7 @@ import { AI_CONTEXT_SCOPES, type AiContextScope } from "../../core/ai/contextSco
 import { summaryInputDigest } from "../../core/ai/digest";
 import { buildDocumentText, type DocumentTextResult } from "../../core/ai/documentText";
 import { buildSummaryPrompt, hasSummaryContent, SUMMARY_PROMPT_VERSION } from "../../core/ai/prompt";
+import type { Sidecar } from "../../core/sidecar/types";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
 import type { PdfDocument } from "../editor/pdfDocument";
@@ -56,7 +57,8 @@ function activeDocument(context: CommandContext): PdfDocument | undefined {
 }
 
 /** The Markdown report body used as prompt context; never the PDF itself. */
-export async function markdownBody(document: PdfDocument): Promise<string> {
+/** `model` is the caller's snapshot: the digest stored beside a prompt must describe the same state. */
+export async function markdownBody(document: PdfDocument, model: Sidecar = document.model): Promise<string> {
   const [{ renderReport }, { reportInputFromSidecar }] = await Promise.all([
     import("../../core/report/render"),
     import("../../core/report/fromSidecar"),
@@ -69,7 +71,7 @@ export async function markdownBody(document: PdfDocument): Promise<string> {
   if (document.pageLabels) {
     inputContext.pageLabels = document.pageLabels;
   }
-  const rendered = await renderReport(reportInputFromSidecar(document.model, inputContext), "markdown");
+  const rendered = await renderReport(reportInputFromSidecar(model, inputContext), "markdown");
   return new TextDecoder().decode(rendered.bytes);
 }
 
@@ -109,14 +111,15 @@ export async function copySummaryPrompt(context: CommandContext): Promise<boolea
     context.output.info(`copySummaryPrompt refused: ${gate.reason}`);
     return false;
   }
+  const model = document.model;
   const prompt = buildSummaryPrompt(
-    await markdownBody(document),
+    await markdownBody(document, model),
     { maxWords: settings.maxWords },
     gate.attestation,
     documentText,
   );
   const copied: CopiedPrompt = {
-    digest: summaryInputDigest(document.model, settings.maxWords, settings.contextScope),
+    digest: summaryInputDigest(model, settings.maxWords, settings.contextScope),
     scope: settings.contextScope,
   };
   await context.extensionContext.workspaceState.update(copiedPromptKey(document), copied);
