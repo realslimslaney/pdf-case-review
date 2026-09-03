@@ -909,6 +909,7 @@
     "package": "pnpm run prepare-pdfjs && pnpm run build -- --minify && vsce package --no-dependencies",
     "vscode:prepublish": "pnpm run build -- --minify",
     "test:e2e": "playwright test -c test/e2e",
+    "docs:check": "node scripts/check-docs.mjs",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs"
