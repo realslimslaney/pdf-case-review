@@ -96,7 +96,7 @@ export interface ReportOptions {
 
 export const DEFAULT_REPORT_OPTIONS: ReportOptions = {
   organization: "none",
-  quoteMaxChars: 300,
+  quoteMaxChars: 0,
   includeEmptyCategories: false,
   usePageLabels: true,
 };
