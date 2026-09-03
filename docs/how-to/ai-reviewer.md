@@ -1,6 +1,6 @@
 # Use Claude Code or Codex as your reviewer
 
-Two independent ways to bring AI into a review, both optional and off by default. Either way, only your highlighted excerpts and notes are involved, never the PDF itself, and the report sets AI text apart in grey italics with a legend.
+Two independent ways to bring AI into a review, both optional and off by default. By default only your highlighted excerpts and notes are involved; a setting can add the document's extracted text (see [choosing the context scope](#choose-how-much-context-is-sent) below), and the PDF file itself is never sent. The report sets AI text apart in grey italics with a legend.
 
 ## A. The built-in executive summary
 
@@ -10,6 +10,29 @@ Two independent ways to bring AI into a review, both optional and off by default
 Before anything is sent you answer one direct question: *may this document be fed into AI context on this account?* The dialog names the signed-in email (read from the CLI's own saved login, never from asking a model), shows the document's authorization line when page 1 has one ("authorized for use only by..."), and counts what will be sent. Answering yes records the attestation in the sidecar; the report's AI section is stamped with provider, model, account and dates. Cancel and nothing is sent; the report still renders without a summary.
 
 The summary is cached in the sidecar (`aiSummary`), so re-rendering the report never re-calls the model; **Summarize with AI** offers to regenerate.
+
+### Choose how much context is sent
+
+By default the summary is built from your highlights and notes alone. If the model needs the document
+itself to be useful (your notes are sparse, or you want claims checked against the text), set:
+
+```jsonc
+"pdfCaseReview.ai.contextScope": "document-text"
+```
+
+Now **Summarize with AI** and **Copy Summary Prompt** append the document text to the prompt after your
+notes: extracted per page through the viewer, each page chunked under a citation marker, so the model can
+cite pages. It is document *text*, not the PDF: the file itself is never sent, and pages with nothing to
+extract (image-only exhibits, scans) are simply absent. Very long documents are cut off at a size budget
+and the prompt says where.
+
+Widening the scope always re-asks the consent question (a wider consent covers narrower runs, so switching back never nags), and the dialog states exactly
+what the run will send: under document text it adds a coverage line ("text extracted from N of M page(s),
+about W words") so you can judge how much of the document is actually going out before you answer.
+**Add AI Page Context** is unaffected: it always sends only the picked pages' highlights and notes.
+
+A summary generated under document text is stamped in the report ("using document text"), and its cache
+is tied to the PDF's content hash, so a changed file marks it as possibly out of date.
 
 ### Context for a busy page
 

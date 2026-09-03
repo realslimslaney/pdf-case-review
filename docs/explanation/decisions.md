@@ -46,6 +46,27 @@ Short records of the decisions that shape the project, newest last. Each spike f
 
 **Why.** Licensed course material is the primary content; the risk is excerpts leaving under the wrong account or without the user realizing. A single tested chokepoint plus a type-level requirement is cheap insurance, and recording the account, the document hash and the question wording makes the decision auditable in the sidecar the user already owns.
 
+**Amendment (2026-09-02): the document-text context scope.** The "only highlights and notes, never
+the PDF" rule is now the default rather than the only behavior. `pdfCaseReview.ai.contextScope`
+(default `notes`) adds a `document-text` scope (issue #22, v1) under which **Summarize with AI** and
+**Copy Summary Prompt** append the document's text to the prompt: extracted per page through the
+viewer, chunked with page-citation markers under a 400k-character budget with explicit truncation
+reporting (`src/core/ai/documentText.ts`). This supersedes the "no `ai.sendFullText` setting" line
+above: a scope enum whose wider position is actually implemented does not mislead the way a dead
+switch would. What has not changed is the shape of the gate. Every constraint holds: the one consent
+chokepoint (`ensureAttestation` in `src/extension/ai/consentGate.ts`) is still the only path, and the
+scope rides through it rather than around it; the consent record carries `contextScope` and
+`needsReconsent` (`src/core/ai/consent.ts`) treats any scope change, in either direction, as a fresh
+question, with pre-scope consents read as notes-only; only extracted text is ever sent, never the PDF
+file, so encryption and permissions are never touched; the dialog is honest about coverage (pages with
+extractable text, approximate words, image-only pages and scans named as excluded) instead of implying
+the whole document goes out; and the feature is always named "Document text", never "Full PDF",
+because extraction genuinely misses scans and image-only exhibits (owner decision). The staleness
+digest (`src/core/ai/digest.ts`) folds in the scope and the source hash for document-text runs while
+notes-only digests stay byte-identical, and the report provenance line adds "using document text".
+**Add AI Page Context** still sends notes only. The notes-plus-structure middle scope from issue #22
+remains deferred with the sections work.
+
 ## ADR-0007: Large-PDF memory limits are settings; `retainContextWhenHidden` stays on by default
 
 **Decision.** Three viewer settings govern memory on large documents: `pdfCaseReview.viewer.maxCanvasPixels` and `viewer.maxImageSize` (both `0` = keep the vendored PDF.js default, resource-scoped, applied when the document is reopened) and `viewer.retainContextWhenHidden` (default `true`, window-scoped). The retain flag is read once at provider registration because VS Code fixes `webviewOptions` there, so changing it needs a window reload and the setting description says so. The webview reads all annotations of a document with bounded concurrency (8 pages in flight) instead of strictly sequentially.

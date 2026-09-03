@@ -38,14 +38,14 @@ The **Note** view (under Highlights in the activity bar) edits one target at a t
 
 ## AI (optional, off by default)
 
-Every path below goes through the eligibility question first: the dialog names the signed-in account and the document, and asks whether it may be fed into AI context. Only highlights and notes are ever sent, never the PDF. AI text in reports renders in grey italics with a legend.
+Every path below goes through the eligibility question first: the dialog names the signed-in account and the document, states exactly what will be sent, and asks whether it may be fed into AI context. By default only highlights and notes are sent; with `pdfCaseReview.ai.contextScope: "document-text"` the summary commands also send text extracted from the document, and a scope change always re-asks. The PDF file itself is never sent under either scope. AI text in reports renders in grey italics with a legend.
 
 | Command | What it does |
 |---|---|
 | `PDF Case Review: Choose AI Provider...` | Probes the `claude` and `codex` CLIs and sets `pdfCaseReview.ai.provider`; unavailable options show a one-line fix. Picking Manual starts the clipboard flow. |
-| `PDF Case Review: Summarize with AI` | The one entry point: with no provider configured it opens the provider picker first, then runs the configured CLI on your highlights and notes and caches the executive summary in the sidecar. Cancellable; 120 second timeout. |
+| `PDF Case Review: Summarize with AI` | The one entry point: with no provider configured it opens the provider picker first, then runs the configured CLI on your highlights and notes and caches the executive summary in the sidecar. Under `ai.contextScope: "document-text"` the prompt also carries the document text, extracted per page with citations, and the consent dialog shows the coverage (pages with extractable text, approximate words). Cancellable; 120 second timeout. |
 | `PDF Case Review: Add AI Page Context...` | Offers pages with a dense, lightly-annotated highlight cluster (`ai.pageContext.minHighlights`), then asks the configured CLI for 2 to 4 sentences of context per picked page; one consent dialog covers the batch. Cached in the sidecar and rendered above those pages in the report. |
-| `PDF Case Review: Copy Summary Prompt` | Puts the summary prompt and your notes on the clipboard for any chat. Works with the provider off. |
+| `PDF Case Review: Copy Summary Prompt` | Puts the summary prompt and your notes on the clipboard for any chat; under `ai.contextScope: "document-text"` the copied prompt includes the document text too, after the same consent dialog. Works with the provider off. |
 | `PDF Case Review: Paste AI Summary` | Saves the clipboard as the document's AI summary, labeled `manual`. |
 | `PDF Case Review: Review AI Consent` | Shows the recorded attestation (account, provider, dates) and offers to revoke it. |
 
