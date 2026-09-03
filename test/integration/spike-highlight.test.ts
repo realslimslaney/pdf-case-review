@@ -48,12 +48,27 @@ suite("PDF Case Review editor", () => {
       },
       30_000,
     );
-    await send(uri, { type: "spike.highlightText", page: 1, spanCount: 2, color: "#53FFBC" });
-
-    const state = await waitFor("a highlight editor", async () => {
+    // Acknowledged request plus one retry, as in helpers.highlight(): an unfocused window (the
+    // macos-latest runner) can drop the DOM selection, in which case no editor is ever created
+    // and a fire-and-forget send would swallow the webview's error.
+    const reached = async () => {
       const current = await viewerState(uri);
       return current && current.editors.length > 0 ? current : undefined;
-    });
+    };
+    const create = () =>
+      request(uri, { type: "spike.highlightText", page: 1, spanCount: 2, color: "#53FFBC" });
+    const result = await create();
+    if (!result.ok) {
+      try {
+        await waitFor("a highlight editor after a failed acknowledgement", reached, 3_000);
+      } catch {
+        const retry = await create();
+        if (!retry.ok) {
+          throw new Error(`spike.highlightText failed twice: ${retry.error ?? result.error ?? "unknown"}`);
+        }
+      }
+    }
+    const state = await waitFor("a highlight editor", reached);
     const [highlight] = state.editors;
     assert.ok(highlight);
     assert.equal(highlight.pageIndex, 0);
