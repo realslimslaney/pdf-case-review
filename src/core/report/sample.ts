@@ -23,6 +23,7 @@ export const SAMPLE_REPORT_INPUT: ReportInput = {
       page: 2,
       top: 700,
       text: "Gross margin: 2023 41.0 percent; 2024 37.2 percent; 2025 33.1 percent.",
+      createdAt: "2026-08-30T10:10:00Z",
       note: "Eight points in two years — **pricing**, not volume.",
     },
     {
@@ -32,6 +33,7 @@ export const SAMPLE_REPORT_INPUT: ReportInput = {
       pageLabel: "i",
       top: 650,
       text: "Distributors now accounted for 58 percent of revenue but only 31\n percent of contribution.",
+      createdAt: "2026-08-30T10:00:00Z",
       note: "",
     },
     {
@@ -41,11 +43,16 @@ export const SAMPLE_REPORT_INPUT: ReportInput = {
       top: 600,
       text: "Kim was worried that a blanket increase would hand share to Beta Fas-\ntenerS.",
       note: "- capacity = 25% of market\n- came online in January",
+      createdAt: "2026-08-30T10:05:00Z",
     },
     { id: "h4", categoryId: "ghost", page: 3, text: "Orphaned highlight", note: "" },
   ],
-  pageNotes: [{ page: 3, note: "The real question is cost to serve." }],
+  pageNotes: [{ page: 3, note: "The real question is cost to serve.", createdAt: "2026-08-30T10:15:00Z" }],
   documentNotes: [
-    { title: "Thesis", note: "Exit the distributor channel *only* if cost-to-serve data confirms it." },
+    {
+      title: "Thesis",
+      note: "Exit the distributor channel *only* if cost-to-serve data confirms it.",
+      createdAt: "2026-08-30T09:55:00Z",
+    },
   ],
 };

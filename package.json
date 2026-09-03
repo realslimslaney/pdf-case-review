@@ -661,18 +661,20 @@
         "pdfCaseReview.report.organization": {
           "type": "string",
           "scope": "resource",
-          "default": "both",
+          "default": "none",
           "enum": [
+            "none",
             "category",
             "page",
             "both"
           ],
           "enumDescriptions": [
-            "Sections per category",
-            "Sections per page, in reading order",
-            "Sections per category, plus a per-page appendix"
+            "No grouped sections: notes appear once, in the order they were taken",
+            "Grouped sections per category",
+            "Grouped sections per page, in reading order",
+            "Grouped sections per category, plus a per-page appendix"
           ],
-          "description": "How the report body is organized."
+          "description": "Grouped sections added after the chronological notes. Reports always open with the notes in the order they were taken and close with the AI summary."
         },
         "pdfCaseReview.report.outputFolder": {
           "type": "string",

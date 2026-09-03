@@ -1,12 +1,16 @@
 import { unzipSync } from "fflate";
 import { PDFDocument } from "pdf-lib";
 import { describe, expect, it } from "vitest";
+import { DEFAULT_REPORT_OPTIONS } from "../../src/core/report/model";
 import { renderReport } from "../../src/core/report/render";
 import { SAMPLE_REPORT_INPUT as SAMPLE_INPUT } from "../../src/core/report/sample";
 
 describe("renderReport", () => {
   it("produces a Word document whose XML carries the headings, quotes and page numbers", async () => {
-    const report = await renderReport(SAMPLE_INPUT, "docx");
+    const report = await renderReport(SAMPLE_INPUT, "docx", {
+      ...DEFAULT_REPORT_OPTIONS,
+      organization: "both",
+    });
     expect(report.extension).toBe("docx");
     const files = unzipSync(report.bytes);
     const documentXml = new TextDecoder().decode(files["word/document.xml"]);
@@ -20,7 +24,10 @@ describe("renderReport", () => {
   }, 20_000);
 
   it("produces a multi-page PDF with embedded Roboto", async () => {
-    const report = await renderReport(SAMPLE_INPUT, "pdf");
+    const report = await renderReport(SAMPLE_INPUT, "pdf", {
+      ...DEFAULT_REPORT_OPTIONS,
+      organization: "both",
+    });
     expect(report.extension).toBe("pdf");
     expect(Array.from(report.bytes.slice(0, 5))).toEqual([0x25, 0x50, 0x44, 0x46, 0x2d]); // %PDF-
     const doc = await PDFDocument.load(report.bytes);

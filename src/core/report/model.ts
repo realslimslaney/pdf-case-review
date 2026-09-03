@@ -26,17 +26,20 @@ export interface ReportHighlightInput {
   kind?: HighlightKind;
   text: string;
   note: string;
+  createdAt?: string;
 }
 
 export interface ReportPageNoteInput {
   page: number;
   pageLabel?: string;
   note: string;
+  createdAt?: string;
 }
 
 export interface ReportDocumentNoteInput {
   title: string;
   note: string;
+  createdAt?: string;
 }
 
 export interface ReportAiSummary {
@@ -64,7 +67,7 @@ export interface ReportInput {
 }
 
 export interface ReportOptions {
-  organization: "category" | "page" | "both";
+  organization: "none" | "category" | "page" | "both";
   /** 0 = unlimited. */
   quoteMaxChars: number;
   includeEmptyCategories: boolean;
@@ -72,7 +75,7 @@ export interface ReportOptions {
 }
 
 export const DEFAULT_REPORT_OPTIONS: ReportOptions = {
-  organization: "both",
+  organization: "none",
   quoteMaxChars: 300,
   includeEmptyCategories: false,
   usePageLabels: true,
@@ -88,6 +91,11 @@ export interface ReportItem {
   quote: string;
   note: string;
 }
+
+export type ChronologicalEntry =
+  | { kind: "highlight"; item: ReportItem }
+  | { kind: "pageNote"; citation: string; note: string }
+  | { kind: "documentNote"; title: string; note: string };
 
 export interface CategorySection {
   category: ReportCategory;
@@ -122,6 +130,7 @@ export interface ReportModel {
   aiSummary: ReportAiSummary | null;
   summary: SummaryRow[];
   documentNotes: ReportDocumentNoteInput[];
+  chronological: ChronologicalEntry[];
   byCategory: CategorySection[];
   byPage: PageSection[];
   uncategorized: ReportItem[];
@@ -195,6 +204,54 @@ export function buildReportModel(
     note: highlight.note.trim(),
   }));
 
+  const itemsById = new Map(items.map((item) => [item.id, item]));
+  const stamped: { createdAt?: string; entry: ChronologicalEntry }[] = [
+    ...input.highlights.map((highlight) => {
+      const stampedEntry: { createdAt?: string; entry: ChronologicalEntry } = {
+        entry: { kind: "highlight", item: itemsById.get(highlight.id) as ReportItem },
+      };
+      if (highlight.createdAt !== undefined) {
+        stampedEntry.createdAt = highlight.createdAt;
+      }
+      return stampedEntry;
+    }),
+    ...(input.pageNotes ?? []).map((note) => {
+      const stampedEntry: { createdAt?: string; entry: ChronologicalEntry } = {
+        entry: {
+          kind: "pageNote",
+          citation: formatCitation(note.page, note.pageLabel, options.usePageLabels),
+          note: note.note,
+        },
+      };
+      if (note.createdAt !== undefined) {
+        stampedEntry.createdAt = note.createdAt;
+      }
+      return stampedEntry;
+    }),
+    ...(input.documentNotes ?? []).map((note) => {
+      const stampedEntry: { createdAt?: string; entry: ChronologicalEntry } = {
+        entry: { kind: "documentNote", title: note.title, note: note.note },
+      };
+      if (note.createdAt !== undefined) {
+        stampedEntry.createdAt = note.createdAt;
+      }
+      return stampedEntry;
+    }),
+  ];
+  // Timestamped entries in the order they were taken; unstamped ones keep their input order at
+  // the end (sort is stable), so hand-built inputs without timestamps still render sensibly.
+  const chronological = stamped
+    .sort((left, right) =>
+      left.createdAt === undefined
+        ? right.createdAt === undefined
+          ? 0
+          : 1
+        : right.createdAt === undefined
+          ? -1
+          : left.createdAt.localeCompare(right.createdAt),
+    )
+    .map(({ entry }) => entry);
+
   const summary: SummaryRow[] = input.categories
     .map((category) => {
       const own = items.filter((item) => item.category.id === category.id);
@@ -259,6 +316,7 @@ export function buildReportModel(
     aiSummary: input.aiSummary ?? null,
     summary,
     documentNotes: (input.documentNotes ?? []).filter((note) => note.note.trim() !== ""),
+    chronological,
     byCategory,
     byPage,
     uncategorized,

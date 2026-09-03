@@ -92,23 +92,43 @@ describe("noteToBlocks", () => {
 });
 
 describe("layout + markdown", () => {
-  it("renders the full report deterministically", () => {
+  it("renders chronological notes by default", () => {
     const markdown = renderMarkdown(layoutReport(buildReportModel(SAMPLE_INPUT)));
     expect(markdown).toContain("# Acme Widgets (A): The Pricing Decision");
     expect(markdown).toContain("- **Highlights:** 4 highlights · 4 notes");
     expect(markdown).toContain("| Financial `#53FFBC` | 1 | 1 | 2 |");
     expect(markdown).toContain("## Thesis");
     expect(markdown).toContain(
-      "> Gross margin: 2023 41.0 percent; 2024 37.2 percent; 2025 33.1 percent. *(p. 2 · Financial)*",
+      "> Financial: Gross margin: 2023 41.0 percent; 2024 37.2 percent; 2025 33.1 percent. *(p. 2)*",
     );
     expect(markdown).toContain("Eight points in two years — **pricing**, not volume.");
-    expect(markdown).toContain("## Appendix: notes in reading order");
-    expect(markdown).toContain("### Page i [1]");
+    expect(markdown).toContain("## Notes in the order taken");
+    expect(markdown).not.toContain("## Appendix");
+    expect(markdown).not.toContain("## Document notes");
     expect(markdown).toContain("> Concern: Kim was worried");
-    expect(markdown).toContain("### Page 3");
+    expect(markdown).toContain("### Page note · p. 3");
     expect(markdown).toContain("The real question is cost to serve.");
     expect(markdown.endsWith("\n")).toBe(true);
     expect(renderMarkdown(layoutReport(buildReportModel(SAMPLE_INPUT)))).toBe(markdown);
+  });
+
+  it("orders chronological entries by createdAt with unstamped ones last", () => {
+    const model = buildReportModel(SAMPLE_INPUT);
+    expect(
+      model.chronological.map((entry) => (entry.kind === "highlight" ? entry.item.id : entry.kind)),
+    ).toEqual(["documentNote", "h1", "h3", "h2", "pageNote", "h4"]);
+  });
+
+  it("adds grouped sections and the reading-order appendix for organization both", () => {
+    const markdown = renderMarkdown(
+      layoutReport(buildReportModel(SAMPLE_INPUT, { ...DEFAULT_REPORT_OPTIONS, organization: "both" })),
+    );
+    expect(markdown).toContain("## Document notes");
+    expect(markdown).toContain(
+      "> Gross margin: 2023 41.0 percent; 2024 37.2 percent; 2025 33.1 percent. *(p. 2 · Financial)*",
+    );
+    expect(markdown).toContain("## Appendix: notes in reading order");
+    expect(markdown).toContain("### Page i [1]");
   });
 
   it("omits the appendix for category-only organization", () => {
@@ -116,7 +136,7 @@ describe("layout + markdown", () => {
       layoutReport(buildReportModel(SAMPLE_INPUT, { ...DEFAULT_REPORT_OPTIONS, organization: "category" })),
     );
     expect(markdown).not.toContain("Appendix");
-    expect(markdown).not.toContain("### Page");
+    expect(markdown).not.toContain("### Page i");
   });
 });
 
@@ -130,7 +150,9 @@ describe("empty quotes by highlight kind", () => {
   };
 
   it("labels a free highlight as an image region and a failed capture as no text", () => {
-    const markdown = renderMarkdown(layoutReport(buildReportModel(input)));
+    const markdown = renderMarkdown(
+      layoutReport(buildReportModel(input, { ...DEFAULT_REPORT_OPTIONS, organization: "category" })),
+    );
     // Category sections name the category in the citation: the color bar alone must never be
     // the only category marker on a quote.
     expect(markdown).toContain("> [image region] *(p. 2 · Fact)*");

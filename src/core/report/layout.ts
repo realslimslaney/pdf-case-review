@@ -139,35 +139,6 @@ export function layoutReport(model: ReportModel): ReportBlock[] {
     ],
   });
 
-  if (model.aiSummary) {
-    const { provider, model: modelName, account, generatedAt, attestedAt, text, stale } = model.aiSummary;
-    blocks.push({ kind: "paragraph", muted: true, runs: [{ text: AI_LEGEND }] });
-    blocks.push({ kind: "heading", level: 2, text: "AI summary" });
-    if (stale) {
-      blocks.push({
-        kind: "paragraph",
-        muted: true,
-        runs: [
-          {
-            text:
-              "This summary may be out of date: highlights or notes changed after it was generated. " +
-              "Run Summarize with AI again to refresh it.",
-          },
-        ],
-      });
-    }
-    blocks.push(...markGenerated(noteToBlocks(text)));
-    blocks.push({
-      kind: "paragraph",
-      muted: true,
-      runs: [
-        {
-          text: `Generated with ${provider}${modelName ? ` (${modelName})` : ""}${account ? ` as ${account}` : ""} on ${generatedAt}${attestedAt ? `; eligibility attested on ${attestedAt}` : ""}.`,
-        },
-      ],
-    });
-  }
-
   blocks.push({ kind: "heading", level: 2, text: "Summary" });
   blocks.push({
     kind: "table",
@@ -176,7 +147,26 @@ export function layoutReport(model: ReportModel): ReportBlock[] {
     swatches: model.summary.map((row) => row.category.color),
   });
 
-  if (model.documentNotes.length > 0) {
+  if (model.chronological.length > 0) {
+    blocks.push({ kind: "heading", level: 2, text: "Notes in the order taken" });
+    for (const entry of model.chronological) {
+      switch (entry.kind) {
+        case "highlight":
+          blocks.push(...itemBlocks(entry.item, true));
+          break;
+        case "pageNote":
+          blocks.push({ kind: "heading", level: 3, text: `Page note · ${entry.citation}` });
+          blocks.push(...noteToBlocks(entry.note));
+          break;
+        case "documentNote":
+          blocks.push({ kind: "heading", level: 3, text: entry.title });
+          blocks.push(...noteToBlocks(entry.note));
+          break;
+      }
+    }
+  }
+
+  if (options.organization !== "none" && model.documentNotes.length > 0) {
     blocks.push({ kind: "heading", level: 2, text: "Document notes" });
     for (const note of model.documentNotes) {
       blocks.push({ kind: "heading", level: 3, text: note.title });
@@ -210,6 +200,35 @@ export function layoutReport(model: ReportModel): ReportBlock[] {
         blocks.push(...itemBlocks(item, true));
       }
     }
+  }
+
+  if (model.aiSummary) {
+    const { provider, model: modelName, account, generatedAt, attestedAt, text, stale } = model.aiSummary;
+    blocks.push({ kind: "paragraph", muted: true, runs: [{ text: AI_LEGEND }] });
+    blocks.push({ kind: "heading", level: 2, text: "AI summary" });
+    if (stale) {
+      blocks.push({
+        kind: "paragraph",
+        muted: true,
+        runs: [
+          {
+            text:
+              "This summary may be out of date: highlights or notes changed after it was generated. " +
+              "Run Summarize with AI again to refresh it.",
+          },
+        ],
+      });
+    }
+    blocks.push(...markGenerated(noteToBlocks(text)));
+    blocks.push({
+      kind: "paragraph",
+      muted: true,
+      runs: [
+        {
+          text: `Generated with ${provider}${modelName ? ` (${modelName})` : ""}${account ? ` as ${account}` : ""} on ${generatedAt}${attestedAt ? `; eligibility attested on ${attestedAt}` : ""}.`,
+        },
+      ],
+    });
   }
 
   return blocks;

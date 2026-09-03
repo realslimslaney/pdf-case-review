@@ -34,6 +34,7 @@ export function reportInputFromSidecar(sidecar: Sidecar, context: ReportInputCon
       kind: highlight.kind,
       text: highlight.text,
       note: highlight.note,
+      createdAt: highlight.createdAt,
     };
     const pageLabel = labelFor(highlight.page, highlight.pageLabel);
     if (pageLabel !== undefined) {
@@ -56,7 +57,7 @@ export function reportInputFromSidecar(sidecar: Sidecar, context: ReportInputCon
   }
   if (sidecar.pageNotes && sidecar.pageNotes.length > 0) {
     input.pageNotes = sidecar.pageNotes.map((note) => {
-      const entry: ReportPageNoteInput = { page: note.page, note: note.note };
+      const entry: ReportPageNoteInput = { page: note.page, note: note.note, createdAt: note.createdAt };
       const pageLabel = labelFor(note.page);
       if (pageLabel !== undefined) {
         entry.pageLabel = pageLabel;
@@ -65,9 +66,10 @@ export function reportInputFromSidecar(sidecar: Sidecar, context: ReportInputCon
     });
   }
   if (sidecar.documentNotes && sidecar.documentNotes.length > 0) {
-    input.documentNotes = sortDocumentNotes(sidecar.documentNotes).map(({ title, note }) => ({
+    input.documentNotes = sortDocumentNotes(sidecar.documentNotes).map(({ title, note, createdAt }) => ({
       title,
       note,
+      createdAt,
     }));
   }
   if (context.includeAiSummary && sidecar.aiSummary) {

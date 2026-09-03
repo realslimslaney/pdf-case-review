@@ -39,7 +39,10 @@ export function reportSettings(uri: Uri): ReportSettings {
         ? defaultFormat
         : "ask",
     options: {
-      organization: organization === "category" || organization === "page" ? organization : "both",
+      organization:
+        organization === "category" || organization === "page" || organization === "both"
+          ? organization
+          : "none",
       quoteMaxChars:
         Number.isInteger(quoteMaxChars) && quoteMaxChars >= 0
           ? quoteMaxChars

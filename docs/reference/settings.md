@@ -27,7 +27,7 @@ All settings live under `pdfCaseReview.*`. Unless noted, they have `resource` sc
 | Setting | Default | Meaning |
 |---|---|---|
 | `pdfCaseReview.report.defaultFormat` | `ask` | Format for **Generate Report** (`Ctrl+Alt+R`): `ask` shows a picker; `markdown`, `docx` or `pdf` render immediately. |
-| `pdfCaseReview.report.organization` | `both` | `category` (sections per category), `page` (reading order), or `both` (categories plus a per-page appendix). |
+| `pdfCaseReview.report.organization` | `none` | Grouped sections added after the chronological notes: `none` (notes appear once, in the order they were taken), `category`, `page`, or `both` (category sections plus a reading-order appendix). Reports always open with the chronological notes and close with the AI summary. |
 | `pdfCaseReview.report.outputFolder` | `""` | Where reports are written. Empty writes beside the PDF; a relative path is resolved against the workspace folder. Ignored in untrusted workspaces. |
 | `pdfCaseReview.report.quoteMaxChars` | `300` | Longest quoted passage, truncated at a word boundary; `0` means unlimited. |
 | `pdfCaseReview.report.author` | `""` | Author line in the title block; empty omits it. |
