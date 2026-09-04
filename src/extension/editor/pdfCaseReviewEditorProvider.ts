@@ -210,8 +210,10 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
     return this.documents.get(uri.toString());
   }
 
-  /** Every page's text for the document-text AI scope; entries are null when unavailable. */
-  /** Bounded workers: a 300-page PDF must not start 300 getTextContent calls in the webview at once. */
+  /**
+   * Every page's text for the document-text AI scope; entries are null when unavailable. Bounded
+   * workers: a 300-page PDF must not start 300 getTextContent calls in the webview at once.
+   */
   async collectDocumentText(document: PdfDocument): Promise<DocumentTextPage[]> {
     const pageCount = document.info.pageCount;
     const pages: DocumentTextPage[] = new Array(pageCount);
