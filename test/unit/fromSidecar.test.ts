@@ -1,6 +1,7 @@
 import { unzipSync } from "fflate";
 import { PDFDocument } from "pdf-lib";
 import { describe, expect, it } from "vitest";
+import { PAGE_CONTEXT_PROMPT_VERSION, pageContextInputDigest } from "../../src/core/ai/pageContext";
 import { reportInputFromSidecar } from "../../src/core/report/fromSidecar";
 import { buildReportModel, DEFAULT_REPORT_OPTIONS } from "../../src/core/report/model";
 import { renderReport } from "../../src/core/report/render";
@@ -156,5 +157,55 @@ describe("highlight kind", () => {
     const input = reportInputFromSidecar(model, CONTEXT);
     expect(input.highlights[0]?.kind).toBe("free");
     expect(buildReportModel(input, DEFAULT_REPORT_OPTIONS).byPage[0]?.items[0]?.kind).toBe("free");
+  });
+});
+
+describe("aiPageContexts mapping", () => {
+  it("maps fresh contexts and flags stale or version-bumped ones", () => {
+    const sidecar = sampleSidecar();
+    sidecar.aiPageContexts = [
+      {
+        page: 2,
+        provider: "claude-cli",
+        generatedAt: "2026-09-02T10:00:00.000Z",
+        text: "Context for page 2.",
+        inputDigest: pageContextInputDigest(sidecar, 2),
+        promptVersion: PAGE_CONTEXT_PROMPT_VERSION,
+      },
+      {
+        page: 1,
+        provider: "claude-cli",
+        generatedAt: "2026-09-02T10:00:00.000Z",
+        text: "Context for page 1 from older content.",
+        inputDigest: "0000000000000000",
+        promptVersion: PAGE_CONTEXT_PROMPT_VERSION,
+      },
+      {
+        page: 3,
+        provider: "claude-cli",
+        generatedAt: "2026-09-02T10:00:00.000Z",
+        text: "Context for page 3, saved without a digest.",
+      },
+    ];
+    const input = reportInputFromSidecar(sidecar, { ...CONTEXT, pageLabels: ["i", "ii", "iii"] });
+    expect(
+      input.pageContexts?.map((entry) => [entry.page, entry.stale === true, entry.unverified === true]),
+    ).toEqual([
+      [2, false, false],
+      [1, true, false],
+      [3, false, true],
+    ]);
+    expect(input.pageContexts?.[0]?.pageLabel).toBe("ii");
+    const undigested = buildReportModel(input).byPage.find((section) => section.page === 3)?.context;
+    expect(undigested).toMatchObject({ stale: false, unverified: true });
+  });
+
+  it("drops AI content entirely when includeAiSummary is off", () => {
+    const sidecar = sampleSidecar();
+    sidecar.aiPageContexts = [
+      { page: 2, provider: "claude-cli", generatedAt: "2026-09-02T10:00:00.000Z", text: "x" },
+    ];
+    const input = reportInputFromSidecar(sidecar, { ...CONTEXT, includeAiSummary: false });
+    expect(input.pageContexts).toBeUndefined();
   });
 });

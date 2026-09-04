@@ -44,6 +44,9 @@ jobs:
         run: pnpm fixtures
       - name: Typecheck, lint, unit tests
         run: pnpm check
+      - name: Docs drift check
+        if: runner.os == 'Linux'
+        run: pnpm docs:check
       - name: Build
         run: pnpm build
       - name: Integration tests (Linux)

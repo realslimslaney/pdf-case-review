@@ -11,7 +11,10 @@ declare global {
   interface Window {
     __hostMessages: WebviewToHostMessage[];
     PDFViewerApplicationOptions: { get(name: string): unknown };
-    PDFViewerApplication: { pdfViewer: { currentPageNumber: number } };
+    PDFViewerApplication: {
+      pdfViewer: { currentPageNumber: number };
+      eventBus: { dispatch(name: string, data: Record<string, unknown>): void };
+    };
   }
 }
 
@@ -119,4 +122,31 @@ test("goTo scrolls to the page and reports the change", async ({ page }) => {
   await expect
     .poll(() => page.evaluate(() => window.PDFViewerApplication.pdfViewer.currentPageNumber))
     .toBe(3);
+});
+
+test("the injected category dropdown lists the palette and follows picker changes", async ({ page }) => {
+  await openViewer(page);
+  const select = page.locator("#pdfCaseReviewCategorySelect");
+  await expect(select).toBeVisible();
+  await expect(select.locator("option")).toHaveText([
+    "Fact",
+    "Financial",
+    "Strategic implication",
+    "Concern",
+    "Question",
+  ]);
+  await select.selectOption({ label: "Concern" });
+  await expect(page.locator("#pdfCaseReviewCategorySwatch")).toHaveCSS(
+    "background-color",
+    "rgb(255, 79, 95)",
+  );
+  // A PDF.js color-picker pick reaches the dropdown through switchannotationeditorparams.
+  await page.evaluate(() =>
+    window.PDFViewerApplication.eventBus.dispatch("switchannotationeditorparams", {
+      source: null,
+      type: 31,
+      value: "#FFCBE6",
+    }),
+  );
+  await expect(select).toHaveValue("#FFCBE6");
 });

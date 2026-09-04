@@ -138,7 +138,8 @@
         "attestedAt": { "type": "string", "format": "date-time" },
         "responsibilityAcknowledged": { "type": "boolean" },
         "eligibilityConfirmed": { "type": "boolean" },
-        "wordingVersion": { "type": "integer" }
+        "wordingVersion": { "type": "integer" },
+        "contextScope": { "type": "string", "enum": ["notes", "document-text"] }
       }
     },
     "aiSummary": {
@@ -150,7 +151,28 @@
         "model": { "type": "string" },
         "account": { "type": "string" },
         "generatedAt": { "type": "string", "format": "date-time" },
-        "text": { "type": "string" }
+        "text": { "type": "string" },
+        "inputDigest": { "type": "string" },
+        "promptVersion": { "type": "integer", "minimum": 1 },
+        "contextScope": { "type": "string", "enum": ["notes", "document-text"] }
+      }
+    },
+    "aiPageContexts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["page", "provider", "generatedAt", "text"],
+        "additionalProperties": false,
+        "properties": {
+          "page": { "type": "integer", "minimum": 1 },
+          "provider": { "type": "string" },
+          "model": { "type": "string" },
+          "account": { "type": "string" },
+          "generatedAt": { "type": "string", "format": "date-time" },
+          "text": { "type": "string" },
+          "inputDigest": { "type": "string" },
+          "promptVersion": { "type": "integer", "minimum": 1 }
+        }
       }
     }
   }

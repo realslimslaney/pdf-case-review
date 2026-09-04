@@ -4,10 +4,12 @@
 // The allow-list of keys is derived from the read code itself: every accessor claims its key and
 // `Reader.done()` rejects whatever was never claimed, so a new field is added in one place.
 
+import { AI_CONTEXT_SCOPES } from "../ai/contextScope";
 import { validateCategories } from "../categories";
 import { UUID_PATTERN } from "./ids";
 import {
   type AiConsent,
+  type AiPageContext,
   type AiSummary,
   type DocumentNote,
   type HighlightContext,
@@ -311,6 +313,7 @@ function readAiConsent(value: unknown, path: string): AiConsent {
   setIfDefined(consent, "authorizationLine", reader.optional("authorizationLine", string));
   setIfDefined(consent, "eligibilityConfirmed", reader.optional("eligibilityConfirmed", boolean));
   setIfDefined(consent, "wordingVersion", reader.optional("wordingVersion", integer()));
+  setIfDefined(consent, "contextScope", reader.optional("contextScope", oneOf(AI_CONTEXT_SCOPES)));
   reader.done();
   return consent;
 }
@@ -324,8 +327,27 @@ function readAiSummary(value: unknown, path: string): AiSummary {
   };
   setIfDefined(summary, "model", reader.optional("model", string));
   setIfDefined(summary, "account", reader.optional("account", string));
+  setIfDefined(summary, "inputDigest", reader.optional("inputDigest", string));
+  setIfDefined(summary, "promptVersion", reader.optional("promptVersion", integer(1)));
+  setIfDefined(summary, "contextScope", reader.optional("contextScope", oneOf(AI_CONTEXT_SCOPES)));
   reader.done();
   return summary;
+}
+
+function readAiPageContext(value: unknown, path: string): AiPageContext {
+  const reader = Reader.of(value, path);
+  const context: AiPageContext = {
+    page: reader.required("page", integer(1)),
+    provider: reader.required("provider", string),
+    generatedAt: reader.required("generatedAt", dateTime),
+    text: reader.required("text", string),
+  };
+  setIfDefined(context, "model", reader.optional("model", string));
+  setIfDefined(context, "account", reader.optional("account", string));
+  setIfDefined(context, "inputDigest", reader.optional("inputDigest", string));
+  setIfDefined(context, "promptVersion", reader.optional("promptVersion", integer(1)));
+  reader.done();
+  return context;
 }
 
 /** Validates already-migrated JSON (see `migrateSidecar`) and returns the typed sidecar. */
@@ -359,6 +381,7 @@ export function validateSidecar(raw: unknown): Sidecar {
   setIfDefined(sidecar, "documentNotes", reader.optional("documentNotes", arrayOf(readDocumentNote)));
   setIfDefined(sidecar, "aiConsent", reader.optional("aiConsent", readAiConsent));
   setIfDefined(sidecar, "aiSummary", reader.optional("aiSummary", readAiSummary));
+  setIfDefined(sidecar, "aiPageContexts", reader.optional("aiPageContexts", arrayOf(readAiPageContext)));
   reader.done();
   return sidecar;
 }

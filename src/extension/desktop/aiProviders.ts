@@ -8,6 +8,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { CancellationToken } from "vscode";
+import type { SummaryPrompt } from "../../core/ai/prompt";
+import { promptText } from "../../core/ai/promptReview";
 import { expandHome } from "./identity";
 
 export const PROVIDER_TIMEOUT_MS = 120_000;
@@ -77,11 +79,13 @@ export interface RunProviderOptions {
   timeoutMs?: number;
 }
 
+/** A string prompt (the reviewed tab's text) goes to stdin verbatim; an object is joined first. */
 export async function runProvider(
   provider: "claude-cli" | "codex-cli",
-  prompt: { system: string; user: string },
+  prompt: SummaryPrompt | string,
   options: RunProviderOptions = {},
 ): Promise<string> {
+  const stdinText = typeof prompt === "string" ? prompt : promptText(prompt);
   const timeoutMs = options.timeoutMs ?? PROVIDER_TIMEOUT_MS;
   const scratchDir = await mkdtemp(join(tmpdir(), "pdf-case-review-"));
   let lastMessageFile: string | undefined;
@@ -144,7 +148,7 @@ export async function runProvider(
         }
         resolve(Buffer.concat(out).toString("utf8"));
       });
-      child.stdin?.end(`${prompt.system}\n\n${prompt.user}`);
+      child.stdin?.end(stdinText);
     });
     if (lastMessageFile) {
       try {

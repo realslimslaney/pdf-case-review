@@ -1,7 +1,16 @@
 // The one place that reads `pdfCaseReview.*` settings, validating at the boundary.
 
-import { ConfigurationTarget, type LogOutputChannel, type Uri, window, workspace } from "vscode";
+import {
+  ConfigurationTarget,
+  type LogOutputChannel,
+  type Uri,
+  type WorkspaceConfiguration,
+  window,
+  workspace,
+} from "vscode";
 import type { RequiredAccountRule } from "../core/ai/consent";
+import type { AiContextScope } from "../core/ai/documentText";
+import { DEFAULT_PAGE_CONTEXT_MIN_HIGHLIGHTS } from "../core/ai/pageContext";
 import { DEFAULT_MAX_WORDS } from "../core/ai/prompt";
 import {
   CATEGORY_PRESETS,
@@ -39,7 +48,10 @@ export function reportSettings(uri: Uri): ReportSettings {
         ? defaultFormat
         : "ask",
     options: {
-      organization: organization === "category" || organization === "page" ? organization : "both",
+      organization:
+        organization === "category" || organization === "page" || organization === "both"
+          ? organization
+          : "none",
       quoteMaxChars:
         Number.isInteger(quoteMaxChars) && quoteMaxChars >= 0
           ? quoteMaxChars
@@ -70,9 +82,13 @@ export interface AiSettings {
   model: string;
   includeInReport: boolean;
   maxWords: number;
+  /** Open the assembled prompt in an editor tab for reading or editing before it is sent. */
+  reviewPrompt: boolean;
   requiredAccount: RequiredAccountRule[];
   accounts: AiAccount[];
   requireVerifiedAccountForProtected: boolean;
+  pageContextMinHighlights: number;
+  contextScope: AiContextScope;
 }
 
 function readRules(raw: unknown, warnings: string[]): RequiredAccountRule[] {
@@ -160,16 +176,26 @@ export function aiSettings(uri: Uri, output: LogOutputChannel): AiSettings {
   const configuration = workspace.getConfiguration("pdfCaseReview.ai", uri);
   const provider = configuration.get<string>("provider", "off");
   const maxWords = configuration.get<number>("maxWords", DEFAULT_MAX_WORDS);
+  const minHighlights = configuration.get<number>(
+    "pageContext.minHighlights",
+    DEFAULT_PAGE_CONTEXT_MIN_HIGHLIGHTS,
+  );
   const warnings: string[] = [];
   const settings: AiSettings = {
     provider: provider === "claude-cli" || provider === "codex-cli" ? provider : "off",
     model: typeof configuration.get("model") === "string" ? configuration.get<string>("model", "") : "",
     includeInReport: configuration.get<boolean>("includeInReport", true) !== false,
     maxWords: Number.isInteger(maxWords) && maxWords > 0 ? maxWords : DEFAULT_MAX_WORDS,
+    reviewPrompt: configuration.get<boolean>("reviewPrompt", true) !== false,
     requiredAccount: readRules(configuration.get<unknown>("requiredAccount"), warnings),
     accounts: readAccounts(configuration.get<unknown>("accounts"), warnings),
     requireVerifiedAccountForProtected:
       configuration.get<boolean>("requireVerifiedAccountForProtected", true) !== false,
+    pageContextMinHighlights:
+      Number.isInteger(minHighlights) && minHighlights >= 2
+        ? minHighlights
+        : DEFAULT_PAGE_CONTEXT_MIN_HIGHLIGHTS,
+    contextScope: configuration.get<string>("contextScope") === "notes" ? "notes" : "document-text",
   };
   if (warnings.length > 0) {
     const detail = warnings.join("; ");
@@ -179,17 +205,35 @@ export function aiSettings(uri: Uri, output: LogOutputChannel): AiSettings {
   return settings;
 }
 
+/** The narrowest scope where `key` is defined; Global when it is set nowhere. */
+export function definedTarget(configuration: WorkspaceConfiguration, key: string): ConfigurationTarget {
+  const inspected = configuration.inspect(key);
+  if (inspected?.workspaceFolderValue !== undefined) return ConfigurationTarget.WorkspaceFolder;
+  if (inspected?.workspaceValue !== undefined) return ConfigurationTarget.Workspace;
+  return ConfigurationTarget.Global;
+}
+
+/** The raw value stored at one target, or undefined when that target does not set the key. */
+export function valueAt<T>(
+  configuration: WorkspaceConfiguration,
+  key: string,
+  target: ConfigurationTarget,
+): T | undefined {
+  const inspected = configuration.inspect<T>(key);
+  switch (target) {
+    case ConfigurationTarget.WorkspaceFolder:
+      return inspected?.workspaceFolderValue;
+    case ConfigurationTarget.Workspace:
+      return inspected?.workspaceValue;
+    default:
+      return inspected?.globalValue;
+  }
+}
+
 /** Writes where the setting is defined (a workspace override would otherwise win over a user write). */
-export async function setAiProvider(provider: AiProviderSetting): Promise<void> {
-  const configuration = workspace.getConfiguration("pdfCaseReview.ai");
-  const inspected = configuration.inspect<string>("provider");
-  const target =
-    inspected?.workspaceFolderValue !== undefined
-      ? ConfigurationTarget.WorkspaceFolder
-      : inspected?.workspaceValue !== undefined
-        ? ConfigurationTarget.Workspace
-        : ConfigurationTarget.Global;
-  await configuration.update("provider", provider, target);
+export async function setAiProvider(provider: AiProviderSetting, resource?: Uri): Promise<void> {
+  const configuration = workspace.getConfiguration("pdfCaseReview.ai", resource);
+  await configuration.update("provider", provider, definedTarget(configuration, "provider"));
 }
 
 export function highlightsGroupBy(): GroupBy {
@@ -200,14 +244,7 @@ export function highlightsGroupBy(): GroupBy {
 /** Writes where the setting is defined (a workspace override would otherwise win over a user write). */
 export async function setHighlightsGroupBy(groupBy: GroupBy): Promise<void> {
   const configuration = workspace.getConfiguration("pdfCaseReview.highlights");
-  const inspected = configuration.inspect<string>("groupBy");
-  const target =
-    inspected?.workspaceFolderValue !== undefined
-      ? ConfigurationTarget.WorkspaceFolder
-      : inspected?.workspaceValue !== undefined
-        ? ConfigurationTarget.Workspace
-        : ConfigurationTarget.Global;
-  await configuration.update("groupBy", groupBy, target);
+  await configuration.update("groupBy", groupBy, definedTarget(configuration, "groupBy"));
 }
 
 export function sidecarLocation(uri: Uri): SidecarLocation {

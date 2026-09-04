@@ -28,7 +28,7 @@ Commercially published case PDFs are usually encrypted with an owner password an
 
 ## Privacy & responsibility
 
-The extension makes no network requests and collects no telemetry. Nothing leaves your machine unless you enable an AI provider or copy the summary prompt yourself, and even then only your highlighted excerpts and notes are sent, never the PDF.
+The extension makes no network requests and collects no telemetry. Nothing leaves your machine unless you enable an AI provider or copy the summary prompt yourself, and even then only your highlighted excerpts, your notes and the document's extracted text are sent, after a consent dialog that states exactly what goes out. Set `pdfCaseReview.ai.contextScope` to `notes` to keep the PDF's text on your machine; the PDF file itself is never sent.
 
 Before any excerpt reaches a model, the extension asks directly: may this document be fed into AI context on this account? The dialog names the signed-in account (read from the CLI's own saved login), shows the document's authorization line when it has one, and records your answer with your notes. You can require a specific account for protected documents (`pdfCaseReview.ai.requiredAccount`); the wrong login is refused with no override. **You are responsible for using this tool on appropriate content; the developers of this extension are not liable for misuse.**
 
@@ -51,4 +51,4 @@ The viewer integration is derived from [mathematic-inc/vscode-pdf](https://githu
 
 ## License
 
-Apache-2.0 — see `LICENSE`.
+Apache-2.0, see `LICENSE`.

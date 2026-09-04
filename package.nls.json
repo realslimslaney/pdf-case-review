@@ -16,6 +16,7 @@
   "command.groupByPage": "Group by Page",
   "command.highlightWithCategory": "Highlight Selection with Category...",
   "command.applyCategoryPreset": "Apply Category Preset...",
+  "command.configure": "Configure...",
   "command.syncCategoriesFromSettings": "Sync Categories from Settings",
   "command.addPageNote": "Add Page Note",
   "command.addDocumentNote": "Add Document Note",
@@ -27,6 +28,8 @@
   "command.ai.copySummaryPrompt": "Copy Summary Prompt",
   "command.ai.pasteSummary": "Paste AI Summary",
   "command.ai.reviewConsent": "Review AI Consent",
+  "command.aiAddPageContext": "Add AI Page Context...",
   "command.summarizeWithAi": "Summarize with AI",
-  "command.ai.chooseProvider": "Choose AI Provider..."
+  "command.ai.chooseProvider": "Choose AI Provider...",
+  "command.ai.showSummary": "Show AI Summary"
 }

@@ -1,5 +1,8 @@
 # Publish a release
 
+For the repository maintainer. If you only want to use the extension, install it from the
+Marketplace or the `.vsix` as described in [Set up your computer](../tutorials/setup.md).
+
 One-time setup, then every release is a merged release-please PR.
 
 ## One-time
@@ -37,7 +40,9 @@ gh api -X POST repos/realslimslaney/pdf-case-review/rulesets --input - <<'JSON'
 JSON
 ```
 
-(`actor_id: 5` is the repository **Admin** role, so you can still merge your own work.)
+`actor_id: 5` is the repository **Admin** role. Without that entry a sole maintainer who is also the
+only code owner could never merge, because the rule requires a code-owner review from someone else.
+The ruleset itself can only be created or changed by an admin.
 
 ## Every release
 

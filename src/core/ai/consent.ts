@@ -3,6 +3,7 @@
 // prompt builder demands. Nothing here talks to a CLI, a dialog or a file.
 
 import type { AiConsent } from "../sidecar/types";
+import { scopeRank } from "./contextScope";
 
 /** Bump when any consent wording changes; stored acknowledgments re-prompt. */
 export const CONSENT_WORDING_VERSION = 1;
@@ -176,6 +177,8 @@ export interface ReconsentFacts {
   email: string;
   documentSha256: string;
   protected: boolean;
+  /** The AI context scope about to be used; a change of scope always re-asks. */
+  contextScope?: string;
 }
 
 /** Protected documents re-ask every run; otherwise any change of login, provider, file or wording. */
@@ -187,6 +190,9 @@ export function needsReconsent(stored: AiConsent | undefined, current: Reconsent
     stored.provider !== current.provider ||
     stored.email.toLowerCase() !== current.email.toLowerCase() ||
     stored.documentSha256 !== current.documentSha256 ||
+    // A wider consent covers narrower runs: document-text consent also authorizes a notes-only
+    // run (page context, say) without re-asking; only widening the scope re-asks.
+    scopeRank(current.contextScope) > scopeRank(stored.contextScope) ||
     stored.wordingVersion !== CONSENT_WORDING_VERSION ||
     stored.eligibilityConfirmed !== true
   );

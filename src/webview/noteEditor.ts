@@ -1,10 +1,11 @@
 // The note editor view: category dropdown, quote preview and a Markdown textarea autosaving on
 // debounce and blur. State lives in the host's sidecar model; this script mirrors one target.
 
-import type {
-  HostToNoteEditorMessage,
-  NoteEditorLoad,
-  NoteEditorToHostMessage,
+import {
+  type HostToNoteEditorMessage,
+  type NoteEditorLoad,
+  type NoteEditorToHostMessage,
+  noteScopeLine,
 } from "../shared/noteEditorProtocol";
 
 const vscode = acquireVsCodeApi();
@@ -26,6 +27,7 @@ function element<T extends HTMLElement>(id: string): T {
 const empty = element<HTMLDivElement>("empty");
 const editor = element<HTMLFormElement>("editor");
 const title = element<HTMLHeadingElement>("title");
+const scope = element<HTMLDivElement>("scope");
 const citation = element<HTMLSpanElement>("citation");
 const quote = element<HTMLQuoteElement>("quote");
 const category = element<HTMLSelectElement>("category");
@@ -72,6 +74,7 @@ function show(message: NoteEditorLoad): void {
   empty.hidden = true;
   editor.hidden = false;
   title.textContent = message.title;
+  scope.textContent = noteScopeLine(message.target);
   citation.textContent = message.citation;
   citation.hidden = message.citation === "";
   quote.textContent = message.quote ?? "";

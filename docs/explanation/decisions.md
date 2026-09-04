@@ -8,7 +8,7 @@ Short records of the decisions that shape the project, newest last. Each spike f
 
 **Why.** `pdfjs-dist` ships the rendering components but not the viewer application (toolbar, sidebar, annotation-editor toolbar, highlight editor, color picker, localization). Rebuilding that is weeks of work; upstream already solved "full viewer inside a VS Code webview under a strict CSP" in ~7 small files.
 
-**Consequences.** Derived files keep their Apache-2.0 header and a "Modified by" line (`pdfjs.lock.json` lists them). Upstream's two patches are replaced by runtime behaviour: the PDF.js CSP `<meta>` is stripped when the HTML is rewritten, and intra-folder links will be routed to VS Code by hooking the link service after initialization. New patches need a header explaining why a runtime hook was impossible. The `upstream-watch` workflow tracks drift.
+**Consequences.** Derived files keep their Apache-2.0 header and a "Modified by" line (`pdfjs.lock.json` lists them). Upstream's two patches are replaced by runtime behavior: the PDF.js CSP `<meta>` is stripped when the HTML is rewritten, and intra-folder links will be routed to VS Code by hooking the link service after initialization. New patches need a header explaining why a runtime hook was impossible. The `upstream-watch` workflow tracks drift.
 
 ## ADR-0002: Sidecar JSON is canonical; PDF is synced on save; protected PDFs are never modified
 
@@ -46,6 +46,40 @@ Short records of the decisions that shape the project, newest last. Each spike f
 
 **Why.** Licensed course material is the primary content; the risk is excerpts leaving under the wrong account or without the user realizing. A single tested chokepoint plus a type-level requirement is cheap insurance, and recording the account, the document hash and the question wording makes the decision auditable in the sidecar the user already owns.
 
+**Amendment (2026-09-02): the document-text context scope.** The "only highlights and notes, never
+the PDF" rule is now the default rather than the only behavior. `pdfCaseReview.ai.contextScope`
+(default `notes`) adds a `document-text` scope (issue #22, v1) under which **Summarize with AI** and
+**Copy Summary Prompt** append the document's text to the prompt: extracted per page through the
+viewer, chunked with page-citation markers under a 400k-character budget with explicit truncation
+reporting (`src/core/ai/documentText.ts`). This supersedes the "no `ai.sendFullText` setting" line
+above: a scope enum whose wider position is actually implemented does not mislead the way a dead
+switch would. What has not changed is the shape of the gate. Every constraint holds: the one consent
+chokepoint (`ensureAttestation` in `src/extension/ai/consentGate.ts`) is still the only path, and the
+scope rides through it rather than around it; the consent record carries `contextScope` and
+`needsReconsent` (`src/core/ai/consent.ts`) treats any scope change, in either direction, as a fresh
+question, with pre-scope consents read as notes-only; only extracted text is ever sent, never the PDF
+file, so encryption and permissions are never touched; the dialog is honest about coverage (pages with
+extractable text, approximate words, image-only pages and scans named as excluded) instead of implying
+the whole document goes out; and the feature is always named "Document text", never "Full PDF",
+because extraction genuinely misses scans and image-only exhibits (owner decision). The staleness
+digest (`src/core/ai/digest.ts`) folds in the scope and the source hash for document-text runs while
+notes-only digests stay byte-identical, and the report provenance line adds "using document text".
+**Add AI Page Context** still sends notes only. The notes-plus-structure middle scope from issue #22
+remains deferred with the sections work.
+
+**Amendment (2026-09-03): `document-text` is the default scope.** `pdfCaseReview.ai.contextScope` now
+defaults to `document-text`; `notes` remains the opt-out that keeps the PDF's text on the machine.
+Owner decision: a summary must work on a freshly opened case before any highlights exist, and the
+consent dialog already states exactly what is sent (with coverage numbers) and requires an explicit
+yes, so the gate rather than the default is what protects the user. The gate itself is unchanged: the
+PDF file is still never sent, only extracted page text, and image-only pages and scans are still
+excluded. Alongside the default change, `hasSummaryContent` (`src/core/ai/prompt.ts`) makes
+**Summarize with AI** and **Copy Summary Prompt** refuse to run when there is nothing to send (no
+highlights and no notes under `notes`; additionally no extractable text under `document-text`), and
+`SUMMARY_PROMPT_VERSION` moved to 2, so summaries cached by earlier releases read as possibly out of
+date once. One correction to the amendment above: `needsReconsent` now treats a wider consent as
+covering narrower runs, so only widening the scope re-asks; switching back to `notes` does not.
+
 ## ADR-0007: Large-PDF memory limits are settings; `retainContextWhenHidden` stays on by default
 
 **Decision.** Three viewer settings govern memory on large documents: `pdfCaseReview.viewer.maxCanvasPixels` and `viewer.maxImageSize` (both `0` = keep the vendored PDF.js default, resource-scoped, applied when the document is reopened) and `viewer.retainContextWhenHidden` (default `true`, window-scoped). The retain flag is read once at provider registration because VS Code fixes `webviewOptions` there, so changing it needs a window reload and the setting description says so. The webview reads all annotations of a document with bounded concurrency (8 pages in flight) instead of strictly sequentially.
@@ -66,7 +100,23 @@ Short records of the decisions that shape the project, newest last. Each spike f
 
 **Why this shape.** Extracting the HTML assembly into a shared pure function means the harness cannot drift from what the provider ships, and gives the string-replacement contract (which `prepare-pdfjs` guards from the vendoring side) a consumer-side test. The stub is honest: the webview bootstrap only ever calls `postMessage`.
 
-**Consequences.** `pnpm test:e2e` needs `prepare-pdfjs`, `fixtures` and `build` first. The harness omits the CSP meta; CSP behaviour stays covered by the integration suite inside real webviews. Playwright is a devDependency only and ships nowhere.
+**Consequences.** `pnpm test:e2e` needs `prepare-pdfjs`, `fixtures` and `build` first. The harness omits the CSP meta; CSP behavior stays covered by the integration suite inside real webviews. Playwright is a devDependency only and ships nowhere.
+
+## ADR-0010: AI page context: pure candidate selection, per-page staleness, replace-by-page
+
+**Decision.** **Add AI Page Context** (issue #29) writes a few AI sentences above a page's highlights in the report when the page has a dense but lightly-annotated cluster. The pure logic lives in `src/core/ai/pageContext.ts`: a page qualifies at `ai.pageContext.minHighlights` or more highlights with fewer than half carrying a note (`pagesNeedingContext`), the prompt builder requires the same branded `Attestation` as every other AI path (ADR-0006), and `pageContextInputDigest` hashes exactly what the prompt was built from, per page. Results are cached in the sidecar as `aiPageContexts`, sorted by `page`, one entry per page; regenerating a page replaces its entry. One consent dialog covers a whole batch of picked pages.
+
+**Why.** The reader who highlights heavily but annotates lightly gets a report that is a wall of quotes; a couple of orienting sentences per busy page makes it skimmable without pretending to be the reader's own analysis. Reusing the ADR-0006 chokepoint means there is no second consent path to audit, and a per-page digest means editing page 4 never marks page 3's context stale.
+
+**Consequences.** Reports interleave page contexts into the chronological stream and into per-page sections (`pageContextBlocks` in `src/core/report/layout.ts`), always above the page's own entries, in the same grey italics with per-block provenance. Because AI content can now appear before the summary section, the AI legend moved to the document head, emitted once when the report contains any AI content. The staleness fields (`inputDigest`, `promptVersion`) mirror `aiSummary`: a stale context is flagged in the report, never withheld.
+
+## ADR-0011: The prompt is reviewed in an editor tab before it is sent; run files live in global storage
+
+**Decision.** With `pdfCaseReview.ai.reviewPrompt` on (the default), **Summarize with AI** writes the assembled prompt to `<globalStorage>/ai/summary-<timestamp>.prompt.md`, opens it as an ordinary text document and waits on a notification ("review the prompt (N words, about M tokens), edit it if you like, then send") with a Send button and Cancel. The provider receives the tab's text at the moment Send is pressed (`TextDocument.getText()`, unsaved edits included), never the original prompt object; the reply is written beside it as `summary-<timestamp>.output.md` and opened in the next column. **Show AI Summary** reuses the same folder for a `summary-cached-<timestamp>.output.md` view of the sidecar's `aiSummary` with a provenance header. The folder is pruned to the newest 20 files by the timestamp in the name. Pure helpers live in `src/core/ai/promptReview.ts` (`promptText`, `promptStats`, `runFileName`, `filesToPrune`, `cachedSummaryDocument`); the host side is `src/extension/ai/summarize.ts`. The token figure is a four-characters-per-token estimate, shown to give a sense of scale, not a bill. Alongside: `ai.maxWords` defaults to 500 (was 350) and is editable from the Configure hub (**Summary Length...**, `src/extension/commands/configure.ts`, written at the scope where the value is defined); `pdfCaseReview.report.quoteMaxChars` defaults to 0 so report quotes are whole unless the user asks for truncation; and `SUMMARY_PROMPT_VERSION` moved to 3 because the template now asks the model to avoid em-dashes.
+
+**Why.** Owner decision: users should see where their tokens go and be able to adjust the prompt before it is spent. The consent dialog's coverage line is a count, not the text. An editor tab is the honest surface: it shows the exact bytes, it is editable with every VS Code affordance, and a file on disk survives a crash mid-run. Global storage rather than a folder beside the PDF keeps prompts (which carry the document text under the default scope) out of the user's directories and out of git. The staleness digest is still computed from the review model, not from the edited prompt, so editing the prompt never by itself marks the summary fresh or stale.
+
+**Consequences.** The gate (ADR-0006) still runs before the tab opens, so a refused document never reaches a file. **Copy Summary Prompt** is unchanged: the clipboard is already its review surface. An edited prompt is sent verbatim, so a user can remove the word budget or the attestation line; that is their call, and the sidecar records provider, account and dates as before. Pruning by count means a prompt worth keeping past 20 runs should be copied elsewhere. Run files are a convenience: a failure to write them is logged and the summary is still cached.
 
 ## Spike log
 
@@ -82,4 +132,4 @@ Results are recorded here as they land. Pass/fail criteria are in the maintainer
 | 4b | Encrypted (publisher-style) PDF | **pass** | Fixture `test/fixtures/static/encrypted-case.pdf` (AES-256, R6, owner password, no-modify). Opens with the empty user password, accepts highlights; pdf-lib refuses it (`ProtectedPdfError`; note pdf-lib's ES5 build breaks `instanceof EncryptedPDFError`, match the message); **PDF.js `saveDocument()` produces a valid incremental update that stays encrypted**. So protected files have a viable dual-write path through PDF.js's writer (category color + note only, no `/Subj`); scheduled for 1.1 per ADR-0002, sidecar-only in 1.0. |
 | 4c | Drawing sidecar-only highlights in the viewer (protected PDF, embedding off, unsaved) | **pass** (M1 phase D, `test/integration/reload.test.ts`) | Strategy 1 works: in NONE mode, once a page's `AnnotationEditorLayer` exists (`uiManager.getLayer(pageIndex)` after `pagerendered`), `layer.deserialize({ annotationType: 9, color: [r,g,b], opacity, rect, rotation, quadPoints })` followed by `layer.add(editor)` draws the highlight and makes it an ordinary editor; the adapter tags it with the sidecar id so the host binds it without a new uuid. The editor's `onceAdded` is neutralized on the instance first: injected highlights must not become undo commands (a page injected after an edit would otherwise sit on top of the stack, and Ctrl+Z removed it instead of undoing the edit, which is what the macOS CI runs caught) and must not take focus; the override also holds when PDF.js re-adds every editor of a recycled page. Pending injections run on `annotationeditorlayerrendered`, since `pagerendered` fires before the page's editor layer exists. The same path works on the encrypted fixture. |
 | 5 | Report rendering (docx + pdfmake) in the host bundle | **pass** (2026-08-30, `test/integration/spike-report.test.ts`) | `src/core/report/`: `buildReportModel` → `layoutReport` (block IR; notes parsed with `marked`) → `renderMarkdown` / `renderDocx` (docx 9, `Packer.toBlob` so it also works in a browser) / `renderPdf` (pdfmake 0.3 browser build + Roboto VFS via `addVirtualFileSystem`). tsup `splitting: true` works for the CJS host bundle: activation loads a 20 KB `extension.js`; docx (0.7 MB) and pdfmake+fonts (3.7 MB unminified) are lazy chunks. All three formats render in the host in ~1.6 s total (first call, chunks cold); VSIX 4.7 MB. Sample outputs: `pdfCaseReview.debug.renderSampleReport` writes `sample-report.{md,docx,pdf}` from the synthetic `SAMPLE_REPORT_INPUT`. |
-| 6 | Reading the logged-in account from Claude Code / Codex | **pass on Windows** (2026-08-30); macOS/Linux to confirm | **Claude Code:** `claude auth status` prints JSON with `loggedIn`, `authMethod`, `email`, `orgId`, `orgName`, `subscriptionType`; so identity needs no file parsing (the same fields also sit in `~/.claude.json` → `oauthAccount.emailAddress` / `organizationName` as a fallback; credentials themselves are elsewhere). **Codex:** `codex login status` only says "Logged in using ChatGPT"; the email is the `email` claim of `tokens.id_token` in `$CODEX_HOME/auth.json` (default `~/.codex`), with `chatgpt_plan_type` and organization titles under the `https://api.openai.com/auth` claim; an `OPENAI_API_KEY` login has no email → unverifiable. Pure parsers with tests: `src/core/ai/identity.ts` (`parseClaudeAuthStatus`, `parseCodexAuthJson`, JWT payload decoded without verification — display only). The host side (spawning the CLIs, reading the file) is desktop-only code for M2. |
+| 6 | Reading the logged-in account from Claude Code / Codex | **pass on Windows** (2026-08-30); macOS/Linux to confirm | **Claude Code:** `claude auth status` prints JSON with `loggedIn`, `authMethod`, `email`, `orgId`, `orgName`, `subscriptionType`; so identity needs no file parsing (the same fields also sit in `~/.claude.json` → `oauthAccount.emailAddress` / `organizationName` as a fallback; credentials themselves are elsewhere). **Codex:** `codex login status` only says "Logged in using ChatGPT"; the email is the `email` claim of `tokens.id_token` in `$CODEX_HOME/auth.json` (default `~/.codex`), with `chatgpt_plan_type` and organization titles under the `https://api.openai.com/auth` claim; an `OPENAI_API_KEY` login has no email → unverifiable. Pure parsers with tests: `src/core/ai/identity.ts` (`parseClaudeAuthStatus`, `parseCodexAuthJson`, JWT payload decoded without verification, display only). The host side (spawning the CLIs, reading the file) is desktop-only code for M2. |

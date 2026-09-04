@@ -3,6 +3,7 @@
 
 import { commands, type Disposable, type TreeView, window } from "vscode";
 
+import { sortDocumentNotes } from "../../core/sidecar/serialize";
 import type { DocumentNoteNode, PageNoteNode } from "../../core/tree";
 import { isNoteTarget, type NoteTarget } from "../../shared/noteEditorProtocol";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
@@ -138,7 +139,7 @@ function toNoteTarget(node: TreeNode): NoteTarget | undefined {
   }
 }
 
-function editTarget(context: CommandContext, document: PdfDocument, target: unknown): NoteTarget | undefined {
+function editTarget(context: CommandContext, target: unknown): NoteTarget | undefined {
   if (typeof target === "string") {
     return { kind: "highlight", id: target };
   }
@@ -157,8 +158,49 @@ function editTarget(context: CommandContext, document: PdfDocument, target: unkn
       return fromSelection;
     }
   }
+  return undefined;
+}
+
+/**
+ * With nothing selected, the destination is a choice, not a surprise: a note silently landing on
+ * the current page confused more than it helped.
+ */
+async function pickFallbackTarget(
+  context: CommandContext,
+  document: PdfDocument,
+): Promise<NoteTarget | "createDocumentNote" | undefined> {
+  interface DestinationItem {
+    label: string;
+    description: string;
+    action: NoteTarget | "createDocumentNote";
+  }
+  const items: DestinationItem[] = [];
   const page = context.provider.getViewerState(document.uri)?.currentPage;
-  return page !== undefined && page >= 1 ? { kind: "page", page } : undefined;
+  if (page !== undefined && page >= 1) {
+    items.push({
+      label: "Page note",
+      description: `For page ${page}, the page in view.`,
+      action: { kind: "page", page },
+    });
+  }
+  const newest = sortDocumentNotes(document.model.documentNotes ?? []).at(-1);
+  items.push(
+    newest
+      ? {
+          label: "Document note",
+          description: `Open "${newest.title}".`,
+          action: { kind: "document", id: newest.id },
+        }
+      : {
+          label: "Document note",
+          description: "Create a note for the whole document.",
+          action: "createDocumentNote",
+        },
+  );
+  const picked = await window.showQuickPick(items, {
+    placeHolder: "No highlight or note is selected. Where should this note go?",
+  });
+  return picked?.action;
 }
 
 export async function editNote(context: CommandContext, target?: unknown): Promise<void> {
@@ -166,10 +208,16 @@ export async function editNote(context: CommandContext, target?: unknown): Promi
   if (!document) {
     return;
   }
-  const resolved = editTarget(context, document, target);
+  let resolved = editTarget(context, target);
   if (!resolved) {
-    void window.showInformationMessage("PDF Case Review: select a highlight or note first.");
-    return;
+    const choice = await pickFallbackTarget(context, document);
+    if (choice === undefined) {
+      return;
+    }
+    if (choice === "createDocumentNote") {
+      return addDocumentNote(context);
+    }
+    resolved = choice;
   }
   await commands.executeCommand("pdfCaseReview.noteEditor.focus");
   context.noteEditor.open(resolved);

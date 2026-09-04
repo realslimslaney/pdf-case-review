@@ -1,6 +1,7 @@
 // The sidecar file model (`<file>.pdf.review.json`), mirroring schemas/review.schema.json.
 // Pure module: no `vscode`, no DOM, no Node.
 
+import type { AiContextScope } from "../ai/contextScope";
 import { type Category, normalizeCategories } from "../categories";
 
 export const SIDECAR_VERSION = 1;
@@ -103,6 +104,8 @@ export interface AiConsent {
   /** The user's explicit yes to "may this document be fed into AI context on this account?". */
   eligibilityConfirmed?: boolean;
   wordingVersion?: number;
+  /** The AI context scope the consent covered (`notes` when absent). */
+  contextScope?: AiContextScope;
 }
 
 export interface AiSummary {
@@ -111,6 +114,25 @@ export interface AiSummary {
   account?: string;
   generatedAt: string;
   text: string;
+  /** `summaryInputDigest` of the content the summary was generated from; absent on old sidecars. */
+  inputDigest?: string;
+  /** `SUMMARY_PROMPT_VERSION` at generation time. */
+  promptVersion?: number;
+  /** The AI context scope the summary was generated under (`notes` when absent). */
+  contextScope?: AiContextScope;
+}
+
+/** AI-written context above one page's highlight cluster (issue #29); same provenance as AiSummary. */
+export interface AiPageContext {
+  page: number;
+  provider: string;
+  model?: string;
+  account?: string;
+  generatedAt: string;
+  text: string;
+  /** `pageContextInputDigest` of that page's content when generated; absent means possibly stale. */
+  inputDigest?: string;
+  promptVersion?: number;
 }
 
 export interface Sidecar {
@@ -124,6 +146,7 @@ export interface Sidecar {
   documentNotes?: DocumentNote[];
   aiConsent?: AiConsent;
   aiSummary?: AiSummary;
+  aiPageContexts?: AiPageContext[];
 }
 
 /** Notes with content: non-empty highlight and page notes, plus every document note. */

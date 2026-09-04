@@ -8,7 +8,7 @@
 | Keys | Command |
 |---|---|
 | `Ctrl+Alt+1` … `Ctrl+Alt+9` | Highlight the current text selection with the Nth category; with no selection, recolor the highlight selected in the tree (or the last created one). |
-| `Ctrl+Alt+N` | Edit the note of the selected highlight (or the current page's note) in the Note view. |
+| `Ctrl+Alt+N` | Edit the note of the selected highlight in the Note view; with nothing selected, asks where the note should go (the page in view, or a document note). |
 | `Ctrl+Alt+D` | Add a document note. |
 | `Ctrl+S` | Save through VS Code (sidecar first, then the PDF when allowed). PDF.js's own save is disabled. |
 | `Ctrl+Z` / `Ctrl+Y` | Undo and redo highlight edits through PDF.js. |

@@ -200,4 +200,23 @@ suite("M2 phase 2: note editor view", () => {
     assert.equal((await editorState()).target, null);
     await vscode.commands.executeCommand("pdfCaseReview.debug.autoConfirmDelete", null);
   });
+
+  test("editNote without a target asks where the note goes instead of assuming the page", async () => {
+    const before = (await documentState(pdf))?.model.pageNotes?.length ?? 0;
+    let settled = false;
+    const pending = vscode.commands.executeCommand("pdfCaseReview.editNote").then(() => {
+      settled = true;
+    });
+    // The command is awaiting the destination QuickPick; dismiss it until the command settles.
+    await waitFor("the dismissed destination picker to settle the command", async () => {
+      if (settled) {
+        return true;
+      }
+      await vscode.commands.executeCommand("workbench.action.closeQuickOpen");
+      return undefined;
+    });
+    await pending;
+    const after = (await documentState(pdf))?.model.pageNotes?.length ?? 0;
+    assert.equal(after, before, "a dismissed picker creates nothing");
+  });
 });

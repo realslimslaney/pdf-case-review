@@ -33,6 +33,6 @@ describe("buildSummaryPrompt", () => {
 
   it("falls back to the default word budget for nonsense values", () => {
     const prompt = buildSummaryPrompt("x", { maxWords: -3 }, createAttestation(RECORD));
-    expect(prompt.user).toContain("at most 250 words");
+    expect(prompt.user).toContain("at most 500 words");
   });
 });

@@ -176,7 +176,14 @@
       {
         "command": "pdfCaseReview.addDocumentNote",
         "title": "%command.addDocumentNote%",
-        "category": "%commandCategory%"
+        "category": "%commandCategory%",
+        "icon": "$(note)"
+      },
+      {
+        "command": "pdfCaseReview.configure",
+        "title": "%command.configure%",
+        "category": "%commandCategory%",
+        "icon": "$(gear)"
       },
       {
         "command": "pdfCaseReview.deleteNote",
@@ -229,8 +236,18 @@
         "icon": "$(sparkle)"
       },
       {
+        "command": "pdfCaseReview.ai.addPageContext",
+        "title": "%command.aiAddPageContext%",
+        "category": "%commandCategory%"
+      },
+      {
         "command": "pdfCaseReview.ai.chooseProvider",
         "title": "%command.ai.chooseProvider%",
+        "category": "%commandCategory%"
+      },
+      {
+        "command": "pdfCaseReview.ai.showSummary",
+        "title": "%command.ai.showSummary%",
         "category": "%commandCategory%"
       }
     ],
@@ -315,6 +332,36 @@
         {
           "command": "pdfCaseReview.summarizeWithAi",
           "when": "pdfCaseReview.hasActiveDocument && isWorkspaceTrusted"
+        },
+        {
+          "command": "pdfCaseReview.ai.addPageContext",
+          "when": "pdfCaseReview.hasActiveDocument && isWorkspaceTrusted"
+        },
+        {
+          "command": "pdfCaseReview.ai.showSummary",
+          "when": "pdfCaseReview.hasActiveDocument && isWorkspaceTrusted"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "pdfCaseReview.generateReport",
+          "when": "activeCustomEditorId == pdfCaseReview.pdf",
+          "group": "navigation@1"
+        },
+        {
+          "command": "pdfCaseReview.summarizeWithAi",
+          "when": "activeCustomEditorId == pdfCaseReview.pdf && isWorkspaceTrusted",
+          "group": "navigation@2"
+        },
+        {
+          "command": "pdfCaseReview.addDocumentNote",
+          "when": "activeCustomEditorId == pdfCaseReview.pdf",
+          "group": "navigation@3"
+        },
+        {
+          "command": "pdfCaseReview.configure",
+          "when": "activeCustomEditorId == pdfCaseReview.pdf",
+          "group": "navigation@4"
         }
       ],
       "view/title": [
@@ -632,18 +679,20 @@
         "pdfCaseReview.report.organization": {
           "type": "string",
           "scope": "resource",
-          "default": "both",
+          "default": "none",
           "enum": [
+            "none",
             "category",
             "page",
             "both"
           ],
           "enumDescriptions": [
-            "Sections per category",
-            "Sections per page, in reading order",
-            "Sections per category, plus a per-page appendix"
+            "No grouped sections: notes appear once, in the order they were taken",
+            "Grouped sections per category",
+            "Grouped sections per page, in reading order",
+            "Grouped sections per category, plus a per-page appendix"
           ],
-          "description": "How the report body is organized."
+          "description": "Grouped sections added after the chronological notes. Reports always open with the notes in the order they were taken and close with the AI summary."
         },
         "pdfCaseReview.report.outputFolder": {
           "type": "string",
@@ -654,7 +703,7 @@
         "pdfCaseReview.report.quoteMaxChars": {
           "type": "number",
           "scope": "resource",
-          "default": 300,
+          "default": 0,
           "minimum": 0,
           "description": "Longest quoted passage in the report, truncated at a word boundary. 0 means unlimited."
         },
@@ -696,7 +745,7 @@
             "Claude Code CLI (spawns `claude`; desktop only)",
             "Codex CLI (spawns `codex`; desktop only)"
           ],
-          "markdownDescription": "AI provider for the optional executive summary. Off by default: nothing leaves your machine unless you enable a provider, and only your highlights and notes are ever sent, never the PDF. You are responsible for using AI on appropriate content; the developers of this extension are not liable for misuse."
+          "markdownDescription": "AI provider for the optional executive summary. Off by default: nothing leaves your machine unless you enable a provider. What is sent is your highlights and notes plus, under the default document-text scope, the text extracted from the PDF's pages; the PDF file itself is never sent (see `pdfCaseReview.ai.contextScope`). You are responsible for using AI on appropriate content; the developers of this extension are not liable for misuse."
         },
         "pdfCaseReview.ai.model": {
           "type": "string",
@@ -710,12 +759,39 @@
           "default": true,
           "description": "Include the cached AI summary as a labeled section of generated reports."
         },
+        "pdfCaseReview.ai.contextScope": {
+          "type": "string",
+          "scope": "resource",
+          "default": "document-text",
+          "enum": [
+            "notes",
+            "document-text"
+          ],
+          "enumDescriptions": [
+            "Highlights and notes only; the PDF's own text is never sent",
+            "Also send the document text, extracted per page with citations; image-only pages and scans are not included, and the PDF file itself is never sent"
+          ],
+          "description": "What AI features may send. The default includes the document text so a summary works before any notes exist; choose notes to keep the PDF text on this machine. Widening the scope re-asks the consent question, and the dialog states exactly what will be sent."
+        },
+        "pdfCaseReview.ai.pageContext.minHighlights": {
+          "type": "integer",
+          "scope": "resource",
+          "default": 4,
+          "minimum": 2,
+          "description": "Add AI Page Context offers pages with at least this many highlights where fewer than half carry notes."
+        },
         "pdfCaseReview.ai.maxWords": {
           "type": "number",
           "scope": "resource",
-          "default": 250,
+          "default": 500,
           "minimum": 1,
           "description": "Word budget for the AI executive summary."
+        },
+        "pdfCaseReview.ai.reviewPrompt": {
+          "type": "boolean",
+          "scope": "resource",
+          "default": true,
+          "description": "Open the assembled prompt in an editor tab before it is sent, so you can read or edit it; the provider receives exactly what the tab contains."
         },
         "pdfCaseReview.ai.requiredAccount": {
           "type": "array",
@@ -862,6 +938,7 @@
     "package": "pnpm run prepare-pdfjs && pnpm run build -- --minify && vsce package --no-dependencies",
     "vscode:prepublish": "pnpm run build -- --minify",
     "test:e2e": "playwright test -c test/e2e",
+    "docs:check": "node scripts/check-docs.mjs",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs"

@@ -3,8 +3,10 @@ import { commands, type ExtensionContext, Uri, window, workspace } from "vscode"
 import type { HostToWebviewMessage } from "../shared/protocol";
 import { type ConsentTestResponder, setConsentTestResponder } from "./ai/consentGate";
 import { registerAiManualCommands } from "./ai/manualCommands";
+import { registerAiPageContextCommand } from "./ai/pageContexts";
 import { registerAiProviderCommands } from "./ai/summarize";
 import { registerCategoryCommands } from "./commands/categories";
+import { registerConfigureCommand } from "./commands/configure";
 import { registerExportCommands } from "./commands/exportPdf";
 import { GROUP_BY_KEY, registerHighlightCommands } from "./commands/highlights";
 import { registerNoteCommands } from "./commands/notes";
@@ -87,8 +89,10 @@ export function activate(context: ExtensionContext): void {
     ...registerNoteCommands({ provider, tracker, treeView, noteEditor }),
     ...registerReportCommands({ tracker, output }),
     ...registerExportCommands({ provider, tracker }),
+    ...registerConfigureCommand({ tracker }),
     ...registerAiManualCommands({ provider, tracker, output, extensionContext: context }),
     ...registerAiProviderCommands({ provider, tracker, output, extensionContext: context }),
+    ...registerAiPageContextCommand({ provider, tracker, output, extensionContext: context }),
     // Internal commands (not contributed to the palette) used by integration tests and,
     // later, by the notes views.
     commands.registerCommand("pdfCaseReview.debug.getViewerState", (uri: Uri) =>

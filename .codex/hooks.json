@@ -6,8 +6,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/gate_commit.py --allow-direct",
+            "command": "python \"$(git rev-parse --show-toplevel)/.claude/hooks/gate_commit.py\" --allow-direct",
             "timeout": 300
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$(git rev-parse --show-toplevel)/.claude/hooks/style_guard.py\"",
+            "timeout": 30
           }
         ]
       }

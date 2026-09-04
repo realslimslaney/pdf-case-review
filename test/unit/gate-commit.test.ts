@@ -6,7 +6,11 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
+
+// Every test here pays a Python process spawn; on a loaded machine (the gate runs this suite
+// while a build or another vitest is active) one spawn can exceed the 5 s default.
+vi.setConfig({ testTimeout: 30_000 });
 
 const gate = resolve(__dirname, "../../.claude/hooks/gate_commit.py");
 

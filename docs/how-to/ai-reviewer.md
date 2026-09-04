@@ -1,20 +1,54 @@
 # Use Claude Code or Codex as your reviewer
 
-Two independent ways to bring AI into a review, both optional and off by default. Either way, only your highlighted excerpts and notes are involved, never the PDF itself, and the report sets AI text apart in grey italics with a legend.
+Two independent ways to bring AI into a review, both optional and off by default. By default the summary is built from your highlighted excerpts, your notes and the document's extracted text; a setting narrows that to notes only (see [choosing the context scope](#choose-how-much-context-is-sent) below), and the PDF file itself is never sent. The report sets AI text apart in grey italics with a legend.
 
 ## A. The built-in executive summary
 
-1. Install a CLI and sign in once: `npm i -g @anthropic-ai/claude-code` then run `claude`, or `npm i -g @openai/codex` then run `codex`.
-2. Run **PDF Case Review: Choose AI Provider...**. The picker probes both CLIs and shows, per option, the signed-in account or a one-line install fix.
-3. Open your case and run **PDF Case Review: Summarize with AI**.
+1. Install a CLI and sign in once ([Install a command-line AI assistant](install-an-ai-cli.md) walks through it): `npm i -g @anthropic-ai/claude-code` then run `claude`, or `npm i -g @openai/codex` then run `codex`.
+2. Open your case and run **PDF Case Review: Summarize with AI**. That one command is the front door: with no provider configured it opens the provider picker first, which probes both CLIs and shows, per option, the signed-in account or a one-line install fix, plus a Manual entry for the clipboard flow below. (**Choose AI Provider...** opens the same picker on its own whenever you want to switch.)
 
 Before anything is sent you answer one direct question: *may this document be fed into AI context on this account?* The dialog names the signed-in email (read from the CLI's own saved login, never from asking a model), shows the document's authorization line when page 1 has one ("authorized for use only by..."), and counts what will be sent. Answering yes records the attestation in the sidecar; the report's AI section is stamped with provider, model, account and dates. Cancel and nothing is sent; the report still renders without a summary.
 
-The summary is cached in the sidecar (`aiSummary`), so re-rendering the report never re-calls the model; **Summarize with AI** offers to regenerate.
+### Review the prompt before it is sent
+
+After you answer yes, the assembled prompt opens in an editor tab (a Markdown file under the extension's global storage, `ai/summary-<timestamp>.prompt.md`) and a notification reports its size: "review the prompt (N words, about M tokens), edit it if you like, then send", with a **Send to Claude Code** (or **Send to Codex**) button and **Cancel**. Read it to see where your tokens go, trim or reword it if you like, then press Send: the provider receives exactly what the tab contains at that moment, unsaved edits included. Cancel, or dismiss the notification, and nothing is sent. When the run finishes the reply opens beside the prompt as `summary-<timestamp>.output.md`, and it is cached in the sidecar as usual. The folder keeps the newest 20 files. To send straight away without the tab, set `"pdfCaseReview.ai.reviewPrompt": false`. The clipboard flow below never opens a tab; the clipboard is its review surface.
+
+The summary's word budget is `pdfCaseReview.ai.maxWords` (500 by default). **Configure** ($(gear) in the tab's title bar) **> Summary Length...** changes it in place, at whichever settings scope defines it.
+
+The summary is cached in the sidecar (`aiSummary`), so re-rendering the report never re-calls the model; every run of **Summarize with AI** generates a fresh one and replaces it. To read the cached summary without regenerating it, run **PDF Case Review: Show AI Summary**: it opens in a tab headed `Generated with <provider> on <date>` (plus model and account when recorded), and says so when nothing is cached yet. The prompt template is at version 3 as of this release (it now asks the model to avoid em-dashes), so a summary cached by an earlier release is reported as possibly out of date once, until you regenerate it.
+
+When there is nothing to send, **Summarize with AI** and **Copy Summary Prompt** stop with "nothing to summarize yet" instead of sending an empty prompt. Under the default document-text scope (below) the document text alone is enough, so this mainly bites under the `notes` scope, or on a scanned or image-only PDF with no extractable text, until you highlight a passage or add a note.
+
+### Choose how much context is sent
+
+By default the prompt carries your highlights and notes plus the document text, so a summary works on a
+freshly opened case before any highlights exist. **Summarize with AI** and **Copy Summary Prompt** append
+the document text after your notes: extracted per page through the viewer, each page chunked under a
+citation marker, so the model can cite pages. It is document *text*, not the PDF: the file itself is never
+sent, and pages with nothing to extract (image-only exhibits, scans) are simply absent. Very long documents
+are cut off at a size budget and the prompt says where.
+
+To keep the PDF's text on this machine and send only your highlights and notes, narrow the scope:
+
+```jsonc
+"pdfCaseReview.ai.contextScope": "notes"
+```
+
+Widening the scope always re-asks the consent question (a wider consent covers narrower runs, so switching back never nags), and the dialog states exactly
+what the run will send: under document text it adds a coverage line ("text extracted from N of M page(s),
+about W words") so you can judge how much of the document is actually going out before you answer.
+**Add AI Page Context** is unaffected: it always sends only the picked pages' highlights and notes.
+
+A summary generated under document text is stamped in the report ("using document text"), and its cache
+is tied to the PDF's content hash, so a changed file marks it as possibly out of date.
+
+### Context for a busy page
+
+**PDF Case Review: Add AI Page Context...** finds pages with a dense cluster of highlights where most carry no note (threshold: `pdfCaseReview.ai.pageContext.minHighlights`), lets you pick which of them to cover, and asks the same provider for 2 to 4 sentences per page: what the highlighted passages are about and why they hang together. One consent dialog covers the batch. The contexts are cached in the sidecar (`aiPageContexts`) and render above those pages' highlights in the report, in the same grey italics with per-block provenance; editing a page's highlights marks only that page's context as possibly out of date.
 
 ### No CLI? Use the clipboard
 
-**PDF Case Review: Copy Summary Prompt** passes the same eligibility question, then puts the prompt and your notes on the clipboard. Paste into claude.ai, chatgpt.com or any chat, copy the answer, and run **Paste AI Summary**. It is saved and reported like any other provider's output, labeled `manual`.
+Pick **Manual** in the provider picker (or run **PDF Case Review: Copy Summary Prompt** directly). It passes the same eligibility question, then puts the prompt and your notes on the clipboard. Paste into claude.ai, chatgpt.com or any chat, copy the answer, and run **Paste AI Summary**. It is saved and reported like any other provider's output, labeled `manual`.
 
 ### Enforce the right account
 
@@ -42,7 +76,7 @@ If you switch accounts often, keep a second CLI login in its own directory and r
 ]
 ```
 
-To create that login once, run the CLI with the directory set, for example in PowerShell: `$env:CLAUDE_CONFIG_DIR = "$HOME\.claude-school"; claude` and sign in. From then on the extension sets `CLAUDE_CONFIG_DIR` (or `CODEX_HOME`) on the spawned CLI itself and verifies the email it finds there; you never export environment variables for VS Code.
+The **Configure** button in the viewer's title bar ($(gear)) has an **Add an AI Account** flow that writes both settings for you and opens a sign-in terminal with the directory already on the environment. By hand instead: run the CLI with the directory set, for example in PowerShell: `$env:CLAUDE_CONFIG_DIR = "$HOME\.claude-school"; claude` and sign in. From then on the extension sets `CLAUDE_CONFIG_DIR` (or `CODEX_HOME`) on the spawned CLI itself and verifies the email it finds there; you never export environment variables for VS Code. To switch the account your terminal and the Claude Code chat panel use as well, see [Use personal and school Claude accounts](two-claude-accounts.md).
 
 ## B. The agent reads your notes directly
 

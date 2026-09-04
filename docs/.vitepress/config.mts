@@ -10,7 +10,7 @@ export default defineConfig({
   lastUpdated: true,
   themeConfig: {
     nav: [
-      { text: "Tutorial", link: "/tutorials/first-case" },
+      { text: "Tutorial", link: "/tutorials/setup" },
       { text: "How-to", link: "/how-to/categories" },
       { text: "Reference", link: "/reference/commands" },
       { text: "Explanation", link: "/explanation/decisions" },
@@ -18,7 +18,10 @@ export default defineConfig({
     sidebar: [
       {
         text: "Tutorials",
-        items: [{ text: "Your first case", link: "/tutorials/first-case" }],
+        items: [
+          { text: "Set up your computer", link: "/tutorials/setup" },
+          { text: "Your first case", link: "/tutorials/first-case" },
+        ],
       },
       {
         text: "How-to",
@@ -26,9 +29,14 @@ export default defineConfig({
           { text: "Set up categories", link: "/how-to/categories" },
           { text: "Work with scanned PDFs", link: "/how-to/scanned-pdfs" },
           { text: "Work with very large PDFs", link: "/how-to/large-pdfs" },
+          { text: "Install a command-line AI assistant", link: "/how-to/install-an-ai-cli" },
           { text: "Claude Code or Codex as reviewer", link: "/how-to/ai-reviewer" },
-          { text: "Publish a release", link: "/how-to/release" },
+          { text: "Personal and school Claude accounts", link: "/how-to/two-claude-accounts" },
         ],
+      },
+      {
+        text: "For maintainers",
+        items: [{ text: "Publish a release", link: "/how-to/release" }],
       },
       {
         text: "Reference",
@@ -41,7 +49,10 @@ export default defineConfig({
       },
       {
         text: "Explanation",
-        items: [{ text: "Architecture decisions", link: "/explanation/decisions" }],
+        items: [
+          { text: "Architecture decisions", link: "/explanation/decisions" },
+          { text: "How Claude Code and Codex know who you are", link: "/explanation/claude-accounts" },
+        ],
       },
     ],
     socialLinks: [{ icon: "github", link: "https://github.com/realslimslaney/pdf-case-review" }],

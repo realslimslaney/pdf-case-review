@@ -91,7 +91,7 @@ Every reviewed PDF gets one sidecar file. It is the canonical store for highligh
 | `categories` | yes | The category palette copied into the file so it is self-describing (below). |
 | `highlights` | yes | One entry per highlight (below). |
 | `pageNotes`, `documentNotes` | no | Notes attached to a page or to the whole document (`page`, `note`, timestamps; document notes also have `id` and `title`). |
-| `aiConsent`, `aiSummary` | no | The recorded eligibility attestation and the cached AI summary, when those features are used (below). |
+| `aiConsent`, `aiSummary`, `aiPageContexts` | no | The recorded eligibility attestation and the cached AI summary and page contexts, when those features are used (below). |
 
 ### `source`
 
@@ -136,14 +136,23 @@ Written when the eligibility question is answered yes; shown and revoked by **Re
 | `attestedAt`, `responsibilityAcknowledged` | yes | When, and that the responsibility statement was part of the dialog. |
 | `eligibilityConfirmed` | no | The explicit yes to "may this document be fed into AI context on this account?". |
 | `accountId`, `organization`, `authorizationLine`, `wordingVersion` | no | The `ai.accounts` entry used, the account's organization, the document's own authorization line as shown in the dialog, and the dialog wording version (a change re-asks). |
+| `contextScope` | no | The AI context scope the consent covers: `notes` or `document-text` (`pdfCaseReview.ai.contextScope`). A run under a different scope re-asks. Absent means the consent predates context scopes and is treated as `notes`. |
 
 ### `aiSummary`
 
 The cached executive summary: `provider` (`claude-cli`, `codex-cli` or `manual`), optional `model` and `account`, `generatedAt`, and `text` (Markdown). Reports render it as a labeled section in grey italics; regenerating replaces it.
 
+Optional `inputDigest` and `promptVersion` record what the summary was generated from (a digest of the highlights, notes, categories and word budget, and the prompt template version). When they no longer match the current review, reports add a "may be out of date" line to the AI section; the summary is never withheld, and every run of **Summarize with AI** replaces it. Summaries saved before these fields existed are treated as possibly out of date. The prompt template is at version 3 as of this release, so a summary cached by an earlier release reads as possibly out of date once, until it is regenerated.
+
+Optional `contextScope` records the AI context scope the summary was generated under (`notes` when absent). For `document-text` the input digest also covers the scope and the PDF's hash, so a changed file marks the summary as possibly out of date, and the report's provenance line adds "using document text".
+
+### `aiPageContexts`
+
+Cached AI context per page, from **Add AI Page Context**: each entry carries `page` plus the same provenance and staleness fields as `aiSummary` (`provider`, optional `model` and `account`, `generatedAt`, `text`, `inputDigest`, `promptVersion`). The digest covers only that page's highlights and page note, so editing page 4 never marks page 3's context stale. Entries are ordered by `page`; regenerating a page replaces its entry.
+
 ## How the file is written
 
 - Keys are sorted at every level, indentation is two spaces, line endings are LF and the file ends with a newline, so diffs stay small.
-- `highlights` are in reading order: page, then top edge descending, then left edge, then `id`. `categories` are ordered by `order`, `pageNotes` by `page`, `documentNotes` by creation time.
+- `highlights` are in reading order: page, then top edge descending, then left edge, then `id`. `categories` are ordered by `order`, `pageNotes` and `aiPageContexts` by `page`, `documentNotes` by creation time.
 - The sidecar is written before the PDF, so an interrupted save never loses notes (see ADR-0005 in `docs/explanation/decisions.md` for why writes are not temp-and-rename).
 - Editing the file by hand is fine; unknown properties and malformed values are rejected on open with the JSON path of the problem, and the document then opens read-only until the file is fixed.

@@ -73,6 +73,19 @@ async function onPath(binary: string): Promise<boolean> {
   return (await execCli(finder, [binary])) !== null;
 }
 
+/** One-line install instructions, shown wherever a CLI turns out to be missing. */
+export const INSTALL_FIX = {
+  "claude-cli": "Install it: npm i -g @anthropic-ai/claude-code, then run `claude` once to sign in.",
+  "codex-cli": "Install it: npm i -g @openai/codex, then run `codex` once to sign in.",
+} as const;
+
+export const PROVIDER_LABEL = { "claude-cli": "Claude Code", "codex-cli": "Codex" } as const;
+
+/** Whether the provider's binary is on PATH; the cheap guard before any consent dialog. */
+export async function providerOnPath(provider: "claude-cli" | "codex-cli"): Promise<boolean> {
+  return onPath(provider === "claude-cli" ? "claude" : "codex");
+}
+
 export interface ProviderProbe {
   provider: "claude-cli" | "codex-cli";
   label: string;
@@ -99,7 +112,7 @@ export async function probeProviders(): Promise<ProviderProbe[]> {
           label: "Claude Code",
           available: false,
           identity: null,
-          fix: "Install it: npm i -g @anthropic-ai/claude-code, then run `claude` once to sign in.",
+          fix: INSTALL_FIX["claude-cli"],
         },
   );
   probes.push(
@@ -116,7 +129,7 @@ export async function probeProviders(): Promise<ProviderProbe[]> {
           label: "Codex",
           available: false,
           identity: null,
-          fix: "Install it: npm i -g @openai/codex, then run `codex` once to sign in.",
+          fix: INSTALL_FIX["codex-cli"],
         },
   );
   return probes;

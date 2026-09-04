@@ -17,6 +17,7 @@ import {
   RESPONSIBILITY_STATEMENT,
   switchAccountInstructions,
 } from "../../core/ai/consent";
+import { type AiContextScope, coverageLine, type DocumentTextResult } from "../../core/ai/documentText";
 import type { ProviderIdentity } from "../../core/ai/identity";
 import { type AiConsent, countNotes } from "../../core/sidecar/types";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
@@ -60,7 +61,13 @@ export interface GateDeps {
   settings: AiSettings;
   globalState: Memento;
   editorProvider: PdfCaseReviewEditorProvider;
+  /** What the run will send; a scope change always re-asks. Absent = notes only. */
+  contextScope?: AiContextScope;
+  /** Coverage numbers for the document-text scope, shown verbatim in the dialog. */
+  documentTextCoverage?: DocumentTextCoverage;
 }
+
+type DocumentTextCoverage = Pick<DocumentTextResult, "pagesWithText" | "pageCount" | "words">;
 
 export type GateResult =
   | { ok: true; attestation: Attestation; accountId?: string }
@@ -133,6 +140,8 @@ interface EligibilityFacts {
   verified: boolean;
   authorizationLine: string | null;
   authorizationLineAvailable: boolean;
+  contextScope: AiContextScope;
+  documentTextCoverage?: DocumentTextCoverage;
 }
 
 const SWITCH_BUTTON = "Wrong account? Show how to switch";
@@ -154,6 +163,11 @@ async function confirmEligibility(
       ? "no authorization line found on page 1"
       : "authorization line unavailable (viewer closed)";
   const counts = `${model.highlights.length} highlighted excerpt(s) and ${countNotes(model)} note(s)`;
+  const sent =
+    facts.contextScope === "document-text" && facts.documentTextCoverage
+      ? `${counts}, plus the document text (${coverageLine(facts.documentTextCoverage)}). The PDF file ` +
+        "itself is never sent; image-only pages and scans are not included."
+      : `${counts}. The PDF itself is never sent.`;
   const yesButton = "Yes, this account is allowed to process this document";
   const choice = await window.showWarningMessage(
     ELIGIBILITY_QUESTION,
@@ -162,7 +176,7 @@ async function confirmEligibility(
       detail:
         `Account: ${account}\n` +
         `Document: ${model.source.fileName}${document.protected ? " (publisher-protected)" : ""} · ${lineText}\n` +
-        `What will be sent: ${counts}. The PDF itself is never sent.\n\n` +
+        `What will be sent: ${sent}\n\n` +
         `If you answer yes and are wrong, that responsibility is yours. ${RESPONSIBILITY_STATEMENT}`,
     },
     yesButton,
@@ -246,18 +260,24 @@ export async function ensureAttestation(document: PdfDocument, deps: GateDeps): 
     email,
     documentSha256: document.model.source.sha256,
     protected: document.protected,
+    contextScope: deps.contextScope ?? "notes",
   };
   if (!needsReconsent(stored, current) && stored) {
     return { ok: true, attestation: createAttestation(stored), ...(accountId ? { accountId } : {}) };
   }
 
-  const confirmed = await confirmEligibility(document, {
+  const eligibilityFacts: EligibilityFacts = {
     email,
     organization,
     verified,
     authorizationLine,
     authorizationLineAvailable: pageText !== null,
-  });
+    contextScope: deps.contextScope ?? "notes",
+  };
+  if (deps.documentTextCoverage) {
+    eligibilityFacts.documentTextCoverage = deps.documentTextCoverage;
+  }
+  const confirmed = await confirmEligibility(document, eligibilityFacts);
   if (confirmed === "switch") {
     showSwitchHelp(deps.provider);
     return { ok: false, reason: "Account switch requested." };
@@ -275,6 +295,7 @@ export async function ensureAttestation(document: PdfDocument, deps: GateDeps): 
     responsibilityAcknowledged: true,
     eligibilityConfirmed: true,
     wordingVersion: CONSENT_WORDING_VERSION,
+    contextScope: deps.contextScope ?? "notes",
   };
   if (organization !== undefined) {
     record.organization = organization;

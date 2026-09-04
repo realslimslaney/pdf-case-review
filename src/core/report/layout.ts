@@ -4,7 +4,7 @@
 import { lexer, type Token, type Tokens } from "marked";
 
 import { IMAGE_REGION_LABEL, NO_TEXT_LABEL } from "../tree";
-import type { ReportItem, ReportModel } from "./model";
+import type { ReportItem, ReportModel, ReportPageContext } from "./model";
 
 export interface TextRun {
   text: string;
@@ -124,6 +124,44 @@ function itemBlocks(item: ReportItem, withCategoryPrefix: boolean): ReportBlock[
   return blocks;
 }
 
+function caution(text: string): ReportBlock {
+  return { kind: "paragraph", muted: true, runs: [{ text }] };
+}
+
+interface Provenance {
+  provider: string;
+  model?: string;
+  account?: string;
+  generatedAt: string;
+  contextScope?: string;
+  attestedAt?: string;
+}
+
+function provenanceLine(source: Provenance): string {
+  return `Generated with ${source.provider}${source.model ? ` (${source.model})` : ""}${source.account ? ` as ${source.account}` : ""}${source.contextScope === "document-text" ? " using document text" : ""} on ${source.generatedAt}${source.attestedAt ? `; eligibility attested on ${source.attestedAt}` : ""}.`;
+}
+
+function pageContextBlocks(context: ReportPageContext): ReportBlock[] {
+  const blocks: ReportBlock[] = [];
+  blocks.push({ kind: "heading", level: 3, text: `AI context · ${context.citation}` });
+  if (context.unverified) {
+    blocks.push(
+      caution(
+        "This context could not be checked against the page's current highlights; it may be out of date.",
+      ),
+    );
+  } else if (context.stale) {
+    blocks.push(
+      caution(
+        "This context may be out of date: the page's highlights, notes or AI settings changed after it was generated.",
+      ),
+    );
+  }
+  blocks.push(...markGenerated(noteToBlocks(context.text)));
+  blocks.push(caution(provenanceLine(context)));
+  return blocks;
+}
+
 export function layoutReport(model: ReportModel): ReportBlock[] {
   const blocks: ReportBlock[] = [];
   const { meta, options } = model;
@@ -139,20 +177,10 @@ export function layoutReport(model: ReportModel): ReportBlock[] {
     ],
   });
 
-  if (model.aiSummary) {
-    const { provider, model: modelName, account, generatedAt, attestedAt, text } = model.aiSummary;
+  const hasAiContent =
+    model.aiSummary !== null || model.chronological.some((entry) => entry.kind === "pageContext");
+  if (hasAiContent) {
     blocks.push({ kind: "paragraph", muted: true, runs: [{ text: AI_LEGEND }] });
-    blocks.push({ kind: "heading", level: 2, text: "AI summary" });
-    blocks.push(...markGenerated(noteToBlocks(text)));
-    blocks.push({
-      kind: "paragraph",
-      muted: true,
-      runs: [
-        {
-          text: `Generated with ${provider}${modelName ? ` (${modelName})` : ""}${account ? ` as ${account}` : ""} on ${generatedAt}${attestedAt ? `; eligibility attested on ${attestedAt}` : ""}.`,
-        },
-      ],
-    });
   }
 
   blocks.push({ kind: "heading", level: 2, text: "Summary" });
@@ -163,7 +191,29 @@ export function layoutReport(model: ReportModel): ReportBlock[] {
     swatches: model.summary.map((row) => row.category.color),
   });
 
-  if (model.documentNotes.length > 0) {
+  if (model.chronological.length > 0) {
+    blocks.push({ kind: "heading", level: 2, text: "Notes in the order taken" });
+    for (const entry of model.chronological) {
+      switch (entry.kind) {
+        case "highlight":
+          blocks.push(...itemBlocks(entry.item, true));
+          break;
+        case "pageNote":
+          blocks.push({ kind: "heading", level: 3, text: `Page note · ${entry.citation}` });
+          blocks.push(...noteToBlocks(entry.note));
+          break;
+        case "documentNote":
+          blocks.push({ kind: "heading", level: 3, text: entry.title });
+          blocks.push(...noteToBlocks(entry.note));
+          break;
+        case "pageContext":
+          blocks.push(...pageContextBlocks(entry.context));
+          break;
+      }
+    }
+  }
+
+  if (options.organization !== "none" && model.documentNotes.length > 0) {
     blocks.push({ kind: "heading", level: 2, text: "Document notes" });
     for (const note of model.documentNotes) {
       blocks.push({ kind: "heading", level: 3, text: note.title });
@@ -190,6 +240,9 @@ export function layoutReport(model: ReportModel): ReportBlock[] {
     }
     for (const section of model.byPage) {
       blocks.push({ kind: "heading", level: options.organization === "both" ? 3 : 2, text: section.heading });
+      if (section.context) {
+        blocks.push(...pageContextBlocks(section.context));
+      }
       if (section.pageNote) {
         blocks.push(...noteToBlocks(section.pageNote));
       }
@@ -197,6 +250,27 @@ export function layoutReport(model: ReportModel): ReportBlock[] {
         blocks.push(...itemBlocks(item, true));
       }
     }
+  }
+
+  if (model.aiSummary) {
+    blocks.push({ kind: "heading", level: 2, text: "AI summary" });
+    if (model.aiSummary.unverified) {
+      blocks.push(
+        caution(
+          "This summary could not be checked against the current notes (it was saved without a content " +
+            "digest); it may be out of date.",
+        ),
+      );
+    } else if (model.aiSummary.stale) {
+      blocks.push(
+        caution(
+          "This summary may be out of date: highlights, notes or AI settings changed after it was generated. " +
+            "Regenerate it with Summarize with AI, or copy and paste a fresh one.",
+        ),
+      );
+    }
+    blocks.push(...markGenerated(noteToBlocks(model.aiSummary.text)));
+    blocks.push(caution(provenanceLine(model.aiSummary)));
   }
 
   return blocks;

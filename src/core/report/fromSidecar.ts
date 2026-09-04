@@ -1,9 +1,18 @@
 // Maps the sidecar (the on-disk truth) to the report pipeline's input. Pure; the caller provides
 // only what it alone knows: the moment, the author setting, the viewer's live page data.
 
+import { summaryInputDigest } from "../ai/digest";
+import { PAGE_CONTEXT_PROMPT_VERSION, pageContextInputDigest } from "../ai/pageContext";
+import { SUMMARY_PROMPT_VERSION } from "../ai/prompt";
 import { sortDocumentNotes } from "../sidecar/serialize";
 import { type Sidecar, sortedCategories } from "../sidecar/types";
-import type { ReportAiSummary, ReportHighlightInput, ReportInput, ReportPageNoteInput } from "./model";
+import type {
+  ReportAiSummary,
+  ReportHighlightInput,
+  ReportInput,
+  ReportPageContextInput,
+  ReportPageNoteInput,
+} from "./model";
 
 export interface ReportInputContext {
   /** ISO timestamp for the title block. */
@@ -14,6 +23,8 @@ export interface ReportInputContext {
   /** The viewer's live page count; the sidecar carries 0 until the first save. */
   pageCount?: number;
   includeAiSummary: boolean;
+  /** Current `pdfCaseReview.ai.maxWords`, for the staleness check; defaults to `DEFAULT_MAX_WORDS`. */
+  aiMaxWords?: number;
 }
 
 export function reportInputFromSidecar(sidecar: Sidecar, context: ReportInputContext): ReportInput {
@@ -30,6 +41,7 @@ export function reportInputFromSidecar(sidecar: Sidecar, context: ReportInputCon
       kind: highlight.kind,
       text: highlight.text,
       note: highlight.note,
+      createdAt: highlight.createdAt,
     };
     const pageLabel = labelFor(highlight.page, highlight.pageLabel);
     if (pageLabel !== undefined) {
@@ -52,7 +64,7 @@ export function reportInputFromSidecar(sidecar: Sidecar, context: ReportInputCon
   }
   if (sidecar.pageNotes && sidecar.pageNotes.length > 0) {
     input.pageNotes = sidecar.pageNotes.map((note) => {
-      const entry: ReportPageNoteInput = { page: note.page, note: note.note };
+      const entry: ReportPageNoteInput = { page: note.page, note: note.note, createdAt: note.createdAt };
       const pageLabel = labelFor(note.page);
       if (pageLabel !== undefined) {
         entry.pageLabel = pageLabel;
@@ -61,9 +73,10 @@ export function reportInputFromSidecar(sidecar: Sidecar, context: ReportInputCon
     });
   }
   if (sidecar.documentNotes && sidecar.documentNotes.length > 0) {
-    input.documentNotes = sortDocumentNotes(sidecar.documentNotes).map(({ title, note }) => ({
+    input.documentNotes = sortDocumentNotes(sidecar.documentNotes).map(({ title, note, createdAt }) => ({
       title,
       note,
+      createdAt,
     }));
   }
   if (context.includeAiSummary && sidecar.aiSummary) {
@@ -82,7 +95,52 @@ export function reportInputFromSidecar(sidecar: Sidecar, context: ReportInputCon
       // An attestation for an earlier revision of the file must not stamp the report.
       summary.attestedAt = sidecar.aiConsent.attestedAt;
     }
+    if (sidecar.aiSummary.contextScope === "document-text") {
+      summary.contextScope = "document-text";
+    }
+    const fresh =
+      sidecar.aiSummary.promptVersion === SUMMARY_PROMPT_VERSION &&
+      sidecar.aiSummary.inputDigest ===
+        summaryInputDigest(
+          sidecar,
+          context.aiMaxWords,
+          sidecar.aiSummary.contextScope === "document-text" ? "document-text" : "notes",
+        );
+    if (sidecar.aiSummary.inputDigest === undefined) {
+      summary.unverified = true;
+    } else if (!fresh) {
+      summary.stale = true;
+    }
     input.aiSummary = summary;
+  }
+  if (context.includeAiSummary && sidecar.aiPageContexts && sidecar.aiPageContexts.length > 0) {
+    input.pageContexts = sidecar.aiPageContexts.map((pageContext) => {
+      const entry: ReportPageContextInput = {
+        page: pageContext.page,
+        text: pageContext.text,
+        provider: pageContext.provider,
+        generatedAt: pageContext.generatedAt,
+      };
+      const fresh =
+        pageContext.promptVersion === PAGE_CONTEXT_PROMPT_VERSION &&
+        pageContext.inputDigest === pageContextInputDigest(sidecar, pageContext.page);
+      if (pageContext.inputDigest === undefined) {
+        entry.unverified = true;
+      } else if (!fresh) {
+        entry.stale = true;
+      }
+      if (pageContext.model !== undefined) {
+        entry.model = pageContext.model;
+      }
+      if (pageContext.account !== undefined) {
+        entry.account = pageContext.account;
+      }
+      const pageLabel = labelFor(pageContext.page);
+      if (pageLabel !== undefined) {
+        entry.pageLabel = pageLabel;
+      }
+      return entry;
+    });
   }
   return input;
 }

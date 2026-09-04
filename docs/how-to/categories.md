@@ -37,6 +37,9 @@ them.
 
 ## Pick categories while reading
 
+- The **category dropdown in the viewer toolbar** (next to the highlight button) sets the
+  category for new highlights: pick one, then select text and highlight as usual. It starts on
+  the palette's first category and follows the color picker.
 - `Ctrl+Alt+1` to `Ctrl+Alt+9` (`Cmd+Alt` on macOS) highlight the current selection with the
   Nth category of the document's palette.
 - The viewer's highlight color picker shows the same palette; picking a color there is picking

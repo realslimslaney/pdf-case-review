@@ -1,3 +1,4 @@
+.env*
 .vscode/**
 .vscode-test/**
 .vscode-test.mjs
@@ -40,7 +41,9 @@ coverage/**
 out/**
 **/*.map
 **/*.ts
-!dist/**/*.js
+!dist/*.js
+!dist/webview/**/*.js
+dist/test/**
 vendor/pdfjs/web/compressed.tracemonkey-pldi-09.pdf
 vendor/pdfjs/web/debugger.*
 vendor/pdfjs/.version

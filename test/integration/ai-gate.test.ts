@@ -30,11 +30,14 @@ suite("M2 phase 4: AI eligibility gate and manual hand-off", () => {
     await openWith(pdf);
     await waitForLoaded(pdf);
     await highlight(pdf, 1, "#53FFBC", 1);
+    // The suite records its first consent in the notes scope so the widening test below is real.
+    await configuration().update("contextScope", "notes", vscode.ConfigurationTarget.Global);
   });
 
   suiteTeardown(async () => {
     await vscode.commands.executeCommand("pdfCaseReview.debug.autoConsent", null);
     await configuration().update("requiredAccount", undefined, vscode.ConfigurationTarget.Global);
+    await configuration().update("contextScope", undefined, vscode.ConfigurationTarget.Global);
     await closeAll();
   });
 
@@ -93,5 +96,67 @@ suite("M2 phase 4: AI eligibility gate and manual hand-off", () => {
     const text = new TextDecoder().decode(await vscode.workspace.fs.readFile(target));
     assert.ok(text.includes("A crisp executive summary of the case."), "the summary is in the report");
     assert.ok(text.toLowerCase().includes("manual"), "the section is stamped with its provider");
+  });
+
+  test("a later content change marks the cached summary stale in the next report", async () => {
+    const STALE_LINE = "This summary may be out of date";
+    const state = await documentState(pdf);
+    assert.ok(state?.model.aiSummary?.inputDigest, "the pasted summary carries an input digest");
+
+    const fresh = await vscode.commands.executeCommand<vscode.Uri>(
+      "pdfCaseReview.generateReport",
+      "markdown",
+    );
+    assert.ok(fresh);
+    const freshText = new TextDecoder().decode(await vscode.workspace.fs.readFile(fresh));
+    assert.ok(!freshText.includes(STALE_LINE), "an unchanged review renders without the caution");
+
+    await highlight(pdf, 1, "#53FFBC", 2);
+    const stale = await vscode.commands.executeCommand<vscode.Uri>(
+      "pdfCaseReview.generateReport",
+      "markdown",
+    );
+    assert.ok(stale);
+    const staleText = new TextDecoder().decode(await vscode.workspace.fs.readFile(stale));
+    assert.ok(staleText.includes(STALE_LINE), "the report flags the summary after the change");
+    assert.ok(
+      staleText.includes("A crisp executive summary of the case."),
+      "the stale summary still renders, informing rather than policing",
+    );
+  });
+
+  test("the document-text scope re-asks consent, sends page text and stamps the summary", async () => {
+    try {
+      await configuration().update("contextScope", "document-text", vscode.ConfigurationTarget.Global);
+      await vscode.commands.executeCommand("pdfCaseReview.debug.autoConsent", {
+        typedEmail: "you@school.edu",
+      });
+      const copied = await vscode.commands.executeCommand<boolean>("pdfCaseReview.ai.copySummaryPrompt");
+      assert.equal(copied, true, "the widened scope re-asks and the responder answers yes");
+      const clipboard = await vscode.env.clipboard.readText();
+      assert.ok(clipboard.includes("Document text ("), "the prompt carries the document-text section");
+      assert.ok(clipboard.includes("--- p. "), "pages are chunked with citations");
+      const state = await documentState(pdf);
+      assert.equal(state?.model.aiConsent?.contextScope, "document-text", "consent records the scope");
+      await vscode.env.clipboard.writeText("A summary grounded in the document text.");
+      const pasted = await vscode.commands.executeCommand<boolean>("pdfCaseReview.ai.pasteSummary");
+      assert.equal(pasted, true);
+      const after = await documentState(pdf);
+      assert.equal(after?.model.aiSummary?.contextScope, "document-text", "the summary carries the scope");
+      assert.ok(after?.model.aiSummary?.inputDigest, "the digest was captured at copy time");
+    } finally {
+      await configuration().update("contextScope", "notes", vscode.ConfigurationTarget.Global);
+    }
+  });
+
+  test("the default scope sends the document text", async () => {
+    await configuration().update("contextScope", undefined, vscode.ConfigurationTarget.Global);
+    await vscode.commands.executeCommand("pdfCaseReview.debug.autoConsent", {
+      typedEmail: "you@school.edu",
+    });
+    const copied = await vscode.commands.executeCommand<boolean>("pdfCaseReview.ai.copySummaryPrompt");
+    assert.equal(copied, true);
+    const clipboard = await vscode.env.clipboard.readText();
+    assert.ok(clipboard.includes("Document text ("), "the unset scope sends the document text");
   });
 });

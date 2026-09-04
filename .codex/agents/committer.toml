@@ -9,9 +9,9 @@ Hard rules:
 - Stage explicit paths only. Never use `git add -A`, `git add .`, or `git add -u`.
 - Never stage `*.vsix`, `.env*`, `vendor/`, `dist/`, `test/fixtures/generated/`, `PLAN.local.md`, or anything gitignored.
 - Commit only the approved work. Preserve unrelated user changes and report anything left uncommitted.
-- Never use `--no-verify`, amend a pushed commit, force-push, or bypass repository safeguards. A PreToolUse hook (`.codex/hooks.json`) runs the shared commit gate on every `git commit`: it blocks commits on main, `--no-verify`, a staged `pnpm-lock.yaml` without a `package.json` version bump, and a red `pnpm run test:unit`. If it blocks on red tests, do not repair code or weaken tests; stop and report the failure.
+- Never use `--no-verify`, amend a pushed commit, force-push, or bypass repository safeguards. A PreToolUse hook (`.codex/hooks.json`) runs the shared commit gate on every `git commit`: it blocks commits on main, `--no-verify`, an em-dash in the commit message, a staged `pnpm-lock.yaml` without `package.json` staged alongside it, and a red `pnpm run test:unit`. If it blocks on red tests, do not repair code or weaken tests; stop and report the failure.
 - Use Conventional Commits: `feat|fix|docs|ci|refactor|test|chore(scope): imperative summary`, at most 72 characters where practical, one logical change per commit. Scopes: viewer, notes, report, ai, sidecar, pdfsync, release, docs, deps. release-please builds versions and the changelog from these messages.
-- If `pnpm-lock.yaml` changed, bump the minor `"version"` in `package.json` in the same or a preceding `chore(deps):` commit. Never use npm or yarn.
+- Never bump `"version"` in `package.json` by hand: release-please owns versions. When `pnpm-lock.yaml` changed, stage it together with the `package.json` change that caused it. Never use npm or yarn.
 - Run only targeted checks while splitting (`pnpm exec vitest run <file>`); the gate runs the full unit suite itself. If Biome rewrites an approved path, re-stage that same explicit path and retry once.
 - Push only when the user's quoted approval or parent prompt explicitly authorizes pushing.
 

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isNoteEditorToHostMessage, isNoteTarget, sameNoteTarget } from "../../src/shared/noteEditorProtocol";
+import {
+  isNoteEditorToHostMessage,
+  isNoteTarget,
+  noteScopeLine,
+  sameNoteTarget,
+} from "../../src/shared/noteEditorProtocol";
 
 describe("isNoteTarget", () => {
   it("accepts the three target kinds and rejects malformed values", () => {
@@ -12,6 +17,18 @@ describe("isNoteTarget", () => {
     expect(isNoteTarget({ kind: "pageNote", page: 3 })).toBe(false);
     expect(isNoteTarget(null)).toBe(false);
     expect(isNoteTarget("highlight")).toBe(false);
+  });
+});
+
+describe("noteScopeLine", () => {
+  it("names the note kind and its report destination for every target", () => {
+    expect(noteScopeLine({ kind: "highlight", id: "a" })).toBe(
+      "Highlight note · shown beneath its quote in the report",
+    );
+    expect(noteScopeLine({ kind: "page", page: 7 })).toBe("Page note · shown with page 7 in the report");
+    expect(noteScopeLine({ kind: "document", id: "a" })).toBe(
+      "Document note · appears with your notes in the order taken",
+    );
   });
 });
 

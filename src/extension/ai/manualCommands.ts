@@ -4,12 +4,42 @@
 
 import { commands, type Disposable, type ExtensionContext, env, type LogOutputChannel, window } from "vscode";
 
-import { buildSummaryPrompt } from "../../core/ai/prompt";
+import { AI_CONTEXT_SCOPES, type AiContextScope } from "../../core/ai/contextScope";
+import { summaryInputDigest } from "../../core/ai/digest";
+import { buildDocumentText, type DocumentTextResult } from "../../core/ai/documentText";
+import { buildSummaryPrompt, hasSummaryContent, SUMMARY_PROMPT_VERSION } from "../../core/ai/prompt";
+import type { Sidecar } from "../../core/sidecar/types";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
 import type { PdfDocument } from "../editor/pdfDocument";
 import { aiSettings } from "../settings";
 import { ensureAttestation } from "./consentGate";
+
+/**
+ * Digest captured at copy time, kept in workspace state so it survives a window reload between copy
+ * and paste. The pasted answer covers what the copied prompt contained, so edits in between must
+ * leave the stored summary marked as possibly stale.
+ */
+interface CopiedPrompt {
+  digest: string;
+  scope: AiContextScope;
+}
+
+function copiedPromptKey(document: PdfDocument): string {
+  return `pdfCaseReview.copiedPrompt:${document.uri.toString()}`;
+}
+
+function isCopiedPrompt(value: unknown): value is CopiedPrompt {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate["digest"] === "string" &&
+    typeof candidate["scope"] === "string" &&
+    (AI_CONTEXT_SCOPES as readonly string[]).includes(candidate["scope"])
+  );
+}
 
 interface CommandContext {
   provider: PdfCaseReviewEditorProvider;
@@ -27,7 +57,8 @@ function activeDocument(context: CommandContext): PdfDocument | undefined {
 }
 
 /** The Markdown report body used as prompt context; never the PDF itself. */
-export async function markdownBody(document: PdfDocument): Promise<string> {
+/** `model` is the caller's snapshot: the digest stored beside a prompt must describe the same state. */
+export async function markdownBody(document: PdfDocument, model: Sidecar = document.model): Promise<string> {
   const [{ renderReport }, { reportInputFromSidecar }] = await Promise.all([
     import("../../core/report/render"),
     import("../../core/report/fromSidecar"),
@@ -40,7 +71,7 @@ export async function markdownBody(document: PdfDocument): Promise<string> {
   if (document.pageLabels) {
     inputContext.pageLabels = document.pageLabels;
   }
-  const rendered = await renderReport(reportInputFromSidecar(document.model, inputContext), "markdown");
+  const rendered = await renderReport(reportInputFromSidecar(model, inputContext), "markdown");
   return new TextDecoder().decode(rendered.bytes);
 }
 
@@ -50,22 +81,48 @@ export async function copySummaryPrompt(context: CommandContext): Promise<boolea
     return false;
   }
   const settings = aiSettings(document.uri, context.output);
+  let documentText: DocumentTextResult | undefined;
+  if (settings.contextScope === "document-text") {
+    const pages = await context.provider.collectDocumentText(document);
+    if (pages.every((page) => page.text === null)) {
+      void window.showErrorMessage(
+        "PDF Case Review: the document text could not be read; keep the PDF open in the viewer and try again.",
+      );
+      return false;
+    }
+    documentText = buildDocumentText(pages);
+  }
+  if (!hasSummaryContent(document.model, settings.contextScope, documentText)) {
+    void window.showInformationMessage(
+      "PDF Case Review: nothing to summarize yet. Highlight passages or add notes first.",
+    );
+    return false;
+  }
   const gate = await ensureAttestation(document, {
     whoAmI: async () => null,
     provider: "manual",
     settings,
     globalState: context.extensionContext.globalState,
     editorProvider: context.provider,
+    contextScope: settings.contextScope,
+    ...(documentText ? { documentTextCoverage: documentText } : {}),
   });
   if (!gate.ok) {
     context.output.info(`copySummaryPrompt refused: ${gate.reason}`);
     return false;
   }
+  const model = document.model;
   const prompt = buildSummaryPrompt(
-    await markdownBody(document),
+    await markdownBody(document, model),
     { maxWords: settings.maxWords },
     gate.attestation,
+    documentText,
   );
+  const copied: CopiedPrompt = {
+    digest: summaryInputDigest(model, settings.maxWords, settings.contextScope),
+    scope: settings.contextScope,
+  };
+  await context.extensionContext.workspaceState.update(copiedPromptKey(document), copied);
   await env.clipboard.writeText(`${prompt.system}\n\n${prompt.user}`);
   void window.showInformationMessage(
     "PDF Case Review: summary prompt copied. Paste it into your AI chat, copy the answer, then run " +
@@ -88,7 +145,17 @@ export async function pasteSummary(context: CommandContext): Promise<boolean> {
     provider: "manual",
     generatedAt: new Date().toISOString(),
     text,
+    promptVersion: SUMMARY_PROMPT_VERSION,
   };
+  const workspaceState = context.extensionContext.workspaceState;
+  const copied = workspaceState.get<unknown>(copiedPromptKey(document));
+  if (isCopiedPrompt(copied)) {
+    summary.inputDigest = copied.digest;
+    if (copied.scope === "document-text") {
+      summary.contextScope = copied.scope;
+    }
+  }
+  await workspaceState.update(copiedPromptKey(document), undefined);
   const account = document.model.aiConsent?.email;
   if (account !== undefined) {
     summary.account = account;
@@ -115,6 +182,7 @@ export async function reviewConsent(context: CommandContext): Promise<void> {
       consent.verified ? "verified" : "unverified"
     })\n` +
     `Provider: ${consent.provider}\n` +
+    `Context: ${consent.contextScope === "document-text" ? "notes and document text" : "notes only"}\n` +
     `Attested: ${consent.attestedAt}\n` +
     (consent.authorizationLine ? `Authorization line: "${consent.authorizationLine}"\n` : "") +
     `Document SHA-256: ${consent.documentSha256.slice(0, 12)}…`;

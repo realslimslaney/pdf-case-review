@@ -7,7 +7,7 @@ All settings live under `pdfCaseReview.*`. Unless noted, they have `resource` sc
 | Setting | Default | Meaning |
 |---|---|---|
 | `pdfCaseReview.categories` | Fact, Financial, Strategic implication, Concern, Question | The highlight palette for new documents. Each entry needs a unique `id` (lowercase letters, digits, dashes), a `name` and a unique `#RRGGBB` `color`; the color is how the viewer tells categories apart. An invalid setting falls back to the defaults with a warning. Categories are copied into each document's sidecar when it is created, so changing the setting does not alter existing documents. |
-| `pdfCaseReview.categoryPresets` | `{}` | Extra palettes for **Apply Category Preset**, keyed by name; `Business case`, `Academic paper` and `Contract` are built in. Same item shape as `categories`. |
+| `pdfCaseReview.categoryPresets` | `{}` | Extra palettes for **Apply Category Preset**, keyed by name; `Business case`, `Academic paper` and `Contract` are built in. Same item shape as `categories`. `window` scope. |
 
 ## Storage
 
@@ -20,16 +20,16 @@ All settings live under `pdfCaseReview.*`. Unless noted, they have `resource` sc
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `pdfCaseReview.highlights.groupBy` | `category` | Whether the Highlights view groups rows by category (palette order) or by page (reading order). The view's title buttons toggle it. |
+| `pdfCaseReview.highlights.groupBy` | `category` | Whether the Highlights view groups rows by category (palette order) or by page (reading order). The view's title buttons toggle it. `window` scope. |
 
 ## Report
 
 | Setting | Default | Meaning |
 |---|---|---|
 | `pdfCaseReview.report.defaultFormat` | `ask` | Format for **Generate Report** (`Ctrl+Alt+R`): `ask` shows a picker; `markdown`, `docx` or `pdf` render immediately. |
-| `pdfCaseReview.report.organization` | `both` | `category` (sections per category), `page` (reading order), or `both` (categories plus a per-page appendix). |
+| `pdfCaseReview.report.organization` | `none` | Grouped sections added after the chronological notes: `none` (notes appear once, in the order they were taken), `category`, `page`, or `both` (category sections plus a reading-order appendix). Reports always open with the chronological notes and close with the AI summary; cached AI page contexts render above their pages' entries in every organization. |
 | `pdfCaseReview.report.outputFolder` | `""` | Where reports are written. Empty writes beside the PDF; a relative path is resolved against the workspace folder. Ignored in untrusted workspaces. |
-| `pdfCaseReview.report.quoteMaxChars` | `300` | Longest quoted passage, truncated at a word boundary; `0` means unlimited. |
+| `pdfCaseReview.report.quoteMaxChars` | `0` | Longest quoted passage. `0` keeps every highlight whole; a positive number truncates at a word boundary with an ellipsis. |
 | `pdfCaseReview.report.author` | `""` | Author line in the title block; empty omits it. |
 | `pdfCaseReview.report.includeEmptyCategories` | `false` | Show categories with no highlights in the summary table and body. |
 | `pdfCaseReview.report.usePageLabels` | `true` | Cite the PDF's own page labels when they differ from page numbers, as `p. iv [4]`. |
@@ -37,14 +37,17 @@ All settings live under `pdfCaseReview.*`. Unless noted, they have `resource` sc
 
 ## AI (optional, off by default)
 
-Nothing leaves your machine unless a provider is enabled or you copy the prompt yourself; only highlights and notes are ever sent, never the PDF. Every run passes the eligibility question naming the signed-in account. See [the AI reviewer how-to](../how-to/ai-reviewer.md).
+Nothing leaves your machine unless a provider is enabled or you copy the prompt yourself. By default the summary commands send your highlights, notes and text extracted from the document; set `ai.contextScope` to `notes` to keep the PDF's text on this machine. The PDF file itself is never sent under either scope. Every run passes the eligibility question naming the signed-in account. See [the AI reviewer how-to](../how-to/ai-reviewer.md).
 
 | Setting | Default | Meaning |
 |---|---|---|
 | `pdfCaseReview.ai.provider` | `off` | `off`, `claude-cli` (spawns `claude`) or `codex-cli` (spawns `codex`). CLI providers need desktop VS Code and a trusted workspace. |
 | `pdfCaseReview.ai.model` | `""` | Model passed to the CLI (`--model`); empty uses the CLI's default. |
 | `pdfCaseReview.ai.includeInReport` | `true` | Include the cached AI summary as a labeled, grey-italics section of generated reports. |
-| `pdfCaseReview.ai.maxWords` | `250` | Word budget for the executive summary. |
+| `pdfCaseReview.ai.maxWords` | `500` | Word budget for the executive summary. |
+| `pdfCaseReview.ai.contextScope` | `document-text` | What AI features may send. `document-text` (the default): **Summarize with AI** and **Copy Summary Prompt** send highlights, notes and the document text, extracted per page with citations under a 400,000-character budget (truncation is reported explicitly), so a summary works before any notes exist. `notes`: highlights and notes only; the PDF's text stays on this machine. Image-only pages and scans have no extractable text and are excluded; the PDF file itself is never sent under either scope. Widening the scope re-asks the consent question, and the dialog states exactly what will be sent with coverage numbers. **Add AI Page Context** always sends notes only. |
+| `pdfCaseReview.ai.reviewPrompt` | `true` | **Summarize with AI** opens the assembled prompt in an editor tab before sending it, with a word and token estimate; edit the tab and press Send, and the provider receives exactly what the tab contains. The reply opens in a tab beside it. The last 20 prompt and output files are kept in the extension's global storage. |
+| `pdfCaseReview.ai.pageContext.minHighlights` | `4` | **Add AI Page Context** offers pages with at least this many highlights where fewer than half carry notes. |
 | `pdfCaseReview.ai.requiredAccount` | `[]` | Rules refusing the AI step under the wrong login. The first rule whose `when` matches (`protected`, `authorizationLineMatches`, `pathGlob`) applies; `email` names the account that must be signed in (no override) and `use` selects an entry of `ai.accounts`. |
 | `pdfCaseReview.ai.accounts` | `[]` | Separate CLI login directories (`{id, provider, configDir}`) for people with more than one account; the extension sets `CLAUDE_CONFIG_DIR` / `CODEX_HOME` on the spawned CLI itself. The account's `provider` must match `pdfCaseReview.ai.provider`; a matched rule selecting a mismatched account is refused with a configuration error, so a run can never execute under a different CLI or login than the one the consent dialog verified. |
 | `pdfCaseReview.ai.requireVerifiedAccountForProtected` | `true` | Refuse CLI providers on publisher-protected documents when the login cannot be verified from the CLI's saved credentials; the manual clipboard path asks for an extra acknowledgment instead. |

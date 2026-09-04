@@ -3,6 +3,7 @@
 // organizes and formats.
 
 import { UNCATEGORIZED_CATEGORY } from "../categories";
+import { compareStrings } from "../sidecar/serialize";
 import type { HighlightKind } from "../sidecar/types";
 import { normalizeCapturedText } from "../text/normalize";
 
@@ -26,17 +27,34 @@ export interface ReportHighlightInput {
   kind?: HighlightKind;
   text: string;
   note: string;
+  createdAt?: string;
 }
 
 export interface ReportPageNoteInput {
   page: number;
   pageLabel?: string;
   note: string;
+  createdAt?: string;
 }
 
 export interface ReportDocumentNoteInput {
   title: string;
   note: string;
+  createdAt?: string;
+}
+
+export interface ReportPageContextInput {
+  page: number;
+  pageLabel?: string;
+  text: string;
+  provider: string;
+  model?: string;
+  account?: string;
+  generatedAt: string;
+  /** Computed by the caller (fromSidecar): the page's content changed after generation. */
+  stale?: boolean;
+  /** No digest was recorded, so freshness cannot be checked. */
+  unverified?: boolean;
 }
 
 export interface ReportAiSummary {
@@ -46,6 +64,12 @@ export interface ReportAiSummary {
   generatedAt: string;
   text: string;
   attestedAt?: string;
+  /** The sidecar content changed after generation; renderers add a caution line. */
+  stale?: boolean;
+  /** `document-text` when the summary was generated with the document text in context. */
+  contextScope?: string;
+  /** No digest was recorded, so freshness cannot be checked. */
+  unverified?: boolean;
 }
 
 export interface ReportInput {
@@ -59,10 +83,11 @@ export interface ReportInput {
   pageNotes?: ReportPageNoteInput[];
   documentNotes?: ReportDocumentNoteInput[];
   aiSummary?: ReportAiSummary;
+  pageContexts?: ReportPageContextInput[];
 }
 
 export interface ReportOptions {
-  organization: "category" | "page" | "both";
+  organization: "none" | "category" | "page" | "both";
   /** 0 = unlimited. */
   quoteMaxChars: number;
   includeEmptyCategories: boolean;
@@ -70,8 +95,8 @@ export interface ReportOptions {
 }
 
 export const DEFAULT_REPORT_OPTIONS: ReportOptions = {
-  organization: "both",
-  quoteMaxChars: 300,
+  organization: "none",
+  quoteMaxChars: 0,
   includeEmptyCategories: false,
   usePageLabels: true,
 };
@@ -87,6 +112,24 @@ export interface ReportItem {
   note: string;
 }
 
+export interface ReportPageContext {
+  page: number;
+  citation: string;
+  text: string;
+  provider: string;
+  model?: string;
+  account?: string;
+  generatedAt: string;
+  stale: boolean;
+  unverified: boolean;
+}
+
+export type ChronologicalEntry =
+  | { kind: "highlight"; item: ReportItem }
+  | { kind: "pageNote"; page: number; citation: string; note: string }
+  | { kind: "documentNote"; title: string; note: string }
+  | { kind: "pageContext"; context: ReportPageContext };
+
 export interface CategorySection {
   category: ReportCategory;
   items: ReportItem[];
@@ -96,6 +139,7 @@ export interface PageSection {
   page: number;
   heading: string;
   pageNote: string | null;
+  context: ReportPageContext | null;
   items: ReportItem[];
 }
 
@@ -120,12 +164,22 @@ export interface ReportModel {
   aiSummary: ReportAiSummary | null;
   summary: SummaryRow[];
   documentNotes: ReportDocumentNoteInput[];
+  chronological: ChronologicalEntry[];
   byCategory: CategorySection[];
   byPage: PageSection[];
   uncategorized: ReportItem[];
 }
 
 const UNCATEGORIZED: ReportCategory = UNCATEGORIZED_CATEGORY;
+
+/** ISO timestamps compared as instants: a sidecar from another tool may carry offsets or mixed precision. */
+function compareInstants(left: string, right: string): number {
+  const leftInstant = Date.parse(left);
+  const rightInstant = Date.parse(right);
+  return Number.isNaN(leftInstant) || Number.isNaN(rightInstant)
+    ? compareStrings(left, right)
+    : leftInstant - rightInstant;
+}
 
 /** Collapses whitespace and re-joins words hyphenated across line breaks. */
 export function normalizeQuote(text: string): string {
@@ -193,6 +247,60 @@ export function buildReportModel(
     note: highlight.note.trim(),
   }));
 
+  const itemsById = new Map(items.map((item) => [item.id, item]));
+  const stamped: { createdAt: string | undefined; entry: ChronologicalEntry }[] = [
+    ...input.highlights.map((highlight) => ({
+      createdAt: highlight.createdAt,
+      entry: { kind: "highlight", item: itemsById.get(highlight.id) as ReportItem } as ChronologicalEntry,
+    })),
+    ...(input.pageNotes ?? [])
+      .filter((note) => note.note.trim() !== "")
+      .map((note) => ({
+        createdAt: note.createdAt,
+        entry: {
+          kind: "pageNote",
+          page: note.page,
+          citation: formatCitation(note.page, note.pageLabel, options.usePageLabels),
+          note: note.note,
+        } as ChronologicalEntry,
+      })),
+    ...(input.documentNotes ?? [])
+      .filter((note) => note.note.trim() !== "")
+      .map((note) => ({
+        createdAt: note.createdAt,
+        entry: { kind: "documentNote", title: note.title, note: note.note } as ChronologicalEntry,
+      })),
+  ];
+  // Timestamped entries in the order they were taken, then unstamped ones in input order, so
+  // hand-built inputs without timestamps still render sensibly.
+  const timestamped = stamped.filter((entry) => entry.createdAt !== undefined);
+  const unstamped = stamped.filter((entry) => entry.createdAt === undefined);
+  timestamped.sort((left, right) => compareInstants(left.createdAt ?? "", right.createdAt ?? ""));
+  const chronological = [...timestamped, ...unstamped].map(({ entry }) => entry);
+  // Each page's AI context sits above that page's earliest entry; a context whose page no longer
+  // holds anything is dropped rather than rendered as an orphan.
+  const pageContexts: ReportPageContext[] = (input.pageContexts ?? []).map((context) => ({
+    page: context.page,
+    citation: formatCitation(context.page, context.pageLabel, options.usePageLabels),
+    text: context.text,
+    ...(context.model !== undefined ? { model: context.model } : {}),
+    ...(context.account !== undefined ? { account: context.account } : {}),
+    provider: context.provider,
+    generatedAt: context.generatedAt,
+    stale: context.stale === true,
+    unverified: context.unverified === true,
+  }));
+  for (const context of pageContexts) {
+    const index = chronological.findIndex(
+      (entry) =>
+        (entry.kind === "highlight" && entry.item.page === context.page) ||
+        (entry.kind === "pageNote" && entry.page === context.page),
+    );
+    if (index >= 0) {
+      chronological.splice(index, 0, { kind: "pageContext", context });
+    }
+  }
+
   const summary: SummaryRow[] = input.categories
     .map((category) => {
       const own = items.filter((item) => item.category.id === category.id);
@@ -234,6 +342,7 @@ export function buildReportModel(
       page,
       heading: label.replace(/^p\. /, "Page "),
       pageNote: pageNotes.get(page)?.note.trim() || null,
+      context: pageContexts.find((candidate) => candidate.page === page) ?? null,
       items: pageItems,
     };
   });
@@ -257,6 +366,7 @@ export function buildReportModel(
     aiSummary: input.aiSummary ?? null,
     summary,
     documentNotes: (input.documentNotes ?? []).filter((note) => note.note.trim() !== ""),
+    chronological,
     byCategory,
     byPage,
     uncategorized,

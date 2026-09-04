@@ -43,6 +43,8 @@ import {
   workspace,
 } from "vscode";
 
+import type { DocumentTextPage } from "../../core/ai/documentText";
+import { withoutOrphanPageContexts } from "../../core/ai/pageContext";
 import { type Category, toHighlightEditorColors } from "../../core/categories";
 import { adoptEmbedded, missingFromFile, toEmbeddable, toInjectable } from "../../core/highlight/convert";
 import { repairPdfjsIds, syncModeOnOpen } from "../../core/pdfExport/syncPlan";
@@ -51,11 +53,13 @@ import { reconcileSnapshot } from "../../core/sidecar/reconcile";
 import { serializeSidecar } from "../../core/sidecar/serialize";
 import {
   type AiConsent,
+  type AiPageContext,
   type AiSummary,
   type DocumentNote,
   emptySidecar,
   type Sidecar,
   type SidecarHighlight,
+  sortedCategories,
   toSidecarCategories,
 } from "../../core/sidecar/types";
 import {
@@ -97,6 +101,8 @@ export interface ViewerState {
   /** The last webview log lines, newest last (diagnostics for tests). */
   logs: string[];
 }
+
+const DOCUMENT_TEXT_CONCURRENCY = 8;
 
 const EMPTY_VIEWER_STATE: ViewerState = {
   loaded: false,
@@ -202,6 +208,31 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
 
   getDocument(uri: Uri): PdfDocument | undefined {
     return this.documents.get(uri.toString());
+  }
+
+  /**
+   * Every page's text for the document-text AI scope; entries are null when unavailable. Bounded
+   * workers: a 300-page PDF must not start 300 getTextContent calls in the webview at once.
+   */
+  async collectDocumentText(document: PdfDocument): Promise<DocumentTextPage[]> {
+    const pageCount = document.info.pageCount;
+    const pages: DocumentTextPage[] = new Array(pageCount);
+    let nextPage = 0;
+    const worker = async (): Promise<void> => {
+      while (nextPage < pageCount) {
+        nextPage += 1;
+        const page = nextPage;
+        const entry: DocumentTextPage = { page, text: await this.getPageText(document, page) };
+        const label = document.pageLabels?.[page - 1];
+        if (label !== undefined) {
+          entry.pageLabel = label;
+        }
+        pages[page - 1] = entry;
+      }
+    };
+    const workers = Math.min(DOCUMENT_TEXT_CONCURRENCY, pageCount);
+    await Promise.all(Array.from({ length: workers }, worker));
+    return pages;
   }
 
   /** One page's text from the viewer; null when no viewer is open, it times out, or has no text. */
@@ -599,6 +630,7 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
 
   /** Tells VS Code the document is dirty and the views that its model changed. */
   private markEdited(document: PdfDocument): void {
+    document.model = withoutOrphanPageContexts(document.model);
     this._onDidChangeCustomDocument.fire({ document });
     this._onDidChangeDocument.fire(document);
   }
@@ -751,6 +783,14 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
 
   setAiSummary(document: PdfDocument, summary: AiSummary): void {
     document.model = { ...document.model, aiSummary: summary };
+    this.markEdited(document);
+  }
+
+  /** Replaces the context for each generated page and keeps the others. */
+  setAiPageContexts(document: PdfDocument, contexts: AiPageContext[]): void {
+    const replaced = new Set(contexts.map((entry) => entry.page));
+    const kept = (document.model.aiPageContexts ?? []).filter((entry) => !replaced.has(entry.page));
+    document.model = { ...document.model, aiPageContexts: [...kept, ...contexts] };
     this.markEdited(document);
   }
 
@@ -1001,7 +1041,12 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
       maxCanvasPixels: settings.get<number>("maxCanvasPixels", 0) || null,
       maxImageSize: settings.get<number>("maxImageSize", 0) || null,
       // The palette comes from the document's own categories: the sidecar is self-describing.
-      highlightEditorColors: toHighlightEditorColors(document.model.categories),
+      highlightEditorColors: toHighlightEditorColors(sortedCategories(document.model.categories)),
+      categories: sortedCategories(document.model.categories).map(({ id, name, color }) => ({
+        id,
+        name,
+        color,
+      })),
       sandboxBundleSrc: `${pdfjs("build", "pdf.sandbox.mjs")}`,
       cMapUrl: withTrailingSlash(pdfjs("web", "cmaps")),
       iccUrl: withTrailingSlash(pdfjs("web", "iccs")),

@@ -2,6 +2,8 @@
 
 All commands are under the **PDF Case Review** category in the Command Palette. The ones that act on a highlight take the highlight you right-clicked in the Highlights view, or the view's current selection.
 
+While a PDF is the active editor, its tab's title bar carries icon buttons for the three headline commands: **Generate Report** ($(output)), **Summarize with AI** ($(sparkle), trusted workspaces only), **Add Document Note** ($(note)) and **Configure** ($(gear)), a hub for choosing the AI provider, adding a second AI account guided (it writes `ai.accounts` and `requiredAccount`, then opens a sign-in terminal), reviewing the AI consent recorded for the document, setting the summary length (**Summary Length...** writes `ai.maxWords` at the scope where it is defined), applying a category preset, and jumping into the category or extension settings. The viewer's own toolbar also holds a category dropdown; see [How to: categories](../how-to/categories.md).
+
 ## Highlights view
 
 The **PDF Case Review** activity-bar icon opens the **Highlights** view for the active PDF. Rows show the highlighted passage (up to 60 characters) with its page; hover for the full quote and note. Grouping follows `pdfCaseReview.highlights.groupBy`. A **Document notes** group lists document-level notes first; in page grouping, a page's note appears above its highlights.
@@ -9,7 +11,7 @@ The **PDF Case Review** activity-bar icon opens the **Highlights** view for the 
 | Command | Where | What it does |
 |---|---|---|
 | `PDF Case Review: Go to Highlight` | click a row, `Ctrl+Alt+G`, palette | Scrolls the PDF to the highlight and flashes it. Invoked with nothing selected, it shows a picker of every highlight, so the viewer is reachable without a mouse. |
-| `PDF Case Review: Edit Note` | `Ctrl+Alt+N`, click a note row, row context menu, palette | Opens the target in the **Note** view (below). With no selection it targets the current page's note. |
+| `PDF Case Review: Edit Note` | `Ctrl+Alt+N`, click a note row, row context menu, palette | Opens the target in the **Note** view (below). With no selection it asks where the note should go (the page in view, or a document note). |
 | `PDF Case Review: Set Category` | row context menu, palette | Picks another category for the highlight; the viewer recolors it and the PDF is updated on the next save. |
 | `PDF Case Review: Delete Highlight` | row context menu (inline trash icon), palette | Deletes the highlight. When the viewer shows it, the deletion goes through PDF.js and `Ctrl+Z` inside the viewer brings it back with its note. |
 | `PDF Case Review: Delete Note` | note row context menu (inline trash icon), palette | Deletes a page or document note. |
@@ -36,13 +38,15 @@ The **Note** view (under Highlights in the activity bar) edits one target at a t
 
 ## AI (optional, off by default)
 
-Every path below goes through the eligibility question first: the dialog names the signed-in account and the document, and asks whether it may be fed into AI context. Only highlights and notes are ever sent, never the PDF. AI text in reports renders in grey italics with a legend.
+Every path below goes through the eligibility question first: the dialog names the signed-in account and the document, states exactly what will be sent, and asks whether it may be fed into AI context. By default the summary commands send highlights, notes and text extracted from the document (`pdfCaseReview.ai.contextScope: "document-text"`); the `notes` scope keeps the PDF's text on this machine, and widening the scope re-asks. The PDF file itself is never sent under either scope. AI text in reports renders in grey italics with a legend.
 
 | Command | What it does |
 |---|---|
-| `PDF Case Review: Choose AI Provider...` | Probes the `claude` and `codex` CLIs and sets `pdfCaseReview.ai.provider`; unavailable options show a one-line fix. |
-| `PDF Case Review: Summarize with AI` | Runs the configured CLI on your highlights and notes and caches the executive summary in the sidecar. Cancellable; 120 second timeout. |
-| `PDF Case Review: Copy Summary Prompt` | Puts the summary prompt and your notes on the clipboard for any chat. Works with the provider off. |
+| `PDF Case Review: Choose AI Provider...` | Probes the `claude` and `codex` CLIs and sets `pdfCaseReview.ai.provider`; unavailable options show a one-line fix. Picking Manual starts the clipboard flow. |
+| `PDF Case Review: Summarize with AI` | The one entry point: with no provider configured it opens the provider picker first, then runs the configured CLI on your highlights and notes and caches the executive summary in the sidecar. Under the default `ai.contextScope: "document-text"` the prompt also carries the document text, extracted per page with citations, and the consent dialog shows the coverage (pages with extractable text, approximate words). With `ai.reviewPrompt` on (the default) the assembled prompt then opens in an editor tab with a word and token estimate and waits for **Send to Claude Code** / **Send to Codex**; the provider receives the tab's contents, edits included, and the reply opens beside it (`ai/summary-<timestamp>.prompt.md` and `.output.md` under the extension's global storage, newest 20 kept). Stops with "nothing to summarize yet" when there are no highlights, no notes and (under document text) no extractable text. Cancellable; 120 second timeout. |
+| `PDF Case Review: Show AI Summary` | Opens the summary cached in the sidecar in a new editor tab, headed by the provider, time, model and account that produced it. Says so when no summary has been generated yet. |
+| `PDF Case Review: Add AI Page Context...` | Offers pages with a dense, lightly-annotated highlight cluster (`ai.pageContext.minHighlights`), then asks the configured CLI for 2 to 4 sentences of context per picked page; one consent dialog covers the batch. Cached in the sidecar and rendered above those pages in the report. |
+| `PDF Case Review: Copy Summary Prompt` | Puts the summary prompt and your notes on the clipboard for any chat; under the default `ai.contextScope: "document-text"` the copied prompt includes the document text too, after the same consent dialog, and the same "nothing to summarize yet" check applies. Works with the provider off. |
 | `PDF Case Review: Paste AI Summary` | Saves the clipboard as the document's AI summary, labeled `manual`. |
 | `PDF Case Review: Review AI Consent` | Shows the recorded attestation (account, provider, dates) and offers to revoke it. |
 

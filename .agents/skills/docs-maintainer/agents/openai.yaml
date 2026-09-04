@@ -1,0 +1,4 @@
+interface:
+  display_name: "Docs Maintainer"
+  short_description: "Audit and fix docs/ against the code before a PR goes out"
+  default_prompt: "Use $docs-maintainer to bring docs/ in line with the changes on this branch."

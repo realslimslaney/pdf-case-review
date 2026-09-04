@@ -3,7 +3,7 @@
 
 import { type DocumentNote, type Sidecar, type SidecarHighlight, sortedCategories } from "./types";
 
-function compareStrings(left: string, right: string): number {
+export function compareStrings(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
@@ -60,6 +60,9 @@ export function serializeSidecar(sidecar: Sidecar): string {
   }
   if (sidecar.documentNotes) {
     ordered.documentNotes = sortDocumentNotes(sidecar.documentNotes);
+  }
+  if (sidecar.aiPageContexts) {
+    ordered.aiPageContexts = [...sidecar.aiPageContexts].sort((left, right) => left.page - right.page);
   }
   return stableStringify(ordered);
 }

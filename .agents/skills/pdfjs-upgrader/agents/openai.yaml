@@ -1,0 +1,4 @@
+interface:
+  display_name: "PDF.js Upgrader"
+  short_description: "Upgrade the vendored PDF.js viewer from pin bump to green tests"
+  default_prompt: "Use $pdfjs-upgrader to upgrade the vendored PDF.js viewer to the version in the upstream-watch issue."

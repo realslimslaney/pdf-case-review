@@ -8,6 +8,7 @@ import * as vscode from "vscode";
 import {
   closeAll,
   fixtureUri,
+  highlightWithRetry,
   openWith,
   request,
   send,
@@ -48,12 +49,13 @@ suite("PDF Case Review editor", () => {
       },
       30_000,
     );
-    await send(uri, { type: "spike.highlightText", page: 1, spanCount: 2, color: "#53FFBC" });
-
-    const state = await waitFor("a highlight editor", async () => {
+    // Acknowledged request plus one retry (a fire-and-forget send would swallow the webview's
+    // error); unlike helpers.highlight() this waits on the viewer's editors, not the model.
+    const reached = async () => {
       const current = await viewerState(uri);
       return current && current.editors.length > 0 ? current : undefined;
-    });
+    };
+    const state = await highlightWithRetry(uri, 1, "#53FFBC", reached, "a highlight editor");
     const [highlight] = state.editors;
     assert.ok(highlight);
     assert.equal(highlight.pageIndex, 0);
