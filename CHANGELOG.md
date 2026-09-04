@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and is maintained by release-please
 from Conventional Commits.
 
+## [0.5.0](https://github.com/realslimslaney/pdf-case-review/compare/v0.1.1...v0.5.0) (2026-09-04)
+
+
+### Features
+
+* M4 UAT readiness (carried AI fix, checklists, staleness digest, AI front door, note scopes) ([#25](https://github.com/realslimslaney/pdf-case-review/issues/25)) ([e133dd6](https://github.com/realslimslaney/pdf-case-review/commit/e133dd61a68754c92af8fe6ac78ab35d43b79426))
+
+
+### Maintenance
+
+* release as 0.5.0 ([#37](https://github.com/realslimslaney/pdf-case-review/issues/37)) ([7d56f1d](https://github.com/realslimslaney/pdf-case-review/commit/7d56f1d590823221c32b0385e25f8f9024d6ed96))
+
 ## [0.1.1](https://github.com/realslimslaney/pdf-case-review/compare/v0.1.0...v0.1.1) (2026-08-31)
 
 
