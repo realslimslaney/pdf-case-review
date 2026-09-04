@@ -89,7 +89,7 @@ export function activate(context: ExtensionContext): void {
     ...registerNoteCommands({ provider, tracker, treeView, noteEditor }),
     ...registerReportCommands({ tracker, output }),
     ...registerExportCommands({ provider, tracker }),
-    ...registerConfigureCommand(),
+    ...registerConfigureCommand({ tracker }),
     ...registerAiManualCommands({ provider, tracker, output, extensionContext: context }),
     ...registerAiProviderCommands({ provider, tracker, output, extensionContext: context }),
     ...registerAiPageContextCommand({ provider, tracker, output, extensionContext: context }),

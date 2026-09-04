@@ -2,8 +2,7 @@
 // pieces which are otherwise JSON-only. Its guided account flow writes `pdfCaseReview.ai.accounts`
 // and `requiredAccount`, then opens a sign-in terminal with the login directory on the environment.
 
-import { commands, type Disposable, window, workspace } from "vscode";
-
+import { commands, type Disposable, type Uri, window, workspace } from "vscode";
 import {
   accountIdsIn,
   defaultConfigDir,
@@ -12,6 +11,7 @@ import {
   validAccountId,
 } from "../../core/ai/accounts";
 import { DEFAULT_MAX_WORDS } from "../../core/ai/prompt";
+import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import { definedTarget, valueAt } from "../settings";
 import { isDesktopHost } from "../util/host";
 
@@ -21,7 +21,9 @@ interface HubItem {
   run: () => Thenable<unknown> | Promise<unknown>;
 }
 
-export async function configure(): Promise<void> {
+export async function configure(tracker: ActiveDocumentTracker): Promise<void> {
+  // Resource-scoped settings need the active PDF, or a workspace-folder override stays invisible.
+  const resource = tracker.active?.uri;
   const items: HubItem[] = [
     {
       label: "$(sparkle) Choose AI Provider...",
@@ -31,7 +33,7 @@ export async function configure(): Promise<void> {
     {
       label: "$(person-add) Add an AI Account...",
       description: "A second CLI login (say, a school account) with its own directory",
-      run: addAiAccount,
+      run: () => addAiAccount(resource),
     },
     {
       label: "$(shield) Review AI Consent",
@@ -40,8 +42,8 @@ export async function configure(): Promise<void> {
     },
     {
       label: "$(text-size) Summary Length...",
-      description: `Word budget for the AI summary, currently ${currentMaxWords()} words`,
-      run: setSummaryLength,
+      description: `Word budget for the AI summary, currently ${currentMaxWords(resource)} words`,
+      run: () => setSummaryLength(resource),
     },
     {
       label: "$(symbol-color) Apply Category Preset...",
@@ -62,22 +64,24 @@ export async function configure(): Promise<void> {
   await picked?.run();
 }
 
-function currentMaxWords(): number {
-  const value = workspace.getConfiguration("pdfCaseReview.ai").get<number>("maxWords", DEFAULT_MAX_WORDS);
+function currentMaxWords(resource: Uri | undefined): number {
+  const value = workspace
+    .getConfiguration("pdfCaseReview.ai", resource)
+    .get<number>("maxWords", DEFAULT_MAX_WORDS);
   return Number.isInteger(value) && value > 0 ? value : DEFAULT_MAX_WORDS;
 }
 
-async function setSummaryLength(): Promise<void> {
+async function setSummaryLength(resource: Uri | undefined): Promise<void> {
   const entered = await window.showInputBox({
     prompt: "Word budget for the AI executive summary",
-    value: String(currentMaxWords()),
+    value: String(currentMaxWords(resource)),
     validateInput: (value) =>
       /^\d+$/.test(value.trim()) && Number(value) > 0 ? undefined : "Enter a whole number greater than zero.",
   });
   if (entered === undefined) {
     return;
   }
-  const configuration = workspace.getConfiguration("pdfCaseReview.ai");
+  const configuration = workspace.getConfiguration("pdfCaseReview.ai", resource);
   await configuration.update("maxWords", Number(entered.trim()), definedTarget(configuration, "maxWords"));
 }
 
@@ -86,14 +90,14 @@ const PROVIDERS = [
   { label: "Codex", id: "codex-cli" as const, cli: "codex login", envVar: "CODEX_HOME" },
 ];
 
-async function addAiAccount(): Promise<void> {
+async function addAiAccount(resource: Uri | undefined): Promise<void> {
   const provider = await window.showQuickPick(PROVIDERS, {
     placeHolder: "Which CLI is the account for?",
   });
   if (!provider) {
     return;
   }
-  const configuration = workspace.getConfiguration("pdfCaseReview.ai");
+  const configuration = workspace.getConfiguration("pdfCaseReview.ai", resource);
   const target = definedTarget(configuration, "accounts");
   const rawAccounts = valueAt<unknown[]>(configuration, "accounts", target) ?? [];
   const usedIds = accountIdsIn(asList(configuration.get<unknown>("accounts", [])));
@@ -198,6 +202,6 @@ function asList(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
-export function registerConfigureCommand(): Disposable[] {
-  return [commands.registerCommand("pdfCaseReview.configure", () => configure())];
+export function registerConfigureCommand(context: { tracker: ActiveDocumentTracker }): Disposable[] {
+  return [commands.registerCommand("pdfCaseReview.configure", () => configure(context.tracker))];
 }

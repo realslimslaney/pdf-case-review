@@ -283,6 +283,8 @@ async function reviewPrompt(
   const textDocument = await openRunFile(Uri.joinPath(runFolder, runFileName("prompt", timestamp)), text, {
     preview: false,
   });
+  // Prune here as well as after the reply, so cancelled or failed runs cannot pile up prompt files.
+  await pruneRunFiles(runFolder);
   const stats = promptStats(text);
   const send = `Send to ${providerLabel}`;
   const choice = await window.showInformationMessage(

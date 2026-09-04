@@ -102,6 +102,8 @@ export interface ViewerState {
   logs: string[];
 }
 
+const DOCUMENT_TEXT_CONCURRENCY = 8;
+
 const EMPTY_VIEWER_STATE: ViewerState = {
   loaded: false,
   loads: 0,
@@ -209,18 +211,26 @@ export class PdfCaseReviewEditorProvider implements CustomEditorProvider<PdfDocu
   }
 
   /** Every page's text for the document-text AI scope; entries are null when unavailable. */
+  /** Bounded workers: a 300-page PDF must not start 300 getTextContent calls in the webview at once. */
   async collectDocumentText(document: PdfDocument): Promise<DocumentTextPage[]> {
-    const pageNumbers = Array.from({ length: document.info.pageCount }, (_, index) => index + 1);
-    return Promise.all(
-      pageNumbers.map(async (page) => {
+    const pageCount = document.info.pageCount;
+    const pages: DocumentTextPage[] = new Array(pageCount);
+    let nextPage = 0;
+    const worker = async (): Promise<void> => {
+      while (nextPage < pageCount) {
+        nextPage += 1;
+        const page = nextPage;
         const entry: DocumentTextPage = { page, text: await this.getPageText(document, page) };
         const label = document.pageLabels?.[page - 1];
         if (label !== undefined) {
           entry.pageLabel = label;
         }
-        return entry;
-      }),
-    );
+        pages[page - 1] = entry;
+      }
+    };
+    const workers = Math.min(DOCUMENT_TEXT_CONCURRENCY, pageCount);
+    await Promise.all(Array.from({ length: workers }, worker));
+    return pages;
   }
 
   /** One page's text from the viewer; null when no viewer is open, it times out, or has no text. */
