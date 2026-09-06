@@ -948,7 +948,7 @@
     "@biomejs/biome": "^2.5.11",
     "@playwright/test": "^1.62.1",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^26.4.0",
+    "@types/node": "^26.4.1",
     "@types/pdfmake": "^0.3.3",
     "@types/vscode": "1.104.0",
     "@vitest/coverage-v8": "^4.1.11",
