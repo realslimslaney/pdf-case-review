@@ -24,8 +24,8 @@ import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
 import { aiSettings } from "../settings";
 import { isDesktopHost } from "../util/host";
+import { configDirFor, resolveIdentity } from "./accountResolution";
 import { ensureAttestation } from "./consentGate";
-import { resolveIdentity } from "./summarize";
 
 interface CommandContext {
   provider: PdfCaseReviewEditorProvider;
@@ -113,8 +113,7 @@ export async function addPageContext(context: CommandContext): Promise<boolean> 
     return false;
   }
   const attestation = gate.attestation;
-  const account = gate.accountId ? settings.accounts.find((entry) => entry.id === gate.accountId) : undefined;
-  const configDir = account?.provider === provider ? account.configDir : undefined;
+  const configDir = configDirFor(settings, gate.accountId);
 
   const { ProviderRunCancelled, runProvider } = await import("../desktop/aiProviders");
   const generated: AiPageContext[] = [];

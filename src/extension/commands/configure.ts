@@ -4,7 +4,8 @@
 
 import { commands, type Disposable, type Uri, window, workspace } from "vscode";
 import {
-  accountIdsIn,
+  accountKey,
+  accountKeysIn,
   defaultConfigDir,
   mergeAccountSettings,
   type NewAccountInput,
@@ -100,15 +101,15 @@ async function addAiAccount(resource: Uri | undefined): Promise<void> {
   const configuration = workspace.getConfiguration("pdfCaseReview.ai", resource);
   const target = definedTarget(configuration, "accounts");
   const rawAccounts = valueAt<unknown[]>(configuration, "accounts", target) ?? [];
-  const usedIds = accountIdsIn(asList(configuration.get<unknown>("accounts", [])));
+  const usedKeys = accountKeysIn(asList(configuration.get<unknown>("accounts", [])));
   const id = await window.showInputBox({
     prompt: "A short name for the account; rules select it by this id",
     value: "school",
     validateInput: (value) =>
       !validAccountId(value)
         ? "Use lowercase letters, digits and dashes, starting with a letter or digit."
-        : usedIds.has(value)
-          ? "This id is already in pdfCaseReview.ai.accounts."
+        : usedKeys.has(accountKey(value, provider.id))
+          ? `This id is already registered for ${provider.label}.`
           : undefined,
   });
   if (!id) {

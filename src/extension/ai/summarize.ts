@@ -36,9 +36,10 @@ import type { AiSummary } from "../../core/sidecar/types";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
 import type { PdfDocument } from "../editor/pdfDocument";
-import { type AiSettings, aiSettings, setAiProvider } from "../settings";
+import { aiSettings, setAiProvider } from "../settings";
 import { isDesktopHost } from "../util/host";
 import { writeBytes } from "../util/writeBytes";
+import { configDirFor, resolveIdentity } from "./accountResolution";
 import { ensureAttestation } from "./consentGate";
 import { markdownBody } from "./manualCommands";
 
@@ -55,31 +56,6 @@ function activeDocument(context: CommandContext): PdfDocument | undefined {
     void window.showInformationMessage("PDF Case Review: open a PDF first.");
   }
   return document;
-}
-
-/**
- * The account a rule names must belong to the active provider: the gate records the identity it
- * verified, so the run may never execute under a different CLI or login directory than that.
- */
-export async function resolveIdentity(settings: AiSettings, accountId: string | undefined) {
-  const desktop = await import("../desktop/identity");
-  if (accountId !== undefined) {
-    const account = settings.accounts.find((entry) => entry.id === accountId);
-    if (!account) {
-      throw new Error(
-        `a requiredAccount rule names the account "${accountId}", but pdfCaseReview.ai.accounts has ` +
-          "no such entry.",
-      );
-    }
-    if (account.provider !== settings.provider) {
-      throw new Error(
-        `the matched requiredAccount rule selects account "${accountId}" (${account.provider}), but ` +
-          `pdfCaseReview.ai.provider is ${settings.provider}. Align the rule and the provider.`,
-      );
-    }
-    return desktop.whoAmIForAccount(account);
-  }
-  return settings.provider === "claude-cli" ? desktop.whoAmIClaude() : desktop.whoAmICodex();
 }
 
 export async function summarizeWithAi(context: CommandContext): Promise<boolean> {
@@ -177,8 +153,7 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
     gate.attestation,
     documentText,
   );
-  const account = gate.accountId ? settings.accounts.find((entry) => entry.id === gate.accountId) : undefined;
-  const configDir = account?.provider === settings.provider ? account.configDir : undefined;
+  const configDir = configDirFor(settings, gate.accountId);
 
   // The prompt tab is the transparency step: what the user reads (and may edit) is what is sent.
   const runFolder = aiRunFolder(context);
