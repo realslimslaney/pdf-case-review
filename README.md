@@ -2,7 +2,7 @@
 
 > Highlight PDFs by category inside VS Code, add notes, and turn them into a printable Word / PDF / Markdown report.
 
-**Version 0.5.0** <!-- x-release-please-version -->, published on the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=realslimslaney.pdf-case-review). Documentation lives at [realslimslaney.github.io/pdf-case-review](https://realslimslaney.github.io/pdf-case-review/); the architecture decisions and spike results are in `docs/explanation/decisions.md`.
+**Version 0.5.1** <!-- x-release-please-version -->, published on the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=realslimslaney.pdf-case-review). Documentation lives at [realslimslaney.github.io/pdf-case-review](https://realslimslaney.github.io/pdf-case-review/); the architecture decisions and spike results are in `docs/explanation/decisions.md`.
 
 Built for reading business-school cases (Fact, Financial, Strategic implication, Concern, Question), but the categories are yours to define, so it works just as well for papers, contracts and textbooks.
 
