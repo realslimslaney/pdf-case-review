@@ -88,7 +88,17 @@ jobs:
           fi
           flag=""
           if [ "${{ needs.build.outputs.prerelease }}" = "true" ]; then flag="--pre-release"; fi
-          npx @vscode/vsce@3.9.2 publish $flag --packagePath pdf-case-review.vsix
+          # The gallery handshake times out often and vsce does not retry (microsoft/vscode-vsce#926).
+          # A timeout can also land after the upload, so retries skip an already-published version.
+          for attempt in 1 2 3 4 5; do
+            if npx @vscode/vsce@3.9.2 publish $flag --skip-duplicate --packagePath pdf-case-review.vsix; then
+              exit 0
+            fi
+            echo "::warning::Marketplace publish attempt $attempt failed; retrying in $((attempt * 30)) s"
+            sleep $((attempt * 30))
+          done
+          echo "::error::Marketplace publish failed after 5 attempts"
+          exit 1
 
   publish-openvsx:
     needs: build
@@ -111,4 +121,12 @@ jobs:
           fi
           flag=""
           if [ "${{ needs.build.outputs.prerelease }}" = "true" ]; then flag="--pre-release"; fi
-          npx ovsx@1.1.1 publish pdf-case-review.vsix $flag -p "$OVSX_PAT"
+          for attempt in 1 2 3; do
+            if npx ovsx@1.1.1 publish pdf-case-review.vsix $flag --skip-duplicate -p "$OVSX_PAT"; then
+              exit 0
+            fi
+            echo "::warning::Open VSX publish attempt $attempt failed; retrying in $((attempt * 30)) s"
+            sleep $((attempt * 30))
+          done
+          echo "::error::Open VSX publish failed after 3 attempts"
+          exit 1
