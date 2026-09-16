@@ -2,8 +2,11 @@
 // same login directory, so both go through here; a rule naming an id the active provider has no
 // entry for is refused with the fix spelled out, never silently run on the default login.
 
+import { type Uri, window } from "vscode";
+
 import { type AiProvider, accountFor, providersFor } from "../../core/ai/accounts";
 import type { ProviderIdentity } from "../../core/ai/identity";
+import { addAiAccount } from "../commands/configure";
 import type { AiSettings } from "../settings";
 
 export class MissingAccountError extends Error {
@@ -58,4 +61,18 @@ export async function resolveIdentity(
 /** The login directory for the gate's account; undefined means the provider's default login. */
 export function configDirFor(settings: AiSettings, accountId: string | undefined): string | undefined {
   return accountId === undefined ? undefined : requiredAccount(settings, accountId).configDir;
+}
+
+/** Reports a gate failure; a missing per-provider account offers the guided flow with the id preset. */
+export async function showGateError(error: unknown, resource: Uri | undefined): Promise<void> {
+  const message = `PDF Case Review: ${error instanceof Error ? error.message : String(error)}`;
+  if (!(error instanceof MissingAccountError)) {
+    void window.showErrorMessage(message);
+    return;
+  }
+  const add = "Add an AI Account...";
+  const choice = await window.showErrorMessage(message, add);
+  if (choice === add) {
+    await addAiAccount(resource, { provider: error.provider, id: error.accountId });
+  }
 }

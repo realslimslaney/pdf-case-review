@@ -18,14 +18,16 @@ import {
   pageContextInputDigest,
   pagesNeedingContext,
 } from "../../core/ai/pageContext";
+import { looksLikeUsageLimit } from "../../core/ai/providerErrors";
 import { formatCitation } from "../../core/report/model";
 import type { AiPageContext } from "../../core/sidecar/types";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
 import { aiSettings } from "../settings";
 import { isDesktopHost } from "../util/host";
-import { configDirFor, resolveIdentity } from "./accountResolution";
+import { configDirFor, resolveIdentity, showGateError } from "./accountResolution";
 import { ensureAttestation } from "./consentGate";
+import { offerProviderSwitch } from "./summarize";
 
 interface CommandContext {
   provider: PdfCaseReviewEditorProvider;
@@ -103,9 +105,7 @@ export async function addPageContext(context: CommandContext): Promise<boolean> 
       editorProvider: context.provider,
     });
   } catch (error) {
-    void window.showErrorMessage(
-      `PDF Case Review: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    await showGateError(error, document.uri);
     return false;
   }
   if (!gate.ok) {
@@ -181,9 +181,14 @@ export async function addPageContext(context: CommandContext): Promise<boolean> 
   const done = `${generated.length} page${generated.length === 1 ? "" : "s"} saved`;
   if (failed !== undefined) {
     const where = failed.page > 0 ? ` on page ${citationLabel(failed.page)}` : "";
-    void window.showErrorMessage(
-      `PDF Case Review: page context failed${where} (${failed.message}); later pages were not attempted. ${done}.`,
-    );
+    context.output.error(`addPageContext failed${where}: ${failed.message}`);
+    const headline = looksLikeUsageLimit(failed.message)
+      ? `${desktop.PROVIDER_LABEL[provider]} reports a usage limit${where}; switch to the other provider for now`
+      : `page context failed${where} (${failed.message})`;
+    const message = `PDF Case Review: ${headline}; later pages were not attempted. ${done}.`;
+    if (await offerProviderSwitch(context, message, provider)) {
+      return addPageContext(context);
+    }
     return generated.length > 0;
   }
   if (generated.length === 0) {

@@ -65,18 +65,54 @@ When a rule matches and the signed-in email differs, the AI step is refused with
 
 ### Two accounts without logging out
 
-If you switch accounts often, keep a second CLI login in its own directory and register it:
+If you switch accounts often, keep a second CLI login in its own directory and register it. An `id` is
+unique per provider, not globally, so register the same id once for each CLI you use:
 
 ```jsonc
 "pdfCaseReview.ai.accounts": [
-  { "id": "school", "provider": "claude-cli", "configDir": "~/.claude-school" }
+  { "id": "school", "provider": "claude-cli", "configDir": "~/.claude-school" },
+  { "id": "school", "provider": "codex-cli", "configDir": "~/.codex-school" }
 ],
 "pdfCaseReview.ai.requiredAccount": [
-  { "when": { "protected": true }, "email": "you@school.edu", "use": "school" }
+  { "when": { "protected": true }, "use": "school" }
 ]
 ```
 
-The **Configure** button in the viewer's title bar ($(gear)) has an **Add an AI Account** flow that writes both settings for you and opens a sign-in terminal with the directory already on the environment. By hand instead: run the CLI with the directory set, for example in PowerShell: `$env:CLAUDE_CONFIG_DIR = "$HOME\.claude-school"; claude` and sign in. From then on the extension sets `CLAUDE_CONFIG_DIR` (or `CODEX_HOME`) on the spawned CLI itself and verifies the email it finds there; you never export environment variables for VS Code. To switch the account your terminal and the Claude Code chat panel use as well, see [Use personal and school Claude accounts](two-claude-accounts.md).
+A rule's `use` picks the entry for the active provider: with `pdfCaseReview.ai.provider` set to
+`claude-cli` a protected document runs under `~/.claude-school`, and switching the provider to `codex-cli`
+moves it to `~/.codex-school` without touching the rule. When a matched rule names an id that has no entry
+for the active provider, the run is refused with an error naming the fix, and its **Add an AI Account...**
+button opens the guided flow with the provider and id already filled in. Listing the same id twice for one
+provider is reported as a warning and the first entry wins. Leave `email` off a rule that has `use` when
+the two logins have different addresses: `email` is checked against whichever login runs, so one address
+cannot fit both.
+
+The **Configure** button in the viewer's title bar ($(gear)) has an **Add an AI Account** flow that writes
+both settings for you, creates the login directory and opens a sign-in terminal with the directory already
+on the environment. When the id is already registered for the other provider and rules select it, the flow
+skips the "when should this account be used?" question and tells you those rules now cover the new
+provider as well. By hand instead: run the CLI with the directory set, for example in PowerShell:
+`$env:CLAUDE_CONFIG_DIR = "$HOME\.claude-school"; claude` and sign in. From then on the extension sets
+`CLAUDE_CONFIG_DIR` (or `CODEX_HOME`) on the spawned CLI itself and verifies the email it finds there; you
+never export environment variables for VS Code. To switch the account your terminal and the Claude Code
+chat panel use as well, see [Use personal and school Claude accounts](two-claude-accounts.md).
+
+While a PDF is open, the status bar shows the provider and the account the document would run under
+(`$(sparkle) Claude Code · school`), with the signed-in email and login directory in its tooltip. A warning
+background means the run would be refused as configured, for example `$(warning) Codex · no "school"
+login`. Clicking the item opens the provider picker.
+
+#### When a plan hits its monthly limit
+
+Click the AI status bar item or run **PDF Case Review: Choose AI Provider...**, pick the other CLI, and
+answer the consent question once more on the next run (the consent is recorded per provider, so a switch
+re-asks it). The same rules apply: a protected document still runs under the `school` entry, now the one for
+the provider you picked. Each CLI in the picker is probed under the login this document's rules select, so
+the email shown is the one the gate will verify; if the other CLI has no login registered under that id, the
+picker says so and offers **Add an AI Account...** after you pick it. When a run fails, the error
+notification carries a **Switch AI Provider...** button that reruns the command under the provider you pick
+there. A failure that reads like a usage limit is reported as "Claude Code reports a usage limit; switch to
+the other provider for now" (or Codex), with the raw error in the output channel.
 
 ## B. The agent reads your notes directly
 

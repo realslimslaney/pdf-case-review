@@ -32,14 +32,16 @@ import {
   runFileName,
   runTimestamp,
 } from "../../core/ai/promptReview";
+import { looksLikeUsageLimit } from "../../core/ai/providerErrors";
 import type { AiSummary } from "../../core/sidecar/types";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
 import type { PdfDocument } from "../editor/pdfDocument";
-import { aiSettings, setAiProvider } from "../settings";
+import { aiSettings } from "../settings";
 import { isDesktopHost } from "../util/host";
 import { writeBytes } from "../util/writeBytes";
-import { configDirFor, resolveIdentity } from "./accountResolution";
+import { configDirFor, resolveIdentity, showGateError } from "./accountResolution";
+import { chooseProvider, pickProvider } from "./chooseProvider";
 import { ensureAttestation } from "./consentGate";
 import { markdownBody } from "./manualCommands";
 
@@ -136,8 +138,7 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
       ...(documentText ? { documentTextCoverage: documentText } : {}),
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    void window.showErrorMessage(`PDF Case Review: ${message}`);
+    await showGateError(error, document.uri);
     return false;
   }
   if (!gate.ok) {
@@ -228,9 +229,31 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
       return false;
     }
     const message = error instanceof Error ? error.message : String(error);
-    void window.showErrorMessage(`PDF Case Review: the AI summary failed (${message}).`);
+    context.output.error(`summarizeWithAi failed: ${message}`);
+    const label = desktop.PROVIDER_LABEL[provider];
+    const headline = looksLikeUsageLimit(message)
+      ? `${label} reports a usage limit; switch to the other provider for now`
+      : `the AI summary failed (${message})`;
+    if (await offerProviderSwitch(context, `PDF Case Review: ${headline}.`, provider)) {
+      return summarizeWithAi(context);
+    }
     return false;
   }
+}
+
+/** Shows the failure with a switch button; true when a different CLI provider was picked. */
+export async function offerProviderSwitch(
+  context: CommandContext,
+  message: string,
+  current: "claude-cli" | "codex-cli",
+): Promise<boolean> {
+  const switchButton = "Switch AI Provider...";
+  const choice = await window.showErrorMessage(message, switchButton);
+  if (choice !== switchButton) {
+    return false;
+  }
+  const picked = await pickProvider(context);
+  return (picked === "claude-cli" || picked === "codex-cli") && picked !== current;
 }
 
 function aiRunFolder(context: CommandContext): Uri {
@@ -300,92 +323,6 @@ export async function showSummary(context: CommandContext): Promise<void> {
   const uri = Uri.joinPath(runFolder, runFileName("cached-output", runTimestamp(new Date())));
   await openRunFile(uri, cachedSummaryDocument(summary), { preview: false });
   await pruneRunFiles(runFolder);
-}
-
-type ProviderPick = "off" | "claude-cli" | "codex-cli" | "manual";
-
-/**
- * The provider QuickPick. Applies the setting for real providers and returns what was picked, so
- * `summarizeWithAi` can continue straight into the flow; "manual" turns the setting off so a stale
- * CLI provider stops intercepting the flow (the copy and paste commands work with the provider off).
- */
-async function pickProvider(context: CommandContext): Promise<ProviderPick | undefined> {
-  interface ProviderItem {
-    label: string;
-    description: string;
-    detail?: string;
-    id: ProviderPick;
-    fix?: string;
-  }
-  const items: ProviderItem[] = [
-    { label: "Off", description: "No AI. The manual copy and paste commands still work.", id: "off" },
-  ];
-  if (isDesktopHost() && workspace.isTrusted) {
-    const desktop = await import("../desktop/identity");
-    for (const probe of await desktop.probeProviders()) {
-      if (probe.available) {
-        const identity = probe.identity;
-        const account = identity?.email
-          ? `${identity.email}${identity.organization ? ` · ${identity.organization}` : ""}`
-          : "installed, not signed in";
-        items.push({ label: probe.label, description: `✓ ${account}`, id: probe.provider });
-      } else {
-        const item: ProviderItem = {
-          label: probe.label,
-          description: "✗ not found on PATH",
-          id: probe.provider,
-        };
-        if (probe.fix) {
-          item.detail = probe.fix;
-          item.fix = probe.fix;
-        }
-        items.push(item);
-      }
-    }
-  } else {
-    const reason = workspace.isTrusted
-      ? "CLI providers need desktop VS Code."
-      : "CLI providers are disabled in untrusted workspaces.";
-    items.push(
-      { label: "Claude Code", description: `✗ ${reason}`, id: "claude-cli", fix: reason },
-      { label: "Codex", description: `✗ ${reason}`, id: "codex-cli", fix: reason },
-    );
-  }
-  if (workspace.isTrusted) {
-    items.push({
-      label: "Manual",
-      description: "Copy the summary prompt, paste the answer back. Works without any CLI.",
-      id: "manual",
-    });
-  } else {
-    const reason = "AI features are disabled in untrusted workspaces.";
-    items.push({ label: "Manual", description: `✗ ${reason}`, id: "manual", fix: reason });
-  }
-  const picked = await window.showQuickPick(items, { placeHolder: "AI provider for executive summaries" });
-  if (!picked) {
-    return undefined;
-  }
-  if (picked.fix) {
-    void window.showInformationMessage(`PDF Case Review: ${picked.label} is unavailable. ${picked.fix}`);
-    return undefined;
-  }
-  if (picked.id === "manual") {
-    await setAiProvider("off", context.tracker.active?.uri);
-    void window.showInformationMessage("PDF Case Review: AI provider set to manual (copy and paste).");
-    context.output.info("ai.provider set to off (manual)");
-    return "manual";
-  }
-  await setAiProvider(picked.id, context.tracker.active?.uri);
-  void window.showInformationMessage(`PDF Case Review: AI provider set to ${picked.label.toLowerCase()}.`);
-  context.output.info(`ai.provider set to ${picked.id}`);
-  return picked.id;
-}
-
-export async function chooseProvider(context: CommandContext): Promise<void> {
-  const picked = await pickProvider(context);
-  if (picked === "manual") {
-    await commands.executeCommand("pdfCaseReview.ai.copySummaryPrompt");
-  }
 }
 
 export function registerAiProviderCommands(context: CommandContext): Disposable[] {
