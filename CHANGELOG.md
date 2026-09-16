@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and is maintained by release-please
 from Conventional Commits.
 
+## [0.5.1](https://github.com/realslimslaney/pdf-case-review/compare/v0.5.0...v0.5.1) (2026-09-16)
+
+
+### Features
+
+* **ai:** one-click switch between Claude Code and Codex for the same account rules ([#51](https://github.com/realslimslaney/pdf-case-review/issues/51)) ([3f7428d](https://github.com/realslimslaney/pdf-case-review/commit/3f7428df3393e3fe9c3f744fe2ec87e360325829))
+
 ## [0.5.0](https://github.com/realslimslaney/pdf-case-review/compare/v0.1.1...v0.5.0) (2026-09-04)
 
 
