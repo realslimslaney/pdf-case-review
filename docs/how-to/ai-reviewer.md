@@ -1,5 +1,8 @@
 # Use Claude Code or Codex as your reviewer
 
+If you are an HBS student, read [Stay compliant with HBS AI policies](hbs-ai-compliance.md) before
+sending HBS course materials to either provider.
+
 Two independent ways to bring AI into a review, both optional and off by default. By default the summary is built from your highlighted excerpts, your notes and the document's extracted text; a setting narrows that to notes only (see [choosing the context scope](#choose-how-much-context-is-sent) below), and the PDF file itself is never sent. The report sets AI text apart in grey italics with a legend.
 
 ## A. The built-in executive summary

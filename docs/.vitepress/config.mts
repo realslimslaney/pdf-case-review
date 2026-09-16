@@ -31,12 +31,16 @@ export default defineConfig({
           { text: "Work with very large PDFs", link: "/how-to/large-pdfs" },
           { text: "Install a command-line AI assistant", link: "/how-to/install-an-ai-cli" },
           { text: "Claude Code or Codex as reviewer", link: "/how-to/ai-reviewer" },
+          { text: "Stay compliant with HBS AI policies", link: "/how-to/hbs-ai-compliance" },
           { text: "Personal and school Claude accounts", link: "/how-to/two-claude-accounts" },
         ],
       },
       {
         text: "For maintainers",
-        items: [{ text: "Publish a release", link: "/how-to/release" }],
+        items: [
+          { text: "Publish a release", link: "/how-to/release" },
+          { text: "Upload a release by hand", link: "/how-to/manual-marketplace-upload" },
+        ],
       },
       {
         text: "Reference",

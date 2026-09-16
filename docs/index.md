@@ -8,8 +8,10 @@ Organized by the [diataxis](https://diataxis.fr/) framework:
   [scanned PDFs](how-to/scanned-pdfs.md), [very large PDFs](how-to/large-pdfs.md),
   [install a command-line AI assistant](how-to/install-an-ai-cli.md),
   [an AI reviewer](how-to/ai-reviewer.md),
+  [staying compliant with HBS AI policies](how-to/hbs-ai-compliance.md),
   [personal and school Claude accounts](how-to/two-claude-accounts.md).
-  For maintainers: [publish a release](how-to/release.md).
+  For maintainers: [publish a release](how-to/release.md),
+  [upload a release by hand](how-to/manual-marketplace-upload.md).
 - Reference: [commands](reference/commands.md), [keybindings](reference/keybindings.md),
   [settings](reference/settings.md), [the sidecar file](reference/sidecar.md).
 - Explanation: why things are the way they are: [architecture decisions](explanation/decisions.md)
