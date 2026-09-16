@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and is maintained by release-please
 from Conventional Commits.
 
+## [0.5.2](https://github.com/realslimslaney/pdf-case-review/compare/v0.5.1...v0.5.2) (2026-09-16)
+
+
+### Documentation
+
+* start the release workflow by hand after the tag ([#55](https://github.com/realslimslaney/pdf-case-review/issues/55)) ([614a385](https://github.com/realslimslaney/pdf-case-review/commit/614a385fca6d80f025bbf69a7ec32ee9a32303ab))
+
 ## [0.5.1](https://github.com/realslimslaney/pdf-case-review/compare/v0.5.0...v0.5.1) (2026-09-16)
 
 
