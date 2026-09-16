@@ -48,6 +48,9 @@ The ruleset itself can only be created or changed by an admin.
 
 1. Merge Conventional-Commit PRs into `main`.
 2. release-please keeps a "chore: release X.Y.Z" PR up to date; merge it to tag `vX.Y.Z` and create the GitHub release.
-3. The `Release` workflow builds the VSIX, attaches it to the release, and, after your approval on the `release` environment, publishes to both marketplaces. Odd minor versions go to the pre-release channel automatically.
+3. Start the `Release` workflow by hand: Actions, Release, "Run workflow", and pick the tag `vX.Y.Z` as the ref (or `gh workflow run release.yml --ref vX.Y.Z`). The tag does not start it on its own, because release-please creates the tag with the workflow's own `GITHUB_TOKEN`, and GitHub never starts workflows from events made by that token.
+4. The workflow builds the VSIX, attaches it to the release, and then waits on the `release` environment. Approve the deployment under the run's "Review deployments" button; both marketplace publish jobs run after that. Odd minor versions go to the pre-release channel automatically.
+
+To make step 3 automatic, give release-please a token other than `GITHUB_TOKEN` (a fine-grained personal access token or a GitHub App installation token with contents and pull-requests write) and pass it as `token:` in `release-please.yml`; tags pushed with that token do trigger the `Release` workflow.
 
 Local dry run: `pnpm package && pnpm exec vsce ls` and install the `.vsix` into a clean profile (`code --profile temp --install-extension pdf-case-review-*.vsix`).
