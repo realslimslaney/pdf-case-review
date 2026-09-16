@@ -145,8 +145,8 @@ anything is sent:
 ```
 
 The **Configure...** gear in the viewer's title bar has an **Add an AI Account...** flow that writes both
-settings and opens a sign-in terminal. Details, including rules by folder or by the document's own
-authorization line, are in
+settings, creates the login directory and opens a sign-in terminal. Details, including rules by folder or
+by the document's own authorization line, are in
 [Use Claude Code or Codex as your reviewer](ai-reviewer.md#two-accounts-without-logging-out).
 
 ## 5. Optional: make the personal account ask before reading school files
@@ -170,7 +170,7 @@ its own `~/.claude-school/settings.json` and needs no rule.
 ## Codex
 
 Codex works the same way with `CODEX_HOME`, which relocates its `~/.codex` directory. Unlike Claude
-Code, Codex does not create the directory for you, so make it first, then sign in:
+Code, Codex does not create the directory for you, so when signing in by hand make it first:
 
 ```bash
 # macOS and Linux
@@ -183,9 +183,16 @@ New-Item -ItemType Directory -Force "$HOME\.codex-school" | Out-Null
 $env:CODEX_HOME = "$HOME\.codex-school"; codex
 ```
 
-Register it for the extension with `"provider": "codex-cli"` and `"configDir": "~/.codex-school"` in
-`pdfCaseReview.ai.accounts`. The switcher functions above translate directly: replace
-`CLAUDE_CONFIG_DIR` with `CODEX_HOME` and `claude` with `codex`.
+Register it for the extension under the same id as the Claude entry, `"school"`, with
+`"provider": "codex-cli"` and `"configDir": "~/.codex-school"` in `pdfCaseReview.ai.accounts`. An id is
+unique per provider, so the rule from step 4 keeps working: `use: "school"` picks the entry for whichever
+provider is active, and switching `pdfCaseReview.ai.provider` (click the AI status bar item, or run
+**Choose AI Provider...**) moves the run to the matching login directory without editing the rule. The
+guided **Add an AI Account...** flow does the same: pick Codex, enter `school`, and it creates the directory
+before opening the sign-in terminal, skipping the "when should this account be used?" question because the
+existing rule already covers the id. If your Codex login has a different email from your Claude login,
+drop `email` from the rule and rely on `use` alone. The switcher functions above translate directly:
+replace `CLAUDE_CONFIG_DIR` with `CODEX_HOME` and `claude` with `codex`.
 
 ## Troubleshooting
 

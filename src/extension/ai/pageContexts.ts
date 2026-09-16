@@ -18,14 +18,17 @@ import {
   pageContextInputDigest,
   pagesNeedingContext,
 } from "../../core/ai/pageContext";
+import { looksLikeUsageLimit } from "../../core/ai/providerErrors";
 import { formatCitation } from "../../core/report/model";
 import type { AiPageContext } from "../../core/sidecar/types";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
+import type { PdfDocument } from "../editor/pdfDocument";
 import { aiSettings } from "../settings";
 import { isDesktopHost } from "../util/host";
+import { configDirFor, resolveIdentity, showGateError } from "./accountResolution";
 import { ensureAttestation } from "./consentGate";
-import { resolveIdentity } from "./summarize";
+import { offerProviderSwitch } from "./summarize";
 
 interface CommandContext {
   provider: PdfCaseReviewEditorProvider;
@@ -40,6 +43,11 @@ export async function addPageContext(context: CommandContext): Promise<boolean> 
     void window.showInformationMessage("PDF Case Review: open a PDF first.");
     return false;
   }
+  return addPageContextFor(context, document);
+}
+
+/** The run for one document, captured up front so a retry after a provider switch targets the same PDF. */
+async function addPageContextFor(context: CommandContext, document: PdfDocument): Promise<boolean> {
   if (!workspace.isTrusted) {
     void window.showWarningMessage("PDF Case Review: AI features are disabled in untrusted workspaces.");
     return false;
@@ -103,9 +111,7 @@ export async function addPageContext(context: CommandContext): Promise<boolean> 
       editorProvider: context.provider,
     });
   } catch (error) {
-    void window.showErrorMessage(
-      `PDF Case Review: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    await showGateError(error, document.uri);
     return false;
   }
   if (!gate.ok) {
@@ -113,8 +119,7 @@ export async function addPageContext(context: CommandContext): Promise<boolean> 
     return false;
   }
   const attestation = gate.attestation;
-  const account = gate.accountId ? settings.accounts.find((entry) => entry.id === gate.accountId) : undefined;
-  const configDir = account?.provider === provider ? account.configDir : undefined;
+  const configDir = configDirFor(settings, gate.accountId);
 
   const { ProviderRunCancelled, runProvider } = await import("../desktop/aiProviders");
   const generated: AiPageContext[] = [];
@@ -182,9 +187,14 @@ export async function addPageContext(context: CommandContext): Promise<boolean> 
   const done = `${generated.length} page${generated.length === 1 ? "" : "s"} saved`;
   if (failed !== undefined) {
     const where = failed.page > 0 ? ` on page ${citationLabel(failed.page)}` : "";
-    void window.showErrorMessage(
-      `PDF Case Review: page context failed${where} (${failed.message}); later pages were not attempted. ${done}.`,
-    );
+    context.output.error(`addPageContext failed${where}: ${failed.message}`);
+    const headline = looksLikeUsageLimit(failed.message)
+      ? `${desktop.PROVIDER_LABEL[provider]} reports a usage limit${where}; switch to the other provider for now`
+      : `page context failed${where} (${failed.message})`;
+    const message = `PDF Case Review: ${headline}; later pages were not attempted. ${done}.`;
+    if (await offerProviderSwitch(context, document, message, provider)) {
+      return addPageContextFor(context, document);
+    }
     return generated.length > 0;
   }
   if (generated.length === 0) {

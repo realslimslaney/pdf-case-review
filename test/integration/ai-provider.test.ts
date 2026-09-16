@@ -5,6 +5,7 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
 
+import type { AiStatusSnapshot } from "../../src/extension/views/aiStatusBar";
 import {
   closeAll,
   copyFixture,
@@ -29,6 +30,41 @@ suite("M2 phase 5: AI provider command", () => {
 
   suiteTeardown(async () => {
     await closeAll();
+  });
+
+  test("the AI status bar follows the provider and the account the rules select", async () => {
+    const configuration = () => vscode.workspace.getConfiguration("pdfCaseReview.ai");
+    const status = () => vscode.commands.executeCommand<AiStatusSnapshot>("pdfCaseReview.debug.getAiStatus");
+    const waitForText = (text: string) =>
+      waitFor(
+        `AI status bar to read ${text}`,
+        async () => {
+          const snapshot = await status();
+          return snapshot?.visible && snapshot.text === text ? snapshot : undefined;
+        },
+        15_000,
+      );
+    try {
+      const off = await waitForText("$(sparkle) AI off");
+      assert.match(off.tooltip, /AI is off/);
+      await configuration().update(
+        "accounts",
+        [{ id: "school", provider: "claude-cli", configDir: "~/.claude-school" }],
+        vscode.ConfigurationTarget.Global,
+      );
+      await configuration().update("requiredAccount", [{ use: "school" }], vscode.ConfigurationTarget.Global);
+      await configuration().update("provider", "claude-cli", vscode.ConfigurationTarget.Global);
+      const claude = await waitForText("$(sparkle) Claude Code · school");
+      assert.match(claude.tooltip, /account "school"/);
+      await configuration().update("provider", "codex-cli", vscode.ConfigurationTarget.Global);
+      const codex = await waitForText('$(warning) Codex · no "school" login');
+      assert.match(codex.tooltip, /only registered for Claude Code/);
+    } finally {
+      for (const key of ["provider", "requiredAccount", "accounts"]) {
+        await configuration().update(key, undefined, vscode.ConfigurationTarget.Global);
+      }
+    }
+    await waitForText("$(sparkle) AI off");
   });
 
   test("with provider off, summarizeWithAi opens the picker; dismissing declines untouched", async () => {

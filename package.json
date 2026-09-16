@@ -851,7 +851,7 @@
               }
             }
           },
-          "markdownDescription": "Separate CLI login directories for people with more than one account, e.g. `[{ \"id\": \"school\", \"provider\": \"claude-cli\", \"configDir\": \"~/.claude-school\" }]`. A `#pdfCaseReview.ai.requiredAccount#` rule selects one with `use`; the extension sets `CLAUDE_CONFIG_DIR` or `CODEX_HOME` on the spawned CLI itself. The account's `provider` must match `#pdfCaseReview.ai.provider#`."
+          "markdownDescription": "Separate CLI login directories for people with more than one account, e.g. `[{ \"id\": \"school\", \"provider\": \"claude-cli\", \"configDir\": \"~/.claude-school\" }]`. A `#pdfCaseReview.ai.requiredAccount#` rule selects one with `use`; the extension sets `CLAUDE_CONFIG_DIR` or `CODEX_HOME` on the spawned CLI itself. The same `id` may appear once per provider; a rule's `use` picks the entry for the active provider, so switching `#pdfCaseReview.ai.provider#` switches the login directory with it."
         },
         "pdfCaseReview.ai.requireVerifiedAccountForProtected": {
           "type": "boolean",
@@ -945,10 +945,10 @@
   },
   "packageManager": "pnpm@11.24.0",
   "devDependencies": {
-    "@biomejs/biome": "^2.5.11",
-    "@playwright/test": "^1.62.1",
+    "@biomejs/biome": "^2.5.12",
+    "@playwright/test": "^1.63.0",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^26.4.1",
+    "@types/node": "^26.5.1",
     "@types/pdfmake": "^0.3.3",
     "@types/vscode": "1.104.0",
     "@vitest/coverage-v8": "^4.1.11",
@@ -964,7 +964,7 @@
   },
   "dependencies": {
     "docx": "^9.7.1",
-    "marked": "^18.0.11",
+    "marked": "^18.0.12",
     "pdf-lib": "^1.17.1",
     "pdfmake": "^0.3.11"
   }

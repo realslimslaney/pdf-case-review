@@ -8,6 +8,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
+import { type AiProvider, PROVIDER_LABEL } from "../../core/ai/accounts";
 import { type ProviderIdentity, parseClaudeAuthStatus, parseCodexAuthJson } from "../../core/ai/identity";
 
 const run = promisify(execFile);
@@ -79,7 +80,7 @@ export const INSTALL_FIX = {
   "codex-cli": "Install it: npm i -g @openai/codex, then run `codex` once to sign in.",
 } as const;
 
-export const PROVIDER_LABEL = { "claude-cli": "Claude Code", "codex-cli": "Codex" } as const;
+export { PROVIDER_LABEL };
 
 /** Whether the provider's binary is on PATH; the cheap guard before any consent dialog. */
 export async function providerOnPath(provider: "claude-cli" | "codex-cli"): Promise<boolean> {
@@ -87,50 +88,32 @@ export async function providerOnPath(provider: "claude-cli" | "codex-cli"): Prom
 }
 
 export interface ProviderProbe {
-  provider: "claude-cli" | "codex-cli";
+  provider: AiProvider;
   label: string;
   available: boolean;
   identity: ProviderIdentity | null;
+  /** The login directory the identity was read from; null for the provider's default. */
+  configDir: string | null;
   /** One-line fix shown when the option is unavailable. */
   fix: string | null;
 }
 
-export async function probeProviders(): Promise<ProviderProbe[]> {
+/** Probes both CLIs, reading each identity from `configDirs[provider]` when given, else the default login. */
+export async function probeProviders(
+  configDirs: Partial<Record<AiProvider, string>> = {},
+): Promise<ProviderProbe[]> {
   const [claudeFound, codexFound] = await Promise.all([onPath("claude"), onPath("codex")]);
-  const probes: ProviderProbe[] = [];
-  probes.push(
-    claudeFound
-      ? {
-          provider: "claude-cli",
-          label: "Claude Code",
-          available: true,
-          identity: await whoAmIClaude(),
-          fix: null,
-        }
-      : {
-          provider: "claude-cli",
-          label: "Claude Code",
-          available: false,
-          identity: null,
-          fix: INSTALL_FIX["claude-cli"],
-        },
-  );
-  probes.push(
-    codexFound
-      ? {
-          provider: "codex-cli",
-          label: "Codex",
-          available: true,
-          identity: await whoAmICodex(),
-          fix: null,
-        }
-      : {
-          provider: "codex-cli",
-          label: "Codex",
-          available: false,
-          identity: null,
-          fix: INSTALL_FIX["codex-cli"],
-        },
-  );
-  return probes;
+  const probe = async (provider: AiProvider, found: boolean): Promise<ProviderProbe> => {
+    const label = PROVIDER_LABEL[provider];
+    const configDir = configDirs[provider] ?? null;
+    if (!found) {
+      return { provider, label, available: false, identity: null, configDir, fix: INSTALL_FIX[provider] };
+    }
+    const identity =
+      provider === "claude-cli"
+        ? await whoAmIClaude(configDir ?? undefined)
+        : await whoAmICodex(configDir ?? undefined);
+    return { provider, label, available: true, identity, configDir, fix: null };
+  };
+  return [await probe("claude-cli", claudeFound), await probe("codex-cli", codexFound)];
 }

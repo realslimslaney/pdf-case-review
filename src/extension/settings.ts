@@ -8,6 +8,7 @@ import {
   window,
   workspace,
 } from "vscode";
+import { type AiAccount, parseAccounts } from "../core/ai/accounts";
 import type { RequiredAccountRule } from "../core/ai/consent";
 import type { AiContextScope } from "../core/ai/documentText";
 import { DEFAULT_PAGE_CONTEXT_MIN_HIGHLIGHTS } from "../core/ai/pageContext";
@@ -70,11 +71,7 @@ export function reportSettings(uri: Uri): ReportSettings {
 
 export type AiProviderSetting = "off" | "claude-cli" | "codex-cli";
 
-export interface AiAccount {
-  id: string;
-  provider: "claude-cli" | "codex-cli";
-  configDir: string;
-}
+export type { AiAccount };
 
 export interface AiSettings {
   provider: AiProviderSetting;
@@ -139,40 +136,8 @@ function readRules(raw: unknown, warnings: string[]): RequiredAccountRule[] {
   return rules;
 }
 
-function readAccounts(raw: unknown, warnings: string[]): AiAccount[] {
-  if (raw === undefined || raw === null) {
-    return [];
-  }
-  if (!Array.isArray(raw)) {
-    warnings.push("accounts must be a list");
-    return [];
-  }
-  const accounts: AiAccount[] = [];
-  for (const entry of raw) {
-    if (typeof entry !== "object" || entry === null) {
-      warnings.push("account entries must be objects");
-      continue;
-    }
-    const source = entry as Record<string, unknown>;
-    const id = source["id"];
-    const provider = source["provider"];
-    const configDir = source["configDir"];
-    if (
-      typeof id !== "string" ||
-      id === "" ||
-      (provider !== "claude-cli" && provider !== "codex-cli") ||
-      typeof configDir !== "string" ||
-      configDir === ""
-    ) {
-      warnings.push(`account "${typeof id === "string" ? id : "?"}" needs id, provider and configDir`);
-      continue;
-    }
-    accounts.push({ id, provider, configDir });
-  }
-  return accounts;
-}
-
-export function aiSettings(uri: Uri, output: LogOutputChannel): AiSettings {
+/** Reads and validates the AI settings without reporting; `aiSettings` is the reporting wrapper. */
+export function readAiSettings(uri: Uri): { settings: AiSettings; warnings: string[] } {
   const configuration = workspace.getConfiguration("pdfCaseReview.ai", uri);
   const provider = configuration.get<string>("provider", "off");
   const maxWords = configuration.get<number>("maxWords", DEFAULT_MAX_WORDS);
@@ -188,7 +153,7 @@ export function aiSettings(uri: Uri, output: LogOutputChannel): AiSettings {
     maxWords: Number.isInteger(maxWords) && maxWords > 0 ? maxWords : DEFAULT_MAX_WORDS,
     reviewPrompt: configuration.get<boolean>("reviewPrompt", true) !== false,
     requiredAccount: readRules(configuration.get<unknown>("requiredAccount"), warnings),
-    accounts: readAccounts(configuration.get<unknown>("accounts"), warnings),
+    accounts: parseAccounts(configuration.get<unknown>("accounts"), warnings),
     requireVerifiedAccountForProtected:
       configuration.get<boolean>("requireVerifiedAccountForProtected", true) !== false,
     pageContextMinHighlights:
@@ -197,6 +162,11 @@ export function aiSettings(uri: Uri, output: LogOutputChannel): AiSettings {
         : DEFAULT_PAGE_CONTEXT_MIN_HIGHLIGHTS,
     contextScope: configuration.get<string>("contextScope") === "notes" ? "notes" : "document-text",
   };
+  return { settings, warnings };
+}
+
+export function aiSettings(uri: Uri, output: LogOutputChannel): AiSettings {
+  const { settings, warnings } = readAiSettings(uri);
   if (warnings.length > 0) {
     const detail = warnings.join("; ");
     output.warn(`pdfCaseReview.ai settings have invalid entries, ignoring them: ${detail}`);

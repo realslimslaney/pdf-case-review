@@ -10,7 +10,6 @@ import {
   checkRule,
   createAttestation,
   ELIGIBILITY_QUESTION,
-  extractAuthorizationLine,
   FIRST_USE_TEXT,
   firstMatchingRule,
   needsReconsent,
@@ -23,6 +22,7 @@ import { type AiConsent, countNotes } from "../../core/sidecar/types";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
 import type { PdfDocument } from "../editor/pdfDocument";
 import type { AiSettings } from "../settings";
+import { documentRuleFacts } from "./documentFacts";
 
 const FIRST_USE_KEY = "pdfCaseReview.ai.firstUseAcknowledged";
 
@@ -190,13 +190,8 @@ export async function ensureAttestation(document: PdfDocument, deps: GateDeps): 
     return { ok: false, reason: "AI features are disabled in untrusted workspaces." };
   }
 
-  const pageText = await deps.editorProvider.getPageText(document, 1);
-  const authorizationLine = pageText === null ? null : extractAuthorizationLine(pageText);
-  const facts = {
-    protected: document.protected,
-    authorizationLine,
-    filePath: document.uri.path,
-  };
+  const { facts, pageText } = await documentRuleFacts(document, deps.editorProvider, { needsLine: true });
+  const authorizationLine = facts.authorizationLine;
   const match = firstMatchingRule(deps.settings.requiredAccount, facts);
   if (match.kind === "needsAuthorizationLine") {
     const reason =

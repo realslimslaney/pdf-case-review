@@ -18,6 +18,7 @@ import {
   setHashMismatchTestResponder,
 } from "./editor/pdfCaseReviewEditorProvider";
 import { highlightsGroupBy } from "./settings";
+import { AiProviderStatusBar } from "./views/aiStatusBar";
 import { HighlightsTreeProvider, type TreeNode } from "./views/highlightsTree";
 import { NoteEditorViewProvider, setNoteDeleteTestResponder } from "./views/noteEditorView";
 import { HighlightsStatusBar, statusText } from "./views/statusBar";
@@ -56,6 +57,7 @@ export function activate(context: ExtensionContext): void {
     showCollapseAll: true,
   });
   const statusBar = new HighlightsStatusBar(tracker);
+  const aiStatusBar = new AiProviderStatusBar(tracker, provider);
   const noteEditor = new NoteEditorViewProvider(context.extensionUri, provider, tracker);
   void commands.executeCommand("setContext", GROUP_BY_KEY, highlightsGroupBy());
   context.subscriptions.push(
@@ -82,6 +84,7 @@ export function activate(context: ExtensionContext): void {
     tree,
     treeView,
     statusBar,
+    aiStatusBar,
     noteEditor,
     window.registerWebviewViewProvider(NoteEditorViewProvider.viewType, noteEditor),
     ...registerHighlightCommands({ provider, tracker, tree, treeView }),
@@ -105,6 +108,7 @@ export function activate(context: ExtensionContext): void {
       provider.request(uri, message),
     ),
     commands.registerCommand("pdfCaseReview.debug.getTrace", () => [...provider.trace]),
+    commands.registerCommand("pdfCaseReview.debug.getAiStatus", () => aiStatusBar.snapshot()),
     commands.registerCommand("pdfCaseReview.debug.getTreeSnapshot", () => ({
       ...tree.snapshot(),
       activeUri: tracker.active?.uri.toString() ?? null,

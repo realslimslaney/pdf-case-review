@@ -80,6 +80,24 @@ highlights and no notes under `notes`; additionally no extractable text under `d
 date once. One correction to the amendment above: `needsReconsent` now treats a wider consent as
 covering narrower runs, so only widening the scope re-asks; switching back to `notes` does not.
 
+**Amendment (2026-09-08): accounts resolve per provider.** The "Rules" paragraph above says a
+`requiredAccount` rule that selects an `ai.accounts` entry must select one for the active provider, and
+anything else is refused. The refusal stands, but the match is now made per provider rather than by
+comparing the entry's `provider` field with the setting: an `id` is unique per (id, provider) pair
+(`accountKey` in `src/core/ai/accounts.ts`), the same id may appear once for `claude-cli` and once for
+`codex-cli`, and a rule's `use` resolves to the entry for the active `pdfCaseReview.ai.provider`
+(`resolveAccount`). A matched rule whose id has no entry for the active provider is refused with a named
+fix (`MissingAccountError` in `src/extension/ai/accountResolution.ts`, whose toast opens the guided
+**Add an AI Account...** flow with provider and id preset); a duplicate pair warns and the first wins.
+Why: the owner's Claude plan hits its monthly usage limit, so switching to Codex for the rest of the
+month must be one action (the AI status bar item, `src/extension/views/aiStatusBar.ts`, or **Choose AI
+Provider...**) and must not require editing rules that encode a licensing obligation. The
+verified-identity-runs invariant is preserved because the gate and the spawn share one lookup:
+`configDirFor` in `src/extension/ai/accountResolution.ts` returns the directory the consent dialog probed,
+and the provider switch changes the consent record's provider, so the eligibility question is asked once
+more. A failed CLI run offers **Switch AI Provider...** and, when the failure text looks like a usage
+limit (`src/core/ai/providerErrors.ts`), says so instead of quoting the raw error.
+
 ## ADR-0007: Large-PDF memory limits are settings; `retainContextWhenHidden` stays on by default
 
 **Decision.** Three viewer settings govern memory on large documents: `pdfCaseReview.viewer.maxCanvasPixels` and `viewer.maxImageSize` (both `0` = keep the vendored PDF.js default, resource-scoped, applied when the document is reopened) and `viewer.retainContextWhenHidden` (default `true`, window-scoped). The retain flag is read once at provider registration because VS Code fixes `webviewOptions` there, so changing it needs a window reload and the setting description says so. The webview reads all annotations of a document with bounded concurrency (8 pages in flight) instead of strictly sequentially.
