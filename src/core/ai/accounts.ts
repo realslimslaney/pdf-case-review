@@ -7,6 +7,11 @@ import { firstMatchingRule, type RequiredAccountRule, type RuleFacts } from "./c
 
 export type AiProvider = "claude-cli" | "codex-cli";
 
+export const PROVIDER_LABEL: Record<AiProvider, string> = {
+  "claude-cli": "Claude Code",
+  "codex-cli": "Codex",
+};
+
 export interface AiAccount {
   id: string;
   provider: AiProvider;
