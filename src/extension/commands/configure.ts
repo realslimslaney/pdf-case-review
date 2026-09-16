@@ -2,13 +2,17 @@
 // pieces which are otherwise JSON-only. Its guided account flow writes `pdfCaseReview.ai.accounts`
 // and `requiredAccount`, then opens a sign-in terminal with the login directory on the environment.
 
-import { commands, type Disposable, type Uri, window, workspace } from "vscode";
+import { commands, type Disposable, Uri, window, workspace } from "vscode";
 import {
+  type AiProvider,
   accountKey,
   accountKeysIn,
   defaultConfigDir,
   mergeAccountSettings,
   type NewAccountInput,
+  parseAccounts,
+  providersFor,
+  rulesUsing,
   validAccountId,
 } from "../../core/ai/accounts";
 import { DEFAULT_MAX_WORDS } from "../../core/ai/prompt";
@@ -91,20 +95,28 @@ const PROVIDERS = [
   { label: "Codex", id: "codex-cli" as const, cli: "codex login", envVar: "CODEX_HOME" },
 ];
 
-async function addAiAccount(resource: Uri | undefined): Promise<void> {
-  const provider = await window.showQuickPick(PROVIDERS, {
-    placeHolder: "Which CLI is the account for?",
-  });
+export interface AddAccountPreset {
+  /** Skips the provider question. */
+  provider?: AiProvider;
+  /** Seeds the id input, for registering an existing id under a second provider. */
+  id?: string;
+}
+
+export async function addAiAccount(resource: Uri | undefined, preset: AddAccountPreset = {}): Promise<void> {
+  const provider = preset.provider
+    ? PROVIDERS.find((entry) => entry.id === preset.provider)
+    : await window.showQuickPick(PROVIDERS, { placeHolder: "Which CLI is the account for?" });
   if (!provider) {
     return;
   }
   const configuration = workspace.getConfiguration("pdfCaseReview.ai", resource);
   const target = definedTarget(configuration, "accounts");
   const rawAccounts = valueAt<unknown[]>(configuration, "accounts", target) ?? [];
-  const usedKeys = accountKeysIn(asList(configuration.get<unknown>("accounts", [])));
+  const effectiveAccounts = asList(configuration.get<unknown>("accounts", []));
+  const usedKeys = accountKeysIn(effectiveAccounts);
   const id = await window.showInputBox({
     prompt: "A short name for the account; rules select it by this id",
-    value: "school",
+    value: preset.id ?? "school",
     validateInput: (value) =>
       !validAccountId(value)
         ? "Use lowercase letters, digits and dashes, starting with a letter or digit."
@@ -123,37 +135,50 @@ async function addAiAccount(resource: Uri | undefined): Promise<void> {
   if (!configDir) {
     return;
   }
-  const scope = await pickScope();
+  const rulesTarget = definedTarget(configuration, "requiredAccount");
+  const rawRules = asList(valueAt<unknown[]>(configuration, "requiredAccount", rulesTarget));
+  // An id already registered for another provider keeps its rules: they now cover this provider too.
+  const otherProviders = providersFor(parseAccounts(effectiveAccounts, []), id);
+  const coveredRules =
+    otherProviders.length > 0 ? rulesUsing(asList(configuration.get("requiredAccount", [])), id) : 0;
+  const scope = coveredRules > 0 ? { kind: "none" as const } : await pickScope();
   if (!scope) {
     return;
   }
-  const rulesTarget = definedTarget(configuration, "requiredAccount");
-  const merged = mergeAccountSettings(
-    asList(rawAccounts),
-    asList(valueAt<unknown[]>(configuration, "requiredAccount", rulesTarget)),
-    { id, provider: provider.id, configDir, scope },
-  );
+  const merged = mergeAccountSettings(asList(rawAccounts), rawRules, {
+    id,
+    provider: provider.id,
+    configDir,
+    scope,
+  });
   await configuration.update("accounts", merged.accounts, target);
   if (scope.kind !== "none") {
     await configuration.update("requiredAccount", merged.rules, rulesTarget);
   }
+  const saved =
+    coveredRules > 0
+      ? `account "${id}" saved for ${provider.label}; the ${coveredRules} rule${coveredRules === 1 ? "" : "s"} that use "${id}" now cover ${provider.label} as well.`
+      : `account "${id}" saved to your settings.`;
   if (!isDesktopHost()) {
     void window.showInformationMessage(
-      `PDF Case Review: account "${id}" saved. Sign in from a desktop machine: set ${provider.envVar} to ${configDir} and run ${provider.cli}.`,
+      `PDF Case Review: ${saved} Sign in from a desktop machine: set ${provider.envVar} to ${configDir} and run ${provider.cli}.`,
     );
     return;
   }
   const choice = await window.showInformationMessage(
-    `PDF Case Review: account "${id}" saved to your settings. Sign in once so ${configDir} holds the login.`,
+    `PDF Case Review: ${saved} Sign in once so ${configDir} holds the login.`,
     "Sign in now",
   );
   if (choice !== "Sign in now") {
     return;
   }
   const { expandHome } = await import("../desktop/identity");
+  const loginDir = expandHome(configDir);
+  // Codex writes auth.json into CODEX_HOME but does not create the directory itself.
+  await workspace.fs.createDirectory(Uri.file(loginDir));
   const terminal = window.createTerminal({
     name: `${provider.label} sign-in (${id})`,
-    env: { [provider.envVar]: expandHome(configDir) },
+    env: { [provider.envVar]: loginDir },
   });
   terminal.show();
   terminal.sendText(provider.cli, true);
