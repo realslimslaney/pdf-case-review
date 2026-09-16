@@ -10,6 +10,7 @@ import { addAiAccount } from "../commands/configure";
 import type { ProviderProbe } from "../desktop/identity";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
+import type { PdfDocument } from "../editor/pdfDocument";
 import { readAiSettings, setAiProvider } from "../settings";
 import { isDesktopHost } from "../util/host";
 import { resolveDocumentAccount } from "./documentFacts";
@@ -80,8 +81,14 @@ function providerItem(
   return item;
 }
 
-export async function pickProvider(context: PickContext): Promise<ProviderPick | undefined> {
-  const document = context.tracker.active;
+/**
+ * `document` is the PDF the choice is for; callers mid-run pass the one they captured, because the
+ * prompt review tab or a dialog may have taken the active tab away from it by now.
+ */
+export async function pickProvider(
+  context: PickContext,
+  document: PdfDocument | undefined = context.tracker.active,
+): Promise<ProviderPick | undefined> {
   const resource = document?.uri;
   const items: ProviderItem[] = [
     { label: "Off", description: "No AI. The manual copy and paste commands still work.", id: "off" },

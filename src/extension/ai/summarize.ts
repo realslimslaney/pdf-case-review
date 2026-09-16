@@ -62,9 +62,14 @@ function activeDocument(context: CommandContext): PdfDocument | undefined {
 
 export async function summarizeWithAi(context: CommandContext): Promise<boolean> {
   const document = activeDocument(context);
-  if (!document) {
-    return false;
-  }
+  return document ? summarizeDocument(context, document) : false;
+}
+
+/**
+ * The run for one document, captured up front: the prompt review tab and the picker take focus
+ * away from the PDF, so nothing below may consult the tracker again.
+ */
+async function summarizeDocument(context: CommandContext, document: PdfDocument): Promise<boolean> {
   if (!workspace.isTrusted) {
     void window.showWarningMessage("PDF Case Review: AI features are disabled in untrusted workspaces.");
     return false;
@@ -72,7 +77,7 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
   let settings = aiSettings(document.uri, context.output);
   if (settings.provider === "off") {
     // The front door: no configured provider is a setup step inside the flow, not a dead end.
-    const picked = await pickProvider(context);
+    const picked = await pickProvider(context, document);
     if (picked === "manual") {
       return (await commands.executeCommand<boolean>("pdfCaseReview.ai.copySummaryPrompt")) === true;
     }
@@ -234,16 +239,20 @@ export async function summarizeWithAi(context: CommandContext): Promise<boolean>
     const headline = looksLikeUsageLimit(message)
       ? `${label} reports a usage limit; switch to the other provider for now`
       : `the AI summary failed (${message})`;
-    if (await offerProviderSwitch(context, `PDF Case Review: ${headline}.`, provider)) {
-      return summarizeWithAi(context);
+    if (await offerProviderSwitch(context, document, `PDF Case Review: ${headline}.`, provider)) {
+      return summarizeDocument(context, document);
     }
     return false;
   }
 }
 
-/** Shows the failure with a switch button; true when a different CLI provider was picked. */
+/**
+ * Shows the failure with a switch button; true when a different CLI provider was picked and the
+ * document is still open, so the caller can retry the same document rather than whatever is active.
+ */
 export async function offerProviderSwitch(
   context: CommandContext,
+  document: PdfDocument,
   message: string,
   current: "claude-cli" | "codex-cli",
 ): Promise<boolean> {
@@ -252,8 +261,20 @@ export async function offerProviderSwitch(
   if (choice !== switchButton) {
     return false;
   }
-  const picked = await pickProvider(context);
-  return (picked === "claude-cli" || picked === "codex-cli") && picked !== current;
+  const picked = await pickProvider(context, document);
+  if (picked !== "claude-cli" && picked !== "codex-cli") {
+    return false;
+  }
+  if (picked === current) {
+    return false;
+  }
+  if (context.provider.getDocument(document.uri) !== document) {
+    void window.showInformationMessage(
+      `PDF Case Review: provider switched; reopen ${document.model.source.fileName} and run the command again.`,
+    );
+    return false;
+  }
+  return true;
 }
 
 function aiRunFolder(context: CommandContext): Uri {

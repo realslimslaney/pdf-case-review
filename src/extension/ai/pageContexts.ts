@@ -23,6 +23,7 @@ import { formatCitation } from "../../core/report/model";
 import type { AiPageContext } from "../../core/sidecar/types";
 import type { ActiveDocumentTracker } from "../editor/activeDocument";
 import type { PdfCaseReviewEditorProvider } from "../editor/pdfCaseReviewEditorProvider";
+import type { PdfDocument } from "../editor/pdfDocument";
 import { aiSettings } from "../settings";
 import { isDesktopHost } from "../util/host";
 import { configDirFor, resolveIdentity, showGateError } from "./accountResolution";
@@ -42,6 +43,11 @@ export async function addPageContext(context: CommandContext): Promise<boolean> 
     void window.showInformationMessage("PDF Case Review: open a PDF first.");
     return false;
   }
+  return addPageContextFor(context, document);
+}
+
+/** The run for one document, captured up front so a retry after a provider switch targets the same PDF. */
+async function addPageContextFor(context: CommandContext, document: PdfDocument): Promise<boolean> {
   if (!workspace.isTrusted) {
     void window.showWarningMessage("PDF Case Review: AI features are disabled in untrusted workspaces.");
     return false;
@@ -186,8 +192,8 @@ export async function addPageContext(context: CommandContext): Promise<boolean> 
       ? `${desktop.PROVIDER_LABEL[provider]} reports a usage limit${where}; switch to the other provider for now`
       : `page context failed${where} (${failed.message})`;
     const message = `PDF Case Review: ${headline}; later pages were not attempted. ${done}.`;
-    if (await offerProviderSwitch(context, message, provider)) {
-      return addPageContext(context);
+    if (await offerProviderSwitch(context, document, message, provider)) {
+      return addPageContextFor(context, document);
     }
     return generated.length > 0;
   }

@@ -15,6 +15,14 @@ import { readAiSettings } from "../settings";
 import { Disposable } from "../util/disposable";
 import { isDesktopHost } from "../util/host";
 
+/** A signed-in identity is re-read after this long; a not-signed-in answer is never kept. */
+const IDENTITY_TTL_MS = 60_000;
+
+interface CachedIdentity {
+  pending: Promise<ProviderIdentity>;
+  at: number;
+}
+
 export interface AiStatusSnapshot {
   visible: boolean;
   text: string;
@@ -35,7 +43,7 @@ export class AiProviderStatusBar extends Disposable {
   );
   private generation = 0;
   private visible = false;
-  private readonly identities = new Map<string, Promise<ProviderIdentity>>();
+  private readonly identities = new Map<string, CachedIdentity>();
 
   constructor(
     private readonly tracker: ActiveDocumentTracker,
@@ -54,6 +62,22 @@ export class AiProviderStatusBar extends Disposable {
       }),
     );
     this._register(workspace.onDidGrantWorkspaceTrust(() => this.refresh()));
+    // Logins change outside the extension (a sign-in terminal, a browser flow, `claude /logout`):
+    // coming back to the window and closing a terminal both re-read the identity.
+    this._register(
+      window.onDidChangeWindowState((state) => {
+        if (state.focused) {
+          this.invalidateIdentities();
+        }
+      }),
+    );
+    this._register(window.onDidCloseTerminal(() => this.invalidateIdentities()));
+    this.refresh();
+  }
+
+  /** Drops every cached identity and re-probes the active document's login. */
+  invalidateIdentities(): void {
+    this.identities.clear();
     this.refresh();
   }
 
@@ -159,17 +183,26 @@ export class AiProviderStatusBar extends Disposable {
 
   private identity(provider: AiProvider, configDir: string | undefined): Promise<ProviderIdentity> {
     const key = `${provider}|${configDir ?? ""}`;
-    let pending = this.identities.get(key);
-    if (!pending) {
-      pending = import("../desktop/identity").then((desktop) =>
+    const cached = this.identities.get(key);
+    if (cached && Date.now() - cached.at < IDENTITY_TTL_MS) {
+      return cached.pending;
+    }
+    const pending = import("../desktop/identity")
+      .then((desktop) =>
         configDir === undefined
           ? provider === "claude-cli"
             ? desktop.whoAmIClaude()
             : desktop.whoAmICodex()
           : desktop.whoAmIForAccount({ provider, configDir }),
-      );
-      this.identities.set(key, pending);
-    }
+      )
+      .then((identity) => {
+        // A missing login is expected to change soon (the sign-in is probably in progress).
+        if (!identity.loggedIn && this.identities.get(key)?.pending === pending) {
+          this.identities.delete(key);
+        }
+        return identity;
+      });
+    this.identities.set(key, { pending, at: Date.now() });
     return pending;
   }
 }
