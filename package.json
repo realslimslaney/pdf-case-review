@@ -945,10 +945,10 @@
   },
   "packageManager": "pnpm@11.24.0",
   "devDependencies": {
-    "@biomejs/biome": "^2.5.13",
+    "@biomejs/biome": "^2.5.14",
     "@playwright/test": "^1.63.0",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^26.5.1",
+    "@types/node": "^26.6.1",
     "@types/pdfmake": "^0.3.3",
     "@types/vscode": "1.104.0",
     "@vitest/coverage-v8": "^4.1.11",
