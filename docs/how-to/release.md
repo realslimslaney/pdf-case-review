@@ -10,6 +10,7 @@ One-time setup, then every release is a merged release-please PR.
 1. **VS Marketplace**: sign in at <https://marketplace.visualstudio.com/manage>, create the publisher (`publisher` in `package.json`). Create an Azure DevOps personal access token at <https://dev.azure.com> (User settings → Personal access tokens → New Token; Organization "All accessible organizations", scope Marketplace → Manage) and store it as the `VSCE_PAT` secret in the `release` environment. Trusted publishing (`vsce publish --oidc`) is not yet shipped in any released vsce; switch back once it is.
 2. **Open VSX**: create an Eclipse account with the same GitHub username, sign in to <https://open-vsx.org>, sign the publisher agreement, generate an access token → `OVSX_PAT` secret in the `release` environment, then `npx ovsx create-namespace <publisher> -p $OVSX_PAT`.
 3. **GitHub**: create an environment named `release` that requires your approval; protect `main`.
+4. **Project board and assignment**: on <https://github.com/users/realslimslaney/projects/4> open the ⋯ menu, Workflows, "Auto-add to project", Edit; pick `realslimslaney/pdf-case-review` with the filter `is:open`, then "Save and turn on workflow" (GitHub Free allows one auto-add workflow per project). It does not add existing items: use "+ Add item", "Add from repository" once. The `Auto-assign` workflow assigns every new issue and PR to `realslimslaney`; run it by hand once (Actions, Auto-assign, "Run workflow") to backfill the open ones.
 
 ### Branch protection
 

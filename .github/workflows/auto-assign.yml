@@ -1,0 +1,46 @@
+# Assigns every new issue and pull request to the maintainer, and backfills the open ones on
+# demand (Actions, Auto-assign, "Run workflow"). Board membership
+# (https://github.com/users/realslimslaney/projects/4) is not done here: the board's own
+# auto-add workflow handles it without a token; see docs/how-to/release.md.
+#
+# Assignment deliberately uses GITHUB_TOKEN: GitHub never starts workflows from events made by
+# that token, so claude.yml (which listens for issues.assigned) does not run a second time.
+# pull_request_target gives Dependabot and fork PRs a write token; it is safe here because
+# nothing from the PR is checked out or executed, only its number is read.
+
+name: Auto-assign
+
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  assign:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ASSIGNEE: realslimslaney
+    steps:
+      - name: Assign the new issue or pull request
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+        run: gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$NUMBER/assignees" -f "assignees[]=$ASSIGNEE" --silent
+      - name: Backfill every open issue and pull request
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/issues?state=open&per_page=100" \
+            --jq ".[] | select(.assignees | map(.login) | index(\"$ASSIGNEE\") | not) | .number" |
+          while read -r number; do
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$number/assignees" -f "assignees[]=$ASSIGNEE" --silent
+            echo "assigned #$number"
+          done
