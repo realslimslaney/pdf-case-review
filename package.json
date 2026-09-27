@@ -945,10 +945,10 @@
   },
   "packageManager": "pnpm@11.24.0",
   "devDependencies": {
-    "@biomejs/biome": "^2.5.13",
+    "@biomejs/biome": "^2.5.14",
     "@playwright/test": "^1.63.0",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^26.5.1",
+    "@types/node": "^26.6.2",
     "@types/pdfmake": "^0.3.3",
     "@types/vscode": "1.104.0",
     "@vitest/coverage-v8": "^4.1.11",
@@ -956,15 +956,15 @@
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^3.9.2",
     "fflate": "^0.8.3",
-    "mocha": "^12.0.1",
+    "mocha": "^12.0.2",
     "tsup": "^8.5.1",
     "typescript": "^7.0.2",
     "vitepress": "^1.6.4",
     "vitest": "^4.1.11"
   },
   "dependencies": {
-    "docx": "^9.7.1",
-    "marked": "^18.0.13",
+    "docx": "^9.7.2",
+    "marked": "^18.0.14",
     "pdf-lib": "^1.17.1",
     "pdfmake": "^0.3.11"
   }
