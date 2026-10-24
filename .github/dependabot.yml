@@ -10,6 +10,9 @@ updates:
     ignore:
       # Must match the minimum VS Code in engines.vscode; bumped by hand together with it.
       - dependency-name: "@types/vscode"
+      # Keep types compatible with the extension host's Node 22 runtime.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
