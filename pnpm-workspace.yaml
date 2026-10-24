@@ -1,9 +1,41 @@
 packages:
   - "."
 
-# pnpm >= 10 blocks postinstall scripts unless allow-listed. esbuild needs its binary;
-# vsce-sign and keytar are pulled in by @vscode/vsce.
+engineStrict: true
+autoInstallPeers: true
+# Keep a single-document lockfile for GitHub's dependency scanner (dependabot-core#15904).
+# Corepack/action-setup select packageManager; engineStrict enforces engines.pnpm.
+pmOnFail: ignore
+blockExoticSubdeps: true
+trustPolicy: no-downgrade
+# Node 22 requires this type-only release from 2024, with a registry signature but no provenance.
+trustPolicyExclude:
+  - "undici-types@6.21.0"
+minimumReleaseAge: 1440
+# Reviewed release with upstream provenance, published on October 24, 2026.
+minimumReleaseAgeExclude:
+  - "@biomejs/biome@2.6.3"
+  - "@biomejs/cli-linux-x64@2.6.3"
+  - "@biomejs/cli-linux-arm64@2.6.3"
+  - "@biomejs/cli-linux-x64-musl@2.6.3"
+  - "@biomejs/cli-linux-arm64-musl@2.6.3"
+  - "@biomejs/cli-win32-x64@2.6.3"
+  - "@biomejs/cli-win32-arm64@2.6.3"
+  - "@biomejs/cli-darwin-x64@2.6.3"
+  - "@biomejs/cli-darwin-arm64@2.6.3"
+  - "@biomejs/cli-android-x64@2.6.3"
+  - "@biomejs/cli-android-arm64@2.6.3"
+
+# Remove each override when its parent supports the patched dependency.
+overrides:
+  # The test runner still requests Mocha 11 with vulnerable serialization dependencies.
+  "@vscode/test-cli>mocha": "12.0.3"
+  # Azure Identity 4.x still requests MSAL 6, affected by CVE-2026-109461.
+  "@azure/identity>@azure/msal-node": "7.1.1"
+  # VitePress 1.x still requests vulnerable Vite 5.
+  "vitepress>vite": "6.4.5"
+
+# Only reviewed build tooling may run installation scripts.
 allowBuilds:
   "@vscode/vsce-sign": true
   esbuild: true
-  keytar: true

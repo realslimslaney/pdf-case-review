@@ -78,8 +78,10 @@ jobs:
           path: pdf-case-review.vsix
       - name: Audit shipped dependencies
         if: runner.os == 'Linux'
-        # Only what ends up in the VSIX; advisories in dev tooling are handled by Dependabot.
         run: pnpm audit --prod --audit-level high
+      - name: Audit development and production dependencies
+        if: runner.os == 'Linux'
+        run: pnpm audit --audit-level high
 
   e2e:
     name: webview smoke (Playwright)

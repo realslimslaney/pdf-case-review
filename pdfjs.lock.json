@@ -1,7 +1,7 @@
 {
-  "version": "6.3.289",
-  "url": "https://github.com/mozilla/pdf.js/releases/download/v6.3.289/pdfjs-6.3.289-dist.zip",
-  "sha256": "98c5832ffe7af4edd59853476a478c0d4d4d76dd49c1701f4c86f7182725cdf9",
+  "version": "6.4.299",
+  "url": "https://github.com/mozilla/pdf.js/releases/download/v6.4.299/pdfjs-6.4.299-dist.zip",
+  "sha256": "f2245eb7ef3f674c872fe568a177bfec15874f5c034613e55d8e307f93ebd86d",
   "upstreamReference": {
     "repo": "mathematic-inc/vscode-pdf",
     "commit": "00b3d23949b30c0aaab6aaa6fbcb48855f16245e",
