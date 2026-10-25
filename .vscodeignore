@@ -6,6 +6,8 @@
 .claude/**
 .codex/**
 .agents/**
+# Local review caches can contain private session metadata.
+.scratch/**
 .devcontainer/**
 *.local.md
 *.vsix
