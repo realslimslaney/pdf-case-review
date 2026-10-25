@@ -58,6 +58,11 @@ jobs:
       - name: Integration tests
         if: runner.os != 'Linux'
         run: pnpm test:integration
+      - name: Add local review-cache packaging sentinel
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p .scratch
+          echo "Local review metadata must not ship." > .scratch/packaging-sentinel.txt
       - name: Package
         if: runner.os == 'Linux'
         run: pnpm exec vsce package --no-dependencies --out pdf-case-review.vsix
@@ -69,10 +74,10 @@ jobs:
           test "$size" -lt 15728640
       - name: VSIX contents are clean
         if: runner.os == 'Linux'
-        # Logs, local notes and nested VSIXes must never ship; assert the file list, not just the size.
+        # Logs, local notes, review caches and nested VSIXes must never ship.
         run: |
           pnpm exec vsce ls --no-dependencies > vsix-files.txt
-          ! grep -E '\.(log|vsix)$|\.local\.md$' vsix-files.txt
+          ! grep -E '\.(log|vsix)$|\.local\.md$|(^|/)\.scratch(/|$)' vsix-files.txt
       - name: Upload VSIX
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
