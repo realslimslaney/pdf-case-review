@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and is maintained by release-please
 from Conventional Commits.
 
+## [0.5.3](https://github.com/realslimslaney/pdf-case-review/compare/v0.5.2...v0.5.3) (2026-10-25)
+
+
+### Bug fixes
+
+* **deps:** update dependencies and harden publishing ([9efc9bd](https://github.com/realslimslaney/pdf-case-review/commit/9efc9bd35d0c14ce230eb366388f533b9eb55d5b))
+* **release:** exclude local review caches from VSIX ([#89](https://github.com/realslimslaney/pdf-case-review/issues/89)) ([149ff12](https://github.com/realslimslaney/pdf-case-review/commit/149ff12cea7a7d9539a1a08b3ad9d0b1573d9355))
+
 ## [0.5.2](https://github.com/realslimslaney/pdf-case-review/compare/v0.5.1...v0.5.2) (2026-09-16)
 
 
