@@ -4,8 +4,8 @@ Thanks for your interest. Until 1.0 the project is moving fast and the maintaine
 
 ## Setup
 
-- Node 22+ and pnpm (`npm i -g pnpm`).
-- `pnpm install && pnpm prepare-pdfjs && pnpm fixtures && pnpm build`
+- Node 24.11+ in the 24.x line (`.node-version`) and the pnpm version pinned in `package.json`.
+- `pnpm install --frozen-lockfile && pnpm prepare-pdfjs && pnpm fixtures && pnpm build`
 - `pnpm check` runs typecheck, Biome and the unit tests; `pnpm test:integration` runs the headless VS Code suite.
 - F5 launches the extension against `test/fixtures`.
 - A `.devcontainer` is provided if you prefer a container or Codespaces.

@@ -15,7 +15,8 @@ Derived-from-upstream files (see `pdfjs.lock.json` → `upstreamReference.derive
 
 ## Conventions
 
-- TypeScript strict; `pnpm` only (never npm/yarn); Node 22+.
+- TypeScript strict; `pnpm` only (never npm/yarn).
+- Develop on Node 24.11+ in the 24.x line (`.node-version`); the extension runtime minimum remains Node 22.
 - Lint/format = Biome (`pnpm lint`, `pnpm fix`). Line length 110.
 - Names spell things out (`webviewPanel`, not `wp`). No comments unless the *why* is non-obvious.
 - **Writing style:** avoid em-dashes; prefer separate sentences, commas, colons or parentheses. Use one only where it is genuinely the clearest choice. Applies to docs, comments, commit messages, PR bodies and generated report text.

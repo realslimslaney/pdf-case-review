@@ -34,8 +34,12 @@ Before any excerpt reaches a model, the extension asks directly: may this docume
 
 ## Development
 
+Use Node.js 24.11 or newer in the 24.x line, matching `.node-version`, and the pnpm version pinned in
+`package.json` under `packageManager`. This is the development toolchain requirement; the extension
+still targets Node 22 and supports VS Code 1.104 or newer.
+
 ```sh
-pnpm install
+pnpm install --frozen-lockfile
 pnpm prepare-pdfjs   # vendors the pinned PDF.js viewer (pdfjs.lock.json)
 pnpm fixtures        # synthetic test PDFs
 pnpm build
@@ -44,6 +48,20 @@ pnpm test:integration
 ```
 
 Press **F5** in VS Code to launch the extension against `test/fixtures`.
+
+When updating dependencies, keep the protections in `pnpm-workspace.yaml` enabled: the 24-hour release
+delay, trust-downgrade checks, registry-only transitive sources, and the installation-script allowlist.
+Review upstream changes before adding an exact-version exception. Remove release-age exceptions once
+the delay has elapsed, trust exceptions when a compatible trusted release is available, and scoped
+overrides when their parent packages support the patched dependency. Run
+`pnpm audit --prod --audit-level high` and `pnpm audit --audit-level high`; CI checks shipped
+dependencies and the full tree.
+
+GitHub's dependency scanner currently misses pnpm 12 lockfiles with multiple YAML documents
+([dependabot-core#15904](https://github.com/dependabot/dependabot-core/issues/15904)), so
+`pmOnFail: ignore` keeps the lockfile in a single document. Use Corepack locally and
+`pnpm/action-setup` in CI to select the `packageManager` pin; `engines.pnpm` with `engineStrict`
+rejects other pnpm versions. Remove the `pmOnFail` workaround once the scanner supports the format.
 
 ## Acknowledgements
 
